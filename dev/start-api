@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+ROOT="$(dirname "$SCRIPT_DIR")"
+
+cd "$ROOT/apps"
+
+uvicorn main:app --reload --host 0.0.0.0 --port 8000

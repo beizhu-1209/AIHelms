@@ -57,7 +57,8 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 
 ## LiteLLM
 
-- Call via HTTP `http://litellm:${LITELLM_PORT}`, authenticate with `LITELLM_MASTER_KEY`
+- 后端内部调用 via HTTP `http://litellm:4000`，authenticate with `LITELLM_MASTER_KEY`
+- 外部 AI 客户端通过 `LITELLM_PORT` 直接访问 litellm
 - Never call model provider APIs directly
 - Provider keys configured via admin UI, not in env files
 
@@ -71,9 +72,10 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 
 - Dockerfile builds the aihelms image for registry push
 - docker-compose.yml references images, no `build:` directive
-- Only Nginx exposes ports externally
-- Configs organized in service subdirectories
-- Ports controlled via env vars (AIHELMS_PORT, LITELLM_PORT, WEB_PORT)
+- docker-compose.middleware.yaml for dev middleware (db, redis, litellm)
+- Internal container ports are fixed (aihelms:8000, litellm:4000), not configurable
+- External mapping ports controlled via env vars (LITELLM_PORT, WEB_PORT, DB_PORT, REDIS_PORT)
+- Only Nginx and LiteLLM expose ports externally in production
 
 ## Authentication
 
