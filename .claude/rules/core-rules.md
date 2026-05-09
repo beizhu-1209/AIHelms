@@ -1,61 +1,61 @@
-# 核心规则
+# Core Rules
 
-<!-- 自动加载，适用于所有文件操作 -->
+<!-- Auto-loaded, applies to all file operations -->
 
-## 调查优先
+## Investigate First
 
-- 不猜测代码行为，先读文件再回答
-- 用户提到的文件，必须先读取再操作
-- 不确定时明确说明，提出验证方案
-- 修改代码前先理解上下文：读取相关文件、检查导入关系、确认调用链
-- 如果不确定某个函数/变量是否被其他地方引用，先搜索再修改
+- Never guess code behavior — read the file before answering
+- Always read files the user mentions before operating on them
+- When uncertain, state it clearly and propose a verification plan
+- Before modifying code: read related files, check imports, confirm call chains
+- If unsure whether a function/variable is referenced elsewhere, search before modifying
 
-## 范围纪律
+## Scope Discipline
 
-- 只做被要求的事，不多做不少做
-- 不重构未被要求修改的代码
-- 不给未修改的代码加注释或 docstring
-- 不为单次使用创建抽象
-- 不添加"以防万一"的错误处理或参数校验
-- 遵循 "only", "just", "exactly" 等限定词的字面意思
-- bug fix 不需要顺便清理周围代码
-- 简单功能不需要额外的可配置性
+- Do only what is asked — no more, no less
+- Do not refactor code that was not requested to be changed
+- Do not add comments or docstrings to unmodified code
+- Do not create abstractions for single-use cases
+- Do not add "just in case" error handling or validation
+- Follow limiting words ("only", "just", "exactly") literally
+- Bug fixes do not need surrounding code cleaned up
+- Simple features do not need extra configurability
 
-## 验证与安全
+## Verification & Safety
 
-- 完成前：跑测试和 lint，说明改了什么、没验证什么
-- 破坏性操作前必须确认：删文件、force push、hard reset、--no-verify
-- 优先编辑现有文件，不随意创建新文件
-- 不跳过 git hooks，不用 --no-verify
-- 不直接推送到 main 分支
-- 涉及认证、权限、数据删除的代码变更，必须说明影响范围
+- Before finishing: run tests and lint, state what changed and what was not verified
+- Confirm before destructive operations: delete files, force push, hard reset, --no-verify
+- Prefer editing existing files over creating new ones
+- Do not skip git hooks, do not use --no-verify
+- Do not push directly to main branch
+- For changes involving auth, permissions, or data deletion: state the impact scope
 
-## 效率
+## Efficiency
 
-- 无依赖的工具调用并行执行
-- 不使用占位符或猜测的参数值
-- 不重复执行已经成功的操作
-- 同一个方法失败两次，换思路而不是继续微调
+- Execute independent tool calls in parallel
+- Do not use placeholder or guessed parameter values
+- Do not repeat operations that already succeeded
+- If the same approach fails twice, change strategy instead of tweaking
 
-## 代码质量
+## Code Quality
 
-- 写自文档化的代码，只在逻辑不明显时加注释
-- 注释解释 "为什么"，不解释 "是什么"
-- 变量和函数命名要有意义，不用 temp、data、info 等模糊名称
-- 不留 TODO 注释，要么现在做要么不做
-- 不留被注释掉的代码，删掉就好
+- Write self-documenting code; only add comments when logic is non-obvious
+- Comments explain "why", not "what"
+- Variable and function names must be meaningful — no temp, data, info
+- No TODO comments — either do it now or don't
+- No commented-out code — delete it
 
-## 错误处理
+## Error Handling
 
-- 只在系统边界做输入校验（用户输入、外部 API）
-- 内部代码之间信任传参，不做防御性编程
-- 错误信息要有上下文，方便定位问题
-- 不吞掉异常，要么处理要么向上抛
+- Only validate input at system boundaries (user input, external APIs)
+- Trust parameters between internal code — no defensive programming
+- Error messages must have context for debugging
+- Never swallow exceptions — either handle or re-raise
 
-## 安全意识
+## Security
 
-- SQL 必须用参数化查询，不拼接字符串
-- 用户输入必须校验和转义
-- 不在代码中硬编码密钥、密码、token
-- 不在日志中打印敏感信息
-- API 端点默认需要认证，公开端点要显式标注
+- SQL must use parameterized queries — no string concatenation
+- User input must be validated and escaped
+- No hardcoded secrets, passwords, or tokens in code
+- No sensitive info in logs
+- API endpoints require auth by default; public endpoints must be explicitly marked

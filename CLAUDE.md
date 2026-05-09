@@ -1,61 +1,121 @@
 # CLAUDE.md
 
-<!-- 保持精简，行为规则在 .claude/rules/，开发规范在各子目录 -->
+<!-- Keep concise. Detailed rules in subdirectory CLAUDE.md and .claude/rules/ -->
 
-## 项目概述
+## Project Overview
 
-AIHelms 是企业级 AI 资源纳管平台，统一管理模型、Skill、MCP Server，建立企业 AI 身份。
+AIHelms is an enterprise AI resource management platform that unifies model, Skill, and MCP Server management with enterprise AI identity.
 
-## 技术栈
+## Tech Stack
 
-| 层级 | 技术 |
-|------|------|
-| 后端 | Python 3.12+, FastAPI, asyncpg |
-| 前端 | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
-| 模型代理 | LiteLLM (官方镜像，通过管理界面配置模型) |
-| 数据库 | PostgreSQL 16+ |
-| 缓存 | Redis 7+ |
-| 部署 | Docker Compose (全部官方镜像，无自建 Dockerfile) |
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.11+, FastAPI, Gunicorn, Celery |
+| Frontend | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS, npm workspaces |
+| Model Proxy | LiteLLM (official image, models configured via admin UI) |
+| Database | PostgreSQL 16+ |
+| Cache/Broker | Redis 7+ (also serves as Celery broker) |
+| Deployment | Docker Compose |
 
-## 目录结构
+## Directory Structure
 
 ```
-apps/           — Python FastAPI 后端 (详见 apps/CLAUDE.md)
-ui/             — Vue 前端 monorepo (详见 ui/CLAUDE.md)
-docker/         — Docker 配置
-  nginx/        — Nginx 模板 + entrypoint
-  litellm/      — LiteLLM 配置
-  db/           — PostgreSQL 初始化脚本
+apps/           — Python FastAPI backend (see apps/CLAUDE.md)
+ui/             — Vue frontend monorepo (see ui/CLAUDE.md)
+docker/         — Docker configs
+  nginx/        — Nginx templates + entrypoint
+  litellm/      — LiteLLM config
+  db/           — PostgreSQL init scripts
+Dockerfile      — Production image (gunicorn)
+Dockerfile.dev  — Development image (uvicorn --reload)
+docker-compose.yml      — Production deployment
+docker-compose.dev.yml  — Development/testing environment
 ```
 
-## 常用命令
+## Development Environment
+
+**所有测试必须依赖 Docker 环境运行。** 不要在宿主机直接运行后端或测试。
 
 ```bash
-# 基础设施
-docker compose up -d db redis litellm
+# 启动开发环境（首次会构建镜像）
+docker compose -f docker-compose.dev.yml up -d --build
 
-# 后端开发
-cd apps && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# 查看日志
+docker compose -f docker-compose.dev.yml logs -f api
 
-# 前端开发
-cd ui && pnpm dev
+# 运行后端测试（在容器内执行）
+docker compose -f docker-compose.dev.yml exec api python -m pytest -v
 
-# 测试
-cd apps && python -m pytest -v
-cd ui && pnpm test
+# 运行 lint（在容器内执行）
+docker compose -f docker-compose.dev.yml exec api black .
+docker compose -f docker-compose.dev.yml exec api ruff check .
 
-# 完整联调
-cd ui && pnpm build
+# 停止环境
+docker compose -f docker-compose.dev.yml down
+
+# 重建数据库（清除数据重新初始化）
+docker compose -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.dev.yml up -d --build
+```
+
+## Common Commands
+
+```bash
+# Frontend dev (宿主机运行，通过 proxy 连接容器内 API)
+cd ui && npm run dev --workspace=@aihelms/web
+cd ui && npm run dev --workspace=@aihelms/admin
+
+# Frontend test/lint
+cd ui && npm test
+cd ui && npm run lint
+
+# Build production image (多阶段构建，自动包含前端)
+docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
+
+# Full integration (production mode)
 docker compose up
 ```
 
-## 镜像仓库
+## Backend Runtime
 
-- 公网: `registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms`
-- Tag: `aihelms:<version>`, `aihelms-web:<version>`
+| Mode | Command | 说明 |
+|------|---------|------|
+| Production | `gunicorn main:app -c gunicorn_conf.py` | 多 worker，UvicornWorker |
+| Development | `uvicorn main:app --reload` | 单 worker，热重载 |
+| Celery Worker | `celery -A celery_app worker --loglevel=info` | 异步任务处理 |
 
-## Git 规范
+## Image Registry
 
-- 分支: `feature/xxx`, `fix/xxx`, 合入 `main`
-- Commit: conventional commits，中文描述
-- 示例: `feat: 添加用户认证模块`, `fix: 修复 token 过期判断`
+- Address: `registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms`
+- Tag: `aihelms:<version>`
+
+## Git Conventions
+
+- Branches: `feature/xxx`, `fix/xxx`, merge into `main`
+- Commits: conventional commits, Chinese description
+- Examples: `feat: 添加用户认证模块`, `fix: 修复 token 过期判断`
+
+## Testing Rules
+
+- **后端测试必须在 Docker 容器内运行**，确保有 PostgreSQL 和 Redis 依赖
+- 使用 `docker compose -f docker-compose.dev.yml exec api python -m pytest -v` 执行测试
+- 不要在宿主机直接 `cd apps && pytest`，因为缺少数据库连接
+- 前端测试可以在宿主机运行（不依赖后端服务）
+- 首次构建: `docker compose -f docker-compose.dev.yml up -d --build`
+- 日常启动: `docker compose -f docker-compose.dev.yml up -d`（不需要 --build）
+- 仅当 `pyproject.toml` 依赖变更时才需要重新 `--build`
+
+## Docker/Env 规范
+
+- docker-compose 中所有端口、密码、配置必须通过 env 变量控制，不允许硬编码
+- 新增环境变量必须同步更新 `.env.example`
+- 后端通过 `core/config.py` 读取配置，不允许 `os.getenv()`
+- 开发环境端口使用 `DEV_*` 前缀变量（如 `DEV_DB_PORT`）
+
+## Subdirectory Guides
+
+- Backend coding standards with examples → `apps/CLAUDE.md`
+- Frontend coding standards with examples → `ui/CLAUDE.md`
+- General behavior rules → `.claude/rules/core-rules.md`
+- Project conventions (API format, database, auth, etc.) → `.claude/rules/project-rules.md`
+- Code review checklist → `.claude/commands/code-review.md`

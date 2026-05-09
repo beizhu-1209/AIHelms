@@ -1,9 +1,9 @@
 upstream aihelms_api {
-    server aihelms:8000;
+    server aihelms:${AIHELMS_PORT};
 }
 
 server {
-    listen ${NGINX_PORT};
+    listen 80;
     server_name ${NGINX_SERVER_NAME};
 
     # API 代理

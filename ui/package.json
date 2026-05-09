@@ -1,11 +1,13 @@
 {
   "name": "aihelms-ui",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "pnpm --filter admin dev & pnpm --filter web dev",
-    "build": "pnpm --filter shared build && pnpm --filter admin build && pnpm --filter web build",
-    "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
+    "build": "npm run build --workspace=@aihelms/shared && npm run build --workspace=@aihelms/admin && npm run build --workspace=@aihelms/web",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
   },
   "engines": {
     "node": ">=18.0.0"
