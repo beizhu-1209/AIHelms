@@ -10,7 +10,7 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
@@ -39,7 +39,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
     volumes:
-      - ./litellm/litellm.yaml:/app/config.yaml:ro
+      - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:
       - "${LITELLM_PORT}:4000"
     command: ["--config", "/app/config.yaml"]

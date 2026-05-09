@@ -27,9 +27,9 @@ docker/         — Docker configs
   nginx/        — Nginx templates + entrypoint
   litellm/      — LiteLLM config
   db/           — PostgreSQL init scripts
-  docker-compose.middleware.yaml — Dev middleware (db, redis, litellm)
 Dockerfile      — Production image (gunicorn)
-docker-compose.yml — Production deployment
+docker-compose.yml              — Production deployment
+docker-compose.middleware.yaml  — Dev middleware (db, redis, litellm)
 ```
 
 ## Development Environment
@@ -101,8 +101,9 @@ docker compose up -d
 ## Docker/Env 规范
 
 - docker-compose 中所有端口、密码、配置必须通过 env 变量控制，不允许硬编码
-- 新增环境变量必须同步更新 `.env.example` 和 `docker/middleware.env.example`
+- 新增环境变量必须同步更新 `.env.example`
 - 后端通过 `core/config.py` 读取配置，不允许 `os.getenv()`
+- 内部容器端口固定不可配置（aihelms:8000、litellm:4000）
 
 ## Subdirectory Guides
 
