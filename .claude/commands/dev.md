@@ -1,116 +1,116 @@
-# 启动开发环境
+# Start Dev Environment
 
-完整启动 AIHelms 本地开发环境的标准流程。
+Standard flow to start the AIHelms local development environment.
 
-## 前置检查
+## Prerequisites
 
-1. 确认 Docker 正在运行
-2. 确认 `.env` 文件存在（如不存在，从 `.env.example` 复制）
-3. 确认 Python 环境已激活（conda activate aihelms）
-4. 确认 Node.js 和 pnpm 可用
+1. Docker is running
+2. `.env` file exists (copy from `.env.example` if not)
+3. Python environment activated (conda activate aihelms)
+4. Node.js and pnpm available
 
-## 启动流程
+## Startup Flow
 
-### Step 1: 基础设施
+### Step 1: Infrastructure
 
 ```bash
-# 检查 .env 是否存在
+# Check .env exists
 test -f .env || cp .env.example .env
 
-# 启动数据库、Redis、LiteLLM
+# Start database, Redis, LiteLLM
 docker compose up -d db redis litellm
 
-# 等待服务就绪
+# Wait for services to be ready
 docker compose exec db pg_isready -U aihelms
 docker compose exec redis redis-cli -a aihelms ping
 ```
 
-### Step 2: 后端
+### Step 2: Backend
 
 ```bash
 cd apps
 
-# 首次需要安装依赖
+# First time: install dependencies
 pip install -e ".[dev]"
 
-# 启动 FastAPI（自动热重载）
+# Start FastAPI (auto hot-reload)
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-验证：访问 http://localhost:8000/api/docs 看到 Swagger UI
+Verify: visit http://localhost:8000/api/docs to see Swagger UI
 
-### Step 3: 前端
+### Step 3: Frontend
 
 ```bash
 cd ui
 
-# 首次需要安装依赖
+# First time: install dependencies
 pnpm install
 
-# 启动开发服务器
-pnpm --filter web dev      # 用户端 → http://localhost:3000
-pnpm --filter admin dev    # 管理后台 → http://localhost:3001
+# Start dev servers
+pnpm --filter web dev      # User app → http://localhost:3000
+pnpm --filter admin dev    # Admin → http://localhost:3001
 ```
 
-验证：访问 http://localhost:3000 看到页面
+Verify: visit http://localhost:3000 to see the page
 
-### Step 4: 完整联调（可选）
+### Step 4: Full Integration (optional)
 
-如果需要通过 Nginx 统一入口测试：
+To test through Nginx unified gateway:
 
 ```bash
-# 先构建前端
+# Build frontend first
 cd ui && pnpm build
 
-# 启动全部服务
+# Start all services
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-验证：访问 http://localhost 看到完整应用
+Verify: visit http://localhost to see the full app
 
-## 服务端口一览
+## Service Ports
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| FastAPI | 8000 | 后端 API + Swagger |
-| Vue Web | 3000 | 用户端开发服务器 |
-| Vue Admin | 3001 | 管理后台开发服务器 |
-| PostgreSQL | 5432 | 数据库（dev 模式对外暴露） |
-| Redis | 6379 | 缓存（dev 模式对外暴露） |
-| LiteLLM | 4000 | 模型代理（仅容器内） |
-| Nginx | 80 | 统一网关（联调模式） |
+| Service | Port | Description |
+|---------|------|-------------|
+| FastAPI | 8000 | Backend API + Swagger |
+| Vue Web | 3000 | User app dev server |
+| Vue Admin | 3001 | Admin dev server |
+| PostgreSQL | 5432 | Database (exposed in dev mode) |
+| Redis | 6379 | Cache (exposed in dev mode) |
+| LiteLLM | 4000 | Model proxy (container-only) |
+| Nginx | 80 | Unified gateway (integration mode) |
 
-## 常见问题
+## Troubleshooting
 
-### 数据库连接失败
+### Database connection failed
 ```bash
-# 检查 db 容器状态
+# Check db container status
 docker compose ps db
 docker compose logs db
 
-# 重建数据库（会清除数据）
+# Rebuild database (will clear data)
 docker compose down db -v && docker compose up -d db
 ```
 
-### LiteLLM 启动失败
+### LiteLLM startup failed
 ```bash
-# 检查日志
+# Check logs
 docker compose logs litellm
 
-# 常见原因：LITELLM_MASTER_KEY 或 LITELLM_SALT_KEY 未设置
+# Common cause: LITELLM_MASTER_KEY or LITELLM_SALT_KEY not set
 grep LITELLM .env
 ```
 
-### 前端依赖安装失败
+### Frontend dependency install failed
 ```bash
-# 清除缓存重装
+# Clear cache and reinstall
 rm -rf node_modules packages/*/node_modules
 pnpm install
 ```
 
-### 端口被占用
+### Port already in use
 ```bash
-# 查找占用端口的进程
+# Find process using the port
 lsof -i :8000
 lsof -i :3000
 ```

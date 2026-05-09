@@ -1,5 +1,5 @@
 upstream aihelms_api {
-    server aihelms:8000;
+    server aihelms:${AIHELMS_PORT};
 }
 
 server {

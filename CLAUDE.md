@@ -1,61 +1,78 @@
 # CLAUDE.md
 
-<!-- 保持精简，行为规则在 .claude/rules/，开发规范在各子目录 -->
+<!-- Keep concise. Detailed rules in subdirectory CLAUDE.md and .claude/rules/ -->
 
-## 项目概述
+## Project Overview
 
-AIHelms 是企业级 AI 资源纳管平台，统一管理模型、Skill、MCP Server，建立企业 AI 身份。
+AIHelms is an enterprise AI resource management platform that unifies model, Skill, and MCP Server management with enterprise AI identity.
 
-## 技术栈
+## Tech Stack
 
-| 层级 | 技术 |
-|------|------|
-| 后端 | Python 3.12+, FastAPI, asyncpg |
-| 前端 | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
-| 模型代理 | LiteLLM (官方镜像，通过管理界面配置模型) |
-| 数据库 | PostgreSQL 16+ |
-| 缓存 | Redis 7+ |
-| 部署 | Docker Compose (全部官方镜像，无自建 Dockerfile) |
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.11+, FastAPI, asyncpg |
+| Frontend | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
+| Model Proxy | LiteLLM (official image, models configured via admin UI) |
+| Database | PostgreSQL 16+ |
+| Cache | Redis 7+ |
+| Deployment | Docker Compose |
 
-## 目录结构
+## Directory Structure
 
 ```
-apps/           — Python FastAPI 后端 (详见 apps/CLAUDE.md)
-ui/             — Vue 前端 monorepo (详见 ui/CLAUDE.md)
-docker/         — Docker 配置
-  nginx/        — Nginx 模板 + entrypoint
-  litellm/      — LiteLLM 配置
-  db/           — PostgreSQL 初始化脚本
+apps/           — Python FastAPI backend (see apps/CLAUDE.md)
+ui/             — Vue frontend monorepo (see ui/CLAUDE.md)
+docker/         — Docker configs
+  nginx/        — Nginx templates + entrypoint
+  litellm/      — LiteLLM config
+  db/           — PostgreSQL init scripts
+Dockerfile      — Build aihelms image
 ```
 
-## 常用命令
+## Common Commands
 
 ```bash
-# 基础设施
+# Infrastructure
 docker compose up -d db redis litellm
 
-# 后端开发
+# Backend dev
 cd apps && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# 前端开发
-cd ui && pnpm dev
+# Frontend dev
+cd ui && pnpm --filter web dev
+cd ui && pnpm --filter admin dev
 
-# 测试
+# Test
 cd apps && python -m pytest -v
 cd ui && pnpm test
 
-# 完整联调
+# Lint
+cd apps && black . && ruff check .
+cd ui && pnpm lint && pnpm type-check
+
+# Build image
+docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
+
+# Full integration
 cd ui && pnpm build
 docker compose up
 ```
 
-## 镜像仓库
+## Image Registry
 
-- 公网: `registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms`
-- Tag: `aihelms:<version>`, `aihelms-web:<version>`
+- Address: `registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms`
+- Tag: `aihelms:<version>`
 
-## Git 规范
+## Git Conventions
 
-- 分支: `feature/xxx`, `fix/xxx`, 合入 `main`
-- Commit: conventional commits，中文描述
-- 示例: `feat: 添加用户认证模块`, `fix: 修复 token 过期判断`
+- Branches: `feature/xxx`, `fix/xxx`, merge into `main`
+- Commits: conventional commits, Chinese description
+- Examples: `feat: 添加用户认证模块`, `fix: 修复 token 过期判断`
+
+## Subdirectory Guides
+
+- Backend coding standards with examples → `apps/CLAUDE.md`
+- Frontend coding standards with examples → `ui/CLAUDE.md`
+- General behavior rules → `.claude/rules/core-rules.md`
+- Project conventions (API format, database, auth, etc.) → `.claude/rules/project-rules.md`
+- Code review checklist → `.claude/commands/code-review.md`
