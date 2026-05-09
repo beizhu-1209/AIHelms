@@ -47,7 +47,7 @@
 
 | 组件 | 技术 |
 |------|------|
-| 后端 | Python 3.12+, FastAPI, asyncpg |
+| 后端 | Python 3.12+, FastAPI|
 | 前端 | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
 | 模型代理 | LiteLLM |
 | 数据库 | PostgreSQL 16+ |
