@@ -51,9 +51,11 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 ## Database
 
 - asyncpg parameterized queries, business tables in `aihelms` schema
-- Schema managed via `docker/db/init.sql`
+- Schema managed via `docker/db/init.sql` (complete structure) + `docker/db/migrations/` (incremental changes)
 - Table names: snake_case plural. Column names: snake_case. Index: `idx_table_column`
 - API paths: plural nouns, kebab-case (`/api/v1/api-keys`)
+- **数据库结构变更时，必须同时更新 `init.sql` 和新增 `migrations/NNN_xxx.sql`**
+- 提交代码前执行 `./dev/migrate` 验证迁移可正常执行
 
 ## LiteLLM
 
