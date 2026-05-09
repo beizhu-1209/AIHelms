@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-336791.svg)](https://www.postgresql.org/)
@@ -47,7 +47,7 @@
 
 | 组件 | 技术 |
 |------|------|
-| 后端 | Python 3.12+, FastAPI|
+| 后端 | Python 3.11+, FastAPI |
 | 前端 | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
 | 模型代理 | LiteLLM |
 | 数据库 | PostgreSQL 16+ |
@@ -109,7 +109,7 @@ AIHelms/
 ### 前置依赖
 
 - Docker & Docker Compose v2+
-- Python 3.12+（推荐 miniconda）
+- Python 3.11+（推荐 miniconda）
 - Node.js 18+ / pnpm 9+
 
 ### 启动基础设施
@@ -122,7 +122,7 @@ docker compose up -d db redis litellm
 ### 后端
 
 ```bash
-conda create -n aihelms python=3.12 && conda activate aihelms
+conda create -n aihelms python=3.11 && conda activate aihelms
 cd apps
 pip install -e ".[dev]"
 

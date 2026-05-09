@@ -1,8 +1,10 @@
 services:
   aihelms:
+    volumes:
+      - ./apps:/app
     environment:
       DEBUG: "true"
-    command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "${AIHELMS_PORT:-8000}"]
 
   db:
     ports:
