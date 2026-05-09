@@ -53,6 +53,9 @@ Thumbs.db
 # Docker
 docker/data/
 
+# Database migrations data (seed data, not committed)
+docker/db/migrations/*.sql
+
 # Logs
 *.log
 logs/
