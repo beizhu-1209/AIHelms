@@ -49,7 +49,7 @@ services:
         condition: service_healthy
 
   aihelms:
-    image: python:3.12-slim
+    image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:${AIHELMS_VERSION:-latest}
     restart: unless-stopped
     working_dir: /app
     environment:
@@ -58,12 +58,6 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       SECRET_KEY: ${SECRET_KEY:-aihelms}
-    volumes:
-      - ./apps:/app
-      - pip_cache:/root/.cache/pip
-    command: >
-      bash -c "pip install --quiet -e . &&
-               uvicorn main:app --host 0.0.0.0 --port 8000"
     networks:
       - internal
       - external
@@ -109,7 +103,6 @@ services:
 volumes:
   pgdata:
   redisdata:
-  pip_cache:
 
 networks:
   internal:
