@@ -8,16 +8,16 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-aihelms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aihelms}
-      POSTGRES_DB: ${POSTGRES_DB:-aihelms}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${DEV_DB_PORT:-5432}:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - pgdata_dev:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aihelms}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -25,16 +25,32 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:-aihelms}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
-      - "${DEV_REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT}:6379"
     volumes:
       - redisdata_dev:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-aihelms}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+  litellm:
+    image: docker.litellm.ai/berriai/litellm:main-stable
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+    volumes:
+      - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
+    ports:
+      - "${LITELLM_PORT}:4000"
+    command: ["--config", "/app/config.yaml"]
+    depends_on:
+      db:
+        condition: service_healthy
 
   aihelms:
     build:
@@ -44,40 +60,24 @@ services:
     restart: unless-stopped
     working_dir: /app/apps
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-aihelms}@redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-admin123}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      LITELLM_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
     volumes:
       - ./apps:/app/apps
     ports:
-      - "${AIHELMS_PORT:-8000}:8000"
+      - "${AIHELMS_PORT}:8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
-
-  celery:
-    image: aihelms-dev
-    restart: unless-stopped
-    working_dir: /app/apps
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-aihelms}@redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-admin123}
-    volumes:
-      - ./apps:/app/apps
-    depends_on:
-      aihelms:
+      litellm:
         condition: service_started
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: ["celery", "-A", "celery_app", "worker", "--loglevel=info"]
+    command: ["bash", "-c", "celery -A celery_app worker --loglevel=info & uvicorn main:app --reload --host 0.0.0.0 --port 8000"]
 
 volumes:
   pgdata_dev:
