@@ -22,58 +22,55 @@ AIHelms is an enterprise AI resource management platform that unifies model, Ski
 ```
 apps/           — Python FastAPI backend (see apps/CLAUDE.md)
 ui/             — Vue frontend monorepo (see ui/CLAUDE.md)
+dev/            — Development startup scripts
 docker/         — Docker configs
   nginx/        — Nginx templates + entrypoint
   litellm/      — LiteLLM config
   db/           — PostgreSQL init scripts
+  docker-compose.middleware.yaml — Dev middleware (db, redis, litellm)
 Dockerfile      — Production image (gunicorn)
-Dockerfile.dev  — Development image (uvicorn --reload)
-docker-compose.yml      — Production deployment
-docker-compose.dev.yml  — Development/testing environment
+docker-compose.yml — Production deployment
 ```
 
 ## Development Environment
 
-**所有测试必须依赖 Docker 环境运行。** 不要在宿主机直接运行后端或测试。
+开发模式：Docker 只跑中间件，应用代码在宿主机运行。
 
 ```bash
-# 启动开发环境（首次会构建镜像）
-docker compose -f docker-compose.dev.yml up -d --build
+# 首次 setup（复制 env、安装依赖）
+./dev/setup
 
-# 查看日志
-docker compose -f docker-compose.dev.yml logs -f api
+# 启动中间件（db + redis + litellm）
+./dev/start-docker-compose
 
-# 运行后端测试（在容器内执行）
-docker compose -f docker-compose.dev.yml exec api python -m pytest -v
+# 启动后端（另一个终端）
+./dev/start-api
 
-# 运行 lint（在容器内执行）
-docker compose -f docker-compose.dev.yml exec api black .
-docker compose -f docker-compose.dev.yml exec api ruff check .
+# 启动 celery worker（另一个终端，按需）
+./dev/start-worker
 
-# 停止环境
-docker compose -f docker-compose.dev.yml down
-
-# 重建数据库（清除数据重新初始化）
-docker compose -f docker-compose.dev.yml down -v
-docker compose -f docker-compose.dev.yml up -d --build
+# 启动前端（另一个终端）
+./dev/start-web
 ```
 
 ## Common Commands
 
 ```bash
-# Frontend dev (宿主机运行，通过 proxy 连接容器内 API)
-cd ui && npm run dev --workspace=@aihelms/web
-cd ui && npm run dev --workspace=@aihelms/admin
+# 后端测试（需先启动中间件）
+cd apps && python -m pytest -v
 
-# Frontend test/lint
+# 后端 lint
+cd apps && black . && ruff check .
+
+# 前端 test/lint
 cd ui && npm test
 cd ui && npm run lint
 
 # Build production image (多阶段构建，自动包含前端)
 docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
 
-# Full integration (production mode)
-docker compose up
+# Production deployment
+docker compose up -d
 ```
 
 ## Backend Runtime
@@ -97,20 +94,15 @@ docker compose up
 
 ## Testing Rules
 
-- **后端测试必须在 Docker 容器内运行**，确保有 PostgreSQL 和 Redis 依赖
-- 使用 `docker compose -f docker-compose.dev.yml exec api python -m pytest -v` 执行测试
-- 不要在宿主机直接 `cd apps && pytest`，因为缺少数据库连接
-- 前端测试可以在宿主机运行（不依赖后端服务）
-- 首次构建: `docker compose -f docker-compose.dev.yml up -d --build`
-- 日常启动: `docker compose -f docker-compose.dev.yml up -d`（不需要 --build）
-- 仅当 `pyproject.toml` 依赖变更时才需要重新 `--build`
+- 后端测试在宿主机运行，需先启动中间件（`./dev/start-docker-compose`）
+- 使用 `cd apps && python -m pytest -v` 执行测试
+- 前端测试可以直接运行（不依赖后端服务）
 
 ## Docker/Env 规范
 
 - docker-compose 中所有端口、密码、配置必须通过 env 变量控制，不允许硬编码
-- 新增环境变量必须同步更新 `.env.example`
+- 新增环境变量必须同步更新 `.env.example` 和 `docker/middleware.env.example`
 - 后端通过 `core/config.py` 读取配置，不允许 `os.getenv()`
-- 开发环境端口使用 `DEV_*` 前缀变量（如 `DEV_DB_PORT`）
 
 ## Subdirectory Guides
 

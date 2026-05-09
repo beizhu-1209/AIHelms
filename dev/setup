@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+ROOT="$(dirname "$SCRIPT_DIR")"
+
+MIDDLEWARE_ENV_EXAMPLE="$ROOT/docker/middleware.env.example"
+MIDDLEWARE_ENV="$ROOT/docker/middleware.env"
+API_ENV_EXAMPLE="$ROOT/apps/.env.example"
+API_ENV="$ROOT/apps/.env"
+
+# 1) 复制中间件环境变量
+if [ ! -f "$MIDDLEWARE_ENV" ]; then
+  cp "$MIDDLEWARE_ENV_EXAMPLE" "$MIDDLEWARE_ENV"
+  echo "已创建 docker/middleware.env"
+fi
+
+# 2) 复制后端环境变量
+if [ -f "$API_ENV_EXAMPLE" ] && [ ! -f "$API_ENV" ]; then
+  cp "$API_ENV_EXAMPLE" "$API_ENV"
+  echo "已创建 apps/.env"
+fi
+
+# 3) 安装 Python 依赖
+echo "安装 Python 依赖..."
+cd "$ROOT/apps"
+pip install -e ".[dev]"
+
+# 4) 安装前端依赖
+echo "安装前端依赖..."
+cd "$ROOT/ui"
+npm install
+
+echo "setup 完成！"
+echo "下一步："
+echo "  1. 启动中间件: ./dev/start-docker-compose"
+echo "  2. 启动后端:   ./dev/start-api"
+echo "  3. 启动前端:   ./dev/start-web"
