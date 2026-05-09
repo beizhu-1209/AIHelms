@@ -180,7 +180,53 @@ npm test
 npm run lint
 ```
 
-## 4. 提交代码
+## 4. 数据库结构变更
+
+### 迁移机制
+
+- 完整表结构定义在 `docker/db/init.sql`（新环境初始化用）
+- 增量变更放在 `docker/db/migrations/` 目录下，按编号排序执行
+- 后端启动时自动检查并执行未执行的迁移（记录在 `aihelms.schema_migrations` 表）
+
+### 迁移文件命名规则
+
+```
+NNN_描述.sql
+```
+
+示例：
+```
+000_schema_migrations.sql
+001_add_avatar_to_users.sql
+002_create_audit_logs.sql
+```
+
+### 开发流程
+
+1. 在 `docker/db/migrations/` 下新建编号 SQL 文件：
+   ```sql
+   -- 001_add_avatar_to_users.sql
+   ALTER TABLE aihelms.users ADD COLUMN avatar TEXT;
+   ```
+
+2. **同步更新 `docker/db/init.sql`**，保持完整表结构定义是最新的
+
+3. 本地验证：重启后端，迁移会自动执行
+
+4. 提交代码时，迁移文件和 `init.sql` 必须一起提交
+
+### 手动执行迁移
+
+```bash
+./dev/migrate
+```
+
+> [!IMPORTANT]
+>
+> 每次涉及数据库结构变更，必须同时更新 `init.sql`（完整结构）和新增 `migrations/NNN_xxx.sql`（增量变更）。
+> `init.sql` 用于新环境初始化，`migrations/` 用于已有环境升级。
+
+## 5. 提交代码
 
 ```bash
 git checkout -b feature/xxx
@@ -197,7 +243,7 @@ git push -u origin feature/xxx
 - Commit 格式：conventional commits，中文描述
 - 示例：`feat: 添加用户认证模块`、`fix: 修复 token 过期判断`
 
-## 5. 构建生产镜像
+## 6. 构建生产镜像
 
 ```bash
 git checkout main && git pull
@@ -208,14 +254,14 @@ docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version
 
 版本号取 `apps/pyproject.toml` 中的 version 字段。
 
-## 6. 推送到阿里云
+## 7. 推送到阿里云
 
 ```bash
 docker login registry.cn-zhangjiakou.aliyuncs.com
 docker push registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version>
 ```
 
-## 7. 服务器部署/更新
+## 8. 服务器部署/更新
 
 ```bash
 cd AIHelms && git pull
@@ -231,14 +277,14 @@ cp .env.example .env   # 修改密码、密钥等
 docker compose up -d   # 直接拉镜像启动，无需本地构建
 ```
 
-## 8. 重建数据库（慎用）
+## 9. 重建数据库（慎用）
 
 ```bash
 docker compose -f docker-compose.middleware.yaml -p aihelms down -v
 docker compose -f docker-compose.middleware.yaml -p aihelms up -d
 ```
 
-## 9. 依赖更新
+## 10. 依赖更新
 
 | 变更 | 操作 |
 |------|------|
