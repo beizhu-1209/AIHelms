@@ -10,11 +10,11 @@ AIHelms is an enterprise AI resource management platform that unifies model, Ski
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.11+, FastAPI, asyncpg |
+| Backend | Python 3.11+, FastAPI, Gunicorn, Celery |
 | Frontend | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
 | Model Proxy | LiteLLM (official image, models configured via admin UI) |
 | Database | PostgreSQL 16+ |
-| Cache | Redis 7+ |
+| Cache/Broker | Redis 7+ (also serves as Celery broker) |
 | Deployment | Docker Compose |
 
 ## Directory Structure
@@ -26,37 +26,64 @@ docker/         — Docker configs
   nginx/        — Nginx templates + entrypoint
   litellm/      — LiteLLM config
   db/           — PostgreSQL init scripts
-Dockerfile      — Build aihelms image
+Dockerfile      — Production image (gunicorn)
+Dockerfile.dev  — Development image (uvicorn --reload)
+docker-compose.yml      — Production deployment
+docker-compose.dev.yml  — Development/testing environment
+```
+
+## Development Environment
+
+**所有测试必须依赖 Docker 环境运行。** 不要在宿主机直接运行后端或测试。
+
+```bash
+# 启动开发环境（首次会构建镜像）
+docker compose -f docker-compose.dev.yml up -d --build
+
+# 查看日志
+docker compose -f docker-compose.dev.yml logs -f api
+
+# 运行后端测试（在容器内执行）
+docker compose -f docker-compose.dev.yml exec api python -m pytest -v
+
+# 运行 lint（在容器内执行）
+docker compose -f docker-compose.dev.yml exec api black .
+docker compose -f docker-compose.dev.yml exec api ruff check .
+
+# 停止环境
+docker compose -f docker-compose.dev.yml down
+
+# 重建数据库（清除数据重新初始化）
+docker compose -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
 ## Common Commands
 
 ```bash
-# Infrastructure
-docker compose up -d db redis litellm
-
-# Backend dev
-cd apps && uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# Frontend dev
+# Frontend dev (宿主机运行，通过 proxy 连接容器内 API)
 cd ui && pnpm --filter web dev
 cd ui && pnpm --filter admin dev
 
-# Test
-cd apps && python -m pytest -v
+# Frontend test/lint
 cd ui && pnpm test
-
-# Lint
-cd apps && black . && ruff check .
 cd ui && pnpm lint && pnpm type-check
 
-# Build image
+# Build production image
+cd ui && pnpm build
 docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
 
-# Full integration
-cd ui && pnpm build
+# Full integration (production mode)
 docker compose up
 ```
+
+## Backend Runtime
+
+| Mode | Command | 说明 |
+|------|---------|------|
+| Production | `gunicorn main:app -c gunicorn_conf.py` | 多 worker，UvicornWorker |
+| Development | `uvicorn main:app --reload` | 单 worker，热重载 |
+| Celery Worker | `celery -A celery_app worker --loglevel=info` | 异步任务处理 |
 
 ## Image Registry
 
@@ -68,6 +95,23 @@ docker compose up
 - Branches: `feature/xxx`, `fix/xxx`, merge into `main`
 - Commits: conventional commits, Chinese description
 - Examples: `feat: 添加用户认证模块`, `fix: 修复 token 过期判断`
+
+## Testing Rules
+
+- **后端测试必须在 Docker 容器内运行**，确保有 PostgreSQL 和 Redis 依赖
+- 使用 `docker compose -f docker-compose.dev.yml exec api python -m pytest -v` 执行测试
+- 不要在宿主机直接 `cd apps && pytest`，因为缺少数据库连接
+- 前端测试可以在宿主机运行（不依赖后端服务）
+- 首次构建: `docker compose -f docker-compose.dev.yml up -d --build`
+- 日常启动: `docker compose -f docker-compose.dev.yml up -d`（不需要 --build）
+- 仅当 `pyproject.toml` 依赖变更时才需要重新 `--build`
+
+## Docker/Env 规范
+
+- docker-compose 中所有端口、密码、配置必须通过 env 变量控制，不允许硬编码
+- 新增环境变量必须同步更新 `.env.example`
+- 后端通过 `core/config.py` 读取配置，不允许 `os.getenv()`
+- 开发环境端口使用 `DEV_*` 前缀变量（如 `DEV_DB_PORT`）
 
 ## Subdirectory Guides
 
