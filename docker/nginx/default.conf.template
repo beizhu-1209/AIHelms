@@ -1,0 +1,26 @@
+upstream aihelms_api {
+    server aihelms:8000;
+}
+
+server {
+    listen ${NGINX_PORT};
+    server_name ${NGINX_SERVER_NAME};
+
+    # API 代理
+    location /api/ {
+        proxy_pass http://aihelms_api;
+        include /etc/nginx/proxy.conf;
+    }
+
+    # 管理后台
+    location /admin/ {
+        alias /usr/share/nginx/html/admin/;
+        try_files $uri $uri/ /admin/index.html;
+    }
+
+    # 用户端（默认）
+    location / {
+        root /usr/share/nginx/html/web;
+        try_files $uri $uri/ /index.html;
+    }
+}

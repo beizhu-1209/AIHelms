@@ -1,0 +1,13 @@
+{
+  "name": "aihelms-ui",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter admin dev & pnpm --filter web dev",
+    "build": "pnpm --filter shared build && pnpm --filter admin build && pnpm --filter web build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

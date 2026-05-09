@@ -1,0 +1,15 @@
+{
+  "name": "@aihelms/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "eslint src/"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
