@@ -11,7 +11,7 @@ AIHelms is an enterprise AI resource management platform that unifies model, Ski
 | Layer | Technology |
 |-------|-----------|
 | Backend | Python 3.11+, FastAPI, Gunicorn, Celery |
-| Frontend | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
+| Frontend | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS, npm workspaces |
 | Model Proxy | LiteLLM (official image, models configured via admin UI) |
 | Database | PostgreSQL 16+ |
 | Cache/Broker | Redis 7+ (also serves as Celery broker) |
@@ -62,15 +62,14 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 ```bash
 # Frontend dev (宿主机运行，通过 proxy 连接容器内 API)
-cd ui && pnpm --filter web dev
-cd ui && pnpm --filter admin dev
+cd ui && npm run dev --workspace=@aihelms/web
+cd ui && npm run dev --workspace=@aihelms/admin
 
 # Frontend test/lint
-cd ui && pnpm test
-cd ui && pnpm lint && pnpm type-check
+cd ui && npm test
+cd ui && npm run lint
 
-# Build production image
-cd ui && pnpm build
+# Build production image (多阶段构建，自动包含前端)
 docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
 
 # Full integration (production mode)

@@ -32,7 +32,7 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 
 ## Frontend (ui/)
 
-**Architecture**: pnpm monorepo — shared/admin/web. admin and web must not import from each other. Shared code via `@aihelms/shared`.
+**Architecture**: npm workspaces monorepo — shared/admin/web. admin and web must not import from each other. Shared code via `@aihelms/shared`.
 
 **Style**:
 - Composition API + `<script setup lang="ts">`, no Options API

@@ -2,7 +2,7 @@
 
 ## Architecture
 
-pnpm workspace monorepo with three packages:
+npm workspace monorepo with three packages:
 
 - **shared** (`@aihelms/shared`): Shared types, API wrappers, utilities
 - **admin**: Admin dashboard
@@ -14,26 +14,25 @@ Rule: admin and web must not import from each other. Shared code goes through `@
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
 # Dev (HMR hot reload, save to see changes)
-pnpm --filter web dev       # User app → http://localhost:3000
-pnpm --filter admin dev     # Admin → http://localhost:3001
+npm run dev --workspace=@aihelms/web       # User app → http://localhost:3000
+npm run dev --workspace=@aihelms/admin     # Admin → http://localhost:3001
 
 # Build
-pnpm build                  # All packages
-pnpm --filter web build     # Web only
-pnpm --filter admin build   # Admin only
+npm run build                              # All packages
+npm run build --workspace=@aihelms/web     # Web only
+npm run build --workspace=@aihelms/admin   # Admin only
 
 # Lint
-pnpm lint
-pnpm lint --fix
+npm run lint
 
 # Type check
-pnpm type-check
+npm run type-check --workspaces --if-present
 
 # Test
-pnpm test
+npm test
 ```
 
 ## Coding Style

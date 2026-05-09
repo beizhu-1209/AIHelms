@@ -12,7 +12,7 @@
   "dependencies": {
     "vue": "^3.4.0",
     "vue-router": "^4.3.0",
-    "@aihelms/shared": "workspace:*"
+    "@aihelms/shared": "*"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
