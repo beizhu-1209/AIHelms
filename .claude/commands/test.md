@@ -1,111 +1,111 @@
-# 运行测试
+# Run Tests
 
-完整的测试执行流程，包含后端和前端测试、lint 检查、覆盖率报告。
+Complete test execution flow including backend and frontend tests, lint checks, and coverage reports.
 
-## 快速测试（日常开发）
+## Quick Test (daily development)
 
 ```bash
-# 后端：运行所有测试
+# Backend: run all tests
 cd apps && python -m pytest -v
 
-# 前端：运行所有测试
+# Frontend: run all tests
 cd ui && pnpm test
 ```
 
-## 完整测试流程
+## Full Test Flow
 
-### Step 1: 后端测试
+### Step 1: Backend Tests
 
 ```bash
 cd apps
 
-# 运行所有测试（详细输出）
+# Run all tests (verbose)
 python -m pytest -v
 
-# 运行单个测试文件
+# Run single test file
 python -m pytest tests/test_users.py -v
 
-# 运行匹配名称的测试
+# Run tests matching name
 python -m pytest -k "test_create_user" -v
 
-# 带覆盖率报告
+# With coverage report
 python -m pytest --cov=. --cov-report=html --cov-report=term-missing
 
-# 只运行快速测试（跳过标记为 slow 的）
+# Only fast tests (skip slow-marked)
 python -m pytest -m "not slow" -v
 
-# 失败时立即停止
+# Stop on first failure
 python -m pytest -x -v
 ```
 
-### Step 2: 后端 Lint & 格式化
+### Step 2: Backend Lint & Format
 
 ```bash
 cd apps
 
-# 格式化检查（不修改文件）
+# Format check (no file changes)
 black --check .
 
-# 格式化（修改文件）
+# Format (modify files)
 black .
 
-# Lint 检查
+# Lint check
 ruff check .
 
-# Lint 自动修复
+# Lint auto-fix
 ruff check . --fix
 
-# 完整检查流程
+# Full check
 black --check . && ruff check .
 ```
 
-### Step 3: 前端测试
+### Step 3: Frontend Tests
 
 ```bash
 cd ui
 
-# 运行所有包的测试
+# Run all package tests
 pnpm test
 
-# 运行单个包的测试
+# Run single package tests
 pnpm --filter web test
 pnpm --filter admin test
 
-# 监听模式（开发时使用）
+# Watch mode (during development)
 pnpm --filter web test -- --watch
 
-# 带覆盖率
+# With coverage
 pnpm --filter web test -- --coverage
 ```
 
-### Step 4: 前端 Lint & 类型检查
+### Step 4: Frontend Lint & Type Check
 
 ```bash
 cd ui
 
-# ESLint 检查
+# ESLint check
 pnpm lint
 
-# 类型检查
+# Type check
 pnpm type-check
 
-# 完整检查流程
+# Full check
 pnpm lint && pnpm type-check
 ```
 
-## CI 完整检查（提交前必须通过）
+## CI Full Check (must pass before commit)
 
 ```bash
-# 后端
+# Backend
 cd apps && black --check . && ruff check . && python -m pytest -v
 
-# 前端
+# Frontend
 cd ui && pnpm lint && pnpm type-check && pnpm test
 ```
 
-## 测试编写规范
+## Test Writing Conventions
 
-### 后端测试（pytest）
+### Backend Tests (pytest)
 
 ```python
 # tests/test_users.py
@@ -114,7 +114,7 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_create_user_with_valid_data_returns_201():
-    """创建用户 - 有效数据应返回 201"""
+    """Create user - valid data should return 201"""
     # Arrange
     user_data = {
         "username": "testuser",
@@ -134,11 +134,11 @@ async def test_create_user_with_valid_data_returns_201():
 
 @pytest.mark.asyncio
 async def test_create_user_with_duplicate_email_returns_409():
-    """创建用户 - 重复邮箱应返回 409"""
+    """Create user - duplicate email should return 409"""
     # ...
 ```
 
-### 前端测试（Vitest）
+### Frontend Tests (Vitest)
 
 ```typescript
 // src/__tests__/UserCard.test.ts
@@ -150,7 +150,7 @@ describe('UserCard', () => {
   it('should display username', () => {
     const wrapper = mount(UserCard, {
       props: {
-        user: { id: 1, username: 'test', email: 'test@example.com' }
+        user: { id: '1', username: 'test', email: 'test@example.com' }
       }
     })
     expect(wrapper.text()).toContain('test')
@@ -158,30 +158,30 @@ describe('UserCard', () => {
 
   it('should emit delete event on button click', async () => {
     const wrapper = mount(UserCard, {
-      props: { user: { id: 1, username: 'test', email: 'test@example.com' } }
+      props: { user: { id: '1', username: 'test', email: 'test@example.com' } }
     })
     await wrapper.find('[data-testid="delete-btn"]').trigger('click')
     expect(wrapper.emitted('delete')).toHaveLength(1)
-    expect(wrapper.emitted('delete')![0]).toEqual([1])
+    expect(wrapper.emitted('delete')![0]).toEqual(['1'])
   })
 })
 ```
 
-## 测试命名规范
+## Test Naming Conventions
 
-- 后端：`test_<功能>_<场景>_<预期结果>`
+- Backend: `test_<feature>_<scenario>_<expected_result>`
   - `test_create_user_with_valid_data_returns_201`
   - `test_login_with_wrong_password_returns_401`
-- 前端：`describe('组件名')` + `it('should 行为描述')`
+- Frontend: `describe('ComponentName')` + `it('should behavior')`
   - `it('should display username')`
   - `it('should emit delete event on button click')`
 
-## 覆盖率目标
+## Coverage Targets
 
-| 模块 | 最低覆盖率 |
-|------|-----------|
+| Module | Minimum Coverage |
+|--------|-----------------|
 | core/ | 90% |
 | services/ | 80% |
 | api/ | 75% |
-| 前端组件 | 70% |
-| 前端工具函数 | 90% |
+| Frontend components | 70% |
+| Frontend utilities | 90% |

@@ -1,6 +1,20 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from api.v1.router import router as api_v1_router
+from core.config import settings
+from core.database import get_pool, close_pool
+from services.auth_service import ensure_super_admin
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await get_pool()
+    await ensure_super_admin(settings.super_admin_password)
+    yield
+    await close_pool()
+
 
 app = FastAPI(
     title="AIHelms",
@@ -8,6 +22,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 app.include_router(api_v1_router, prefix="/api/v1")
