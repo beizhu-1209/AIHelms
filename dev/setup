@@ -29,11 +29,12 @@ fi
 
 echo "安装 Python 依赖..."
 cd "$ROOT/apps"
-pip install -e ".[dev]"
+pip install -i https://mirrors.aliyun.com/pypi/simple/ -e ".[dev]"
 
-# 3) 安装前端依赖
+# 3) 安装前端依赖（使用淘宝镜像加速）
 echo "安装前端依赖..."
 cd "$ROOT/ui"
+npm config set registry https://registry.npmmirror.com
 npm install
 
 echo ""
