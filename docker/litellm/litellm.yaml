@@ -1,0 +1,11 @@
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+# 模型配置通过管理界面添加，无需在此文件中配置
+# 添加后会持久化到数据库中
+model_list: []
