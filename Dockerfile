@@ -17,4 +17,6 @@ COPY ui/packages/admin/dist ./ui/packages/admin/dist/
 
 EXPOSE ${AIHELMS_PORT:-8000}
 
-CMD uvicorn apps.main:app --host 0.0.0.0 --port ${AIHELMS_PORT:-8000}
+WORKDIR /app/apps
+
+CMD ["gunicorn", "main:app", "-c", "gunicorn_conf.py"]

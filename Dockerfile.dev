@@ -1,0 +1,14 @@
+FROM python:3.11
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+
+WORKDIR /app
+
+# Install Python dependencies (including dev), use Chinese mirror for speed
+COPY apps/pyproject.toml ./apps/
+RUN cd apps && uv pip install --system --index-url https://mirrors.aliyun.com/pypi/simple/ -e ".[dev]"
+
+# Source code mounted via volume in dev mode
+COPY apps/ ./apps/
+
+WORKDIR /app/apps

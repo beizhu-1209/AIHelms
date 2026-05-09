@@ -1,13 +1,13 @@
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  is_active: boolean;
-  is_admin: boolean;
-}
+export type { User, CreateUserParams, UpdateUserParams, UserListResult } from './types/user'
+export type { CurrentUser, LoginParams, TokenData, ChangePasswordParams } from './types/auth'
+export type { Organization, OrgTreeNode, OrgManager, CreateOrganizationParams, UpdateOrganizationParams, OrgMember } from './types/organization'
+export type { Role, Permission, CreateRoleParams, UpdateRoleParams } from './types/role'
+export type { ApiResponse } from './api/request'
 
-export interface ApiResponse<T = unknown> {
-  code: number;
-  message: string;
-  data: T;
-}
+export { request } from './api/request'
+export { login, getMe, changePassword } from './api/auth'
+export { getUsers, getUserById, createUser, updateUser, deleteUser, resetUserPassword, updateUserRoles, updateUserOrganizations } from './api/user'
+export { getOrganizations, getOrganizationTree, createOrganization, updateOrganization, updateOrgManagers, deleteOrganization, getOrganizationMembers } from './api/organization'
+export { getRoles, createRole, updateRole, deleteRole, updateRolePermissions, getPermissions } from './api/role'
+export { useAuth } from './composables/useAuth'
+export { usePermission } from './composables/usePermission'
