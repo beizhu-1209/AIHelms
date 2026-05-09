@@ -8,7 +8,7 @@ COPY ui/packages/shared/package.json ./packages/shared/
 COPY ui/packages/admin/package.json ./packages/admin/
 COPY ui/packages/web/package.json ./packages/web/
 
-RUN npm install
+RUN npm config set registry https://registry.npmmirror.com && npm install
 
 COPY ui/ ./
 
