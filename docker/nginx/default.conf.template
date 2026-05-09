@@ -3,7 +3,7 @@ upstream aihelms_api {
 }
 
 server {
-    listen ${NGINX_PORT};
+    listen 80;
     server_name ${NGINX_SERVER_NAME};
 
     # API 代理
