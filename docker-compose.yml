@@ -73,10 +73,9 @@ services:
     image: nginx:latest
     restart: unless-stopped
     ports:
-      - "${NGINX_PORT:-80}:${NGINX_PORT:-80}"
+      - "${WEB_PORT:-80}:80"
     environment:
       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
-      NGINX_PORT: ${NGINX_PORT:-80}
       NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-auto}
       NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-100M}
       NGINX_PROXY_READ_TIMEOUT: ${NGINX_PROXY_READ_TIMEOUT:-300s}
