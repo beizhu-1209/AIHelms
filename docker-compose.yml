@@ -66,6 +66,10 @@ services:
       GUNICORN_MAX_REQUESTS: ${GUNICORN_MAX_REQUESTS:-1000}
       GUNICORN_MAX_REQUESTS_JITTER: ${GUNICORN_MAX_REQUESTS_JITTER:-50}
       GUNICORN_LOGLEVEL: ${GUNICORN_LOGLEVEL:-info}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-0}
+      CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
+      CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
+    command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
     networks:
       - internal
       - external
@@ -76,29 +80,6 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
-
-  celery:
-    image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:${AIHELMS_VERSION:-latest}
-    restart: unless-stopped
-    working_dir: /app/apps
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-aihelms}@redis:6379/0
-      LITELLM_URL: http://litellm:${LITELLM_PORT:-4000}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      SECRET_KEY: ${SECRET_KEY:-aihelms}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-admin123}
-      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-0}
-      CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
-      CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
-    command: ["celery", "-A", "celery_app", "worker", "--loglevel=${CELERY_LOGLEVEL:-info}"]
-    networks:
-      - internal
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   nginx:
     image: nginx:latest
