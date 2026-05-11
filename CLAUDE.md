@@ -27,6 +27,7 @@ docker/         — Docker configs
   nginx/        — Nginx templates + entrypoint
   litellm/      — LiteLLM config
   db/           — PostgreSQL init scripts
+roadmap/        — 开发路线图，各模块任务与进度汇总 (see roadmap/README.md)
 Dockerfile      — Production image (gunicorn)
 docker-compose.yml              — Production deployment
 docker-compose.middleware.yaml  — Dev middleware (db, redis, litellm)

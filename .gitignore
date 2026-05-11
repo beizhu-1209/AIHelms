@@ -59,3 +59,7 @@ docker/db/migrations/*.sql
 # Logs
 *.log
 logs/
+
+# Roadmap (local reference, not committed)
+roadmap/
+
