@@ -2,6 +2,11 @@
 
 <!-- Auto-loaded, applies to all file operations -->
 
+## Roadmap
+
+- 每次完成工作后，必须更新 `roadmap/` 目录中对应模块的进度
+- `roadmap/` 不提交 git，仅本地追踪开发进度
+
 ## Investigate First
 
 - Never guess code behavior — read the file before answering
