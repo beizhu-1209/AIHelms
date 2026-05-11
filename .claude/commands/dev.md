@@ -43,32 +43,29 @@ docker compose -f docker-compose.middleware.yaml -p aihelms ps
 
 Verify: `curl http://localhost:8000/api/health` returns `{"status":"ok"}`
 
-Optional — start Celery worker (async tasks):
-```bash
-./dev/start-worker
-```
+Note: `start-api` simultaneously starts uvicorn (hot reload) and Celery worker.
 
 ### Step 4: Frontend
 
 ```bash
-# Admin panel
 ./dev/start-web
-
-# Or user-facing app
-cd ui && npm run dev --workspace=@aihelms/web
 ```
+
+Starts both admin (port 4001) and web (port 4002) dev servers.
+
+Unified access via Nginx: `http://<NGINX_SERVER_NAME>:<WEB_PORT>/admin` and `http://<NGINX_SERVER_NAME>:<WEB_PORT>/`
 
 ## Service Ports
 
 | Service | Port | Description |
 |---------|------|-------------|
-| FastAPI | 8000 | Backend API + Swagger |
-| Vue Admin | 5173 | Admin dev server |
-| Vue Web | 5174 | User app dev server |
+| FastAPI | 8000 | Backend API |
+| Vue Admin | 4001 | Admin dev server |
+| Vue Web | 4002 | User app dev server |
+| Nginx | WEB_PORT (default 80) | Unified gateway (dev + prod) |
 | PostgreSQL | DB_PORT (default 5432) | Database |
 | Redis | REDIS_PORT (default 6379) | Cache |
 | LiteLLM | LITELLM_PORT (default 4000) | Model proxy |
-| Nginx | WEB_PORT (default 80) | Production gateway |
 
 ## Troubleshooting
 
@@ -100,5 +97,6 @@ npm install
 ### Port already in use
 ```bash
 lsof -i :8000
-lsof -i :5173
+lsof -i :4001
+lsof -i :4002
 ```

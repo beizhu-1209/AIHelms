@@ -5,4 +5,14 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$ROOT/ui"
-npm install && npm run dev --workspace=@aihelms/admin
+npm install
+
+PIDS=()
+trap 'kill "${PIDS[@]}" 2>/dev/null; wait' EXIT
+
+npm run dev --workspace=@aihelms/admin &
+PIDS+=($!)
+npm run dev --workspace=@aihelms/web &
+PIDS+=($!)
+
+wait

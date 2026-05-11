@@ -6,4 +6,17 @@ ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$ROOT/apps"
 
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# 激活 conda 环境
+eval "$(conda shell.bash hook)"
+conda activate aihelms
+
+PIDS=()
+trap 'kill "${PIDS[@]}" 2>/dev/null; wait' EXIT
+
+uvicorn main:app --reload --host 0.0.0.0 --port 8000 &
+PIDS+=($!)
+
+celery -A celery_app worker --loglevel=info &
+PIDS+=($!)
+
+wait

@@ -32,7 +32,7 @@ services:
       retries: 5
 
   litellm:
-    image: docker.litellm.ai/berriai/litellm:main-stable
+    image: docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.3
     restart: unless-stopped
     env_file: .env
     environment:

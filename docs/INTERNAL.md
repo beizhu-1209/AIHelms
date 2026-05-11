@@ -28,10 +28,9 @@ AIHelms/
 │   └── packages/shared/   — 共享组件/工具
 ├── dev/                   — 开发启动脚本
 │   ├── setup              — 首次环境初始化
-│   ├── start-docker-compose — 启动中间件
-│   ├── start-api          — 启动后端 API
-│   ├── start-worker       — 启动 Celery Worker
-│   └── start-web          — 启动前端开发服务器
+│   ├── start-docker-compose — 启动中间件（db + redis + litellm + nginx）
+│   ├── start-api          — 启动后端 API + Celery Worker
+│   └── start-web          — 启动前端开发服务器（admin + web）
 ├── docker/                — Docker 相关配置
 │   ├── docker-compose.middleware.yaml — 开发中间件
 │   ├── middleware.env.example — 中间件环境变量模板
@@ -107,30 +106,27 @@ docker compose -f docker-compose.middleware.yaml -p aihelms ps
 ### 后端开发
 
 ```bash
-# 启动 API 服务（热重载）
+conda activate aihelms
+# 启动 API 服务 + Celery Worker（热重载）
 ./dev/start-api
-
-# 启动 Celery Worker（异步任务，按需，另一个终端）
-./dev/start-worker
 ```
 
 - API 监听 `http://localhost:8000`，代码修改自动重载
+- Celery Worker 同时启动，处理异步任务
 - 验证：`curl http://localhost:8000/api/health` 返回 `{"status":"ok"}`
 - 路由层在 `apps/api/v1/`，业务逻辑在 `apps/services/`
 
 ### 前端开发
 
 ```bash
-# 启动管理后台（默认）
+# 同时启动管理后台和用户端
 ./dev/start-web
-
-# 或启动用户端
-cd ui && npm run dev --workspace=@aihelms/web
 ```
 
-- 管理后台默认 `http://localhost:5173/admin/`
-- 用户端默认 `http://localhost:5174/`
-- Vite proxy 自动将 `/api` 请求转发到后端 `localhost:8000`
+- 管理后台：`http://localhost:4001/admin/`
+- 用户端：`http://localhost:4002/`
+- 统一访问：`http://<NGINX_SERVER_NAME>:<WEB_PORT>/admin/` 和 `http://<NGINX_SERVER_NAME>:<WEB_PORT>/`
+- Nginx 统一代理 API、admin、web，路径规则与生产一致
 
 ## 3. 测试
 
@@ -213,7 +209,7 @@ NNN_描述.sql
 
 3. 本地验证：重启后端，迁移会自动执行
 
-4. 提交代码时，迁移文件和 `init.sql` 必须一起提交
+4. 提交代码时，只提交 `init.sql`（迁移文件仅本地使用，不入库）
 
 ### 手动执行迁移
 
@@ -223,10 +219,58 @@ NNN_描述.sql
 
 > [!IMPORTANT]
 >
-> 每次涉及数据库结构变更，必须同时更新 `init.sql`（完整结构）和新增 `migrations/NNN_xxx.sql`（增量变更）。
-> `init.sql` 用于新环境初始化，`migrations/` 用于已有环境升级。
+> 每次涉及数据库结构变更，必须更新 `init.sql`（完整结构）。
+> `init.sql` 用于新环境初始化，`migrations/` 仅用于本地已有环境的增量升级，不提交到仓库。
 
 ## 5. 提交代码
+
+### 开发完成后的检查
+
+```bash
+# 后端格式化 + lint
+cd apps && black . && ruff check --fix .
+
+# 前端 lint
+cd ui && npm run lint
+
+# 运行测试
+cd apps && python -m pytest -v
+cd ui && npm test
+```
+
+### 需要提交的文件
+
+| 目录/文件 | 说明 |
+|-----------|------|
+| `apps/` | 后端源码（api、services、core、models） |
+| `ui/packages/*/src/` | 前端源码 |
+| `ui/packages/shared/src/` | 共享代码 |
+| `docker/db/init.sql` | 数据库完整结构（有变更时） |
+| `docker/nginx/` | Nginx 配置模板 |
+| `docker/litellm/` | LiteLLM 配置 |
+| `docker-compose.yml` | 生产部署配置 |
+| `docker-compose.middleware.yaml` | 开发中间件配置 |
+| `dev/` | 开发脚本 |
+| `.env.example` | 环境变量模板（新增变量时同步更新） |
+| `Dockerfile` | 生产镜像构建 |
+| `apps/pyproject.toml` | Python 依赖 |
+| `ui/package.json` | 前端依赖 |
+
+### 不提交的文件（已在 .gitignore）
+
+| 目录/文件 | 说明 |
+|-----------|------|
+| `.env` | 实际环境配置（含密码密钥） |
+| `node_modules/` | 前端依赖包 |
+| `ui/packages/*/dist/` | 前端构建产物（镜像构建时自动生成） |
+| `__pycache__/` | Python 缓存 |
+| `.venv/` / `venv/` | Python 虚拟环境 |
+| `docker/data/` | Docker 持久化数据 |
+| `docker/db/migrations/*.sql` | 数据库迁移文件（本地执行，不入库） |
+| `*.log` | 日志文件 |
+| `.vscode/` / `.idea/` | IDE 配置 |
+
+### 提交流程
 
 ```bash
 git checkout -b feature/xxx

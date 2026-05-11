@@ -7,12 +7,15 @@ server {
     server_name ${NGINX_SERVER_NAME};
 
     # API 代理
-    location /api/ {
+    location /api {
         proxy_pass http://aihelms_api;
         include /etc/nginx/proxy.conf;
     }
 
     # 管理后台
+    location = /admin {
+        rewrite ^ /admin/ last;
+    }
     location /admin/ {
         alias /usr/share/nginx/html/admin/;
         try_files $uri $uri/ /admin/index.html;

@@ -17,8 +17,8 @@ Rule: admin and web must not import from each other. Shared code goes through `@
 npm install
 
 # Dev (HMR hot reload, save to see changes)
-npm run dev --workspace=@aihelms/web       # User app → http://localhost:3000
-npm run dev --workspace=@aihelms/admin     # Admin → http://localhost:3001
+npm run dev --workspace=@aihelms/web       # User app → http://localhost:4002
+npm run dev --workspace=@aihelms/admin     # Admin → http://localhost:4001/admin/
 
 # Build
 npm run build                              # All packages

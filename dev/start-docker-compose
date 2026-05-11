@@ -5,4 +5,27 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$ROOT"
+
+# 从 .env 读取需要检查的端口
+source <(grep -E '^(WEB_PORT|DB_PORT|REDIS_PORT|LITELLM_PORT)=' .env 2>/dev/null || true)
+
+PORTS=("${WEB_PORT:-80}" "${DB_PORT:-5432}" "${REDIS_PORT:-6379}" "${LITELLM_PORT:-4000}")
+NAMES=("Nginx(WEB_PORT)" "PostgreSQL(DB_PORT)" "Redis(REDIS_PORT)" "LiteLLM(LITELLM_PORT)")
+
+for i in "${!PORTS[@]}"; do
+    port="${PORTS[$i]}"
+    name="${NAMES[$i]}"
+    pid=$(lsof -i :"$port" -P -n -t 2>/dev/null | head -1 || true)
+    if [[ -n "$pid" ]]; then
+        proc=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
+        # 如果是 docker-proxy 说明是自己的容器，跳过
+        if [[ "$proc" == "docker-proxy" ]]; then
+            continue
+        fi
+        echo "错误: 端口 $port ($name) 已被占用 (PID: $pid, 进程: $proc)"
+        echo "请释放端口或修改 .env 中的端口配置"
+        exit 1
+    fi
+done
+
 docker compose -f docker-compose.middleware.yaml -p aihelms up -d

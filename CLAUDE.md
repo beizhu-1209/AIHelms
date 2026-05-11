@@ -40,14 +40,11 @@ docker-compose.middleware.yaml  — Dev middleware (db, redis, litellm)
 # 首次 setup（复制 env、安装依赖）
 ./dev/setup
 
-# 启动中间件（db + redis + litellm）
+# 启动中间件（db + redis + litellm + nginx）
 ./dev/start-docker-compose
 
-# 启动后端（另一个终端）
+# 启动后端 + celery worker（另一个终端）
 ./dev/start-api
-
-# 启动 celery worker（另一个终端，按需）
-./dev/start-worker
 
 # 启动前端（另一个终端）
 ./dev/start-web
