@@ -61,7 +61,7 @@ docker/db/migrations/*.sql
 logs/
 
 # Roadmap (local reference, not committed)
-roadmap/
+dev/roadmap
 
 # local dev resouce
 dev/resource
