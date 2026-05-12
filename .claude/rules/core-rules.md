@@ -4,8 +4,13 @@
 
 ## Roadmap
 
-- 每次完成工作后，必须更新 `roadmap/` 目录中对应模块的进度
-- `roadmap/` 不提交 git，仅本地追踪开发进度
+- 每次完成工作后，必须更新 `dev/roadmap/` 目录中对应模块的进度
+- `dev/roadmap/` 不提交 git，仅本地追踪开发进度
+
+## Resource
+
+- 开发资料都放在 `dev/resource/` 目录中，之后提到的资料都放在这里面
+- `dev/resource/` 不提交 git，仅本地追踪开发进度
 
 ## Investigate First
 

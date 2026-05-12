@@ -110,3 +110,7 @@ docker compose up -d
 - General behavior rules → `.claude/rules/core-rules.md`
 - Project conventions (API format, database, auth, etc.) → `.claude/rules/project-rules.md`
 - Code review checklist → `.claude/commands/code-review.md`
+
+## 项目进度
+- 项目进度和任务规划在`dev/roadmap`文件夹
+- 每次工作完成要更新`dev/roadmap`文件

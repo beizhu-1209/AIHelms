@@ -63,3 +63,12 @@ logs/
 # Roadmap (local reference, not committed)
 roadmap/
 
+# local dev resouce
+dev/resource
+
+# playwright test
+
+.playwright
+
+# agent
+.agents

@@ -216,6 +216,11 @@ const routes = [
 ]
 ```
 
+## Verification
+
+- Use dev server (`./dev/start-web`) to verify frontend changes, Vite HMR auto-reloads on save, no restart needed
+- Do not use `npm run build` to verify changes during development
+
 ## Constraints
 
 - File ≤500 lines, template ≤100 lines
