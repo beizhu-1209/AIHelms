@@ -43,9 +43,16 @@ export function updateUserRoles(id: number, roleIds: number[]): Promise<null> {
   })
 }
 
-export function updateUserOrganizations(id: number, orgIds: number[]): Promise<null> {
-  return request<null>(`/api/v1/users/${id}/organizations`, {
+export function updateUserDepartments(id: number, departmentIds: number[]): Promise<null> {
+  return request<null>(`/api/v1/users/${id}/departments`, {
     method: 'PUT',
-    body: { organization_ids: orgIds },
+    body: { department_ids: departmentIds },
+  })
+}
+
+export function updateUserProjects(id: number, projectIds: number[]): Promise<null> {
+  return request<null>(`/api/v1/users/${id}/projects`, {
+    method: 'PUT',
+    body: { project_ids: projectIds },
   })
 }

@@ -35,9 +35,8 @@ AIHelms 是企业 AI 资源管理平台，以 LiteLLM 为底座，通过管理�
 
 ### AI市场
 
-- **Skill**：Skill 的发布与上架管理
-- **MCP**：MCP Server 的发布与上架管理
-- **审批**：Skill 和 MCP 上架的审批流程
+- **Skill**：Skill 的发布与上架管理，包括申请使用审批，用户可通过web端申请。
+- **MCP**：MCP Server 的发布与上架管理，包括申请使用审批，用户可通过web端申请。
 
 ### 模型纳管
 

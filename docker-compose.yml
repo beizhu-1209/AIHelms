@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}?schema=public
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
     volumes:

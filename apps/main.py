@@ -4,16 +4,15 @@ from fastapi import FastAPI
 
 from api.v1.router import router as api_v1_router
 from core.config import settings
-from core.database import get_pool, close_pool
+from core.database import close_engine
 from services.auth_service import ensure_super_admin
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await get_pool()
     await ensure_super_admin(settings.super_admin_password)
     yield
-    await close_pool()
+    await close_engine()
 
 
 app = FastAPI(

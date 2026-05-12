@@ -1,9 +1,18 @@
+from collections.abc import AsyncGenerator
+
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.database import async_session
 from core.security import ALGORITHM
 from exceptions import ForbiddenError
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session() as session:
+        yield session
 
 
 async def get_current_user(request: Request) -> dict:

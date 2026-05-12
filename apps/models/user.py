@@ -5,6 +5,9 @@ class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     email: str = Field(..., max_length=255)
     password: str = Field(..., min_length=6, max_length=128)
+    phone: str = Field("", max_length=20)
+    display_name: str = Field("", max_length=100)
+    position: str = Field("", max_length=100)
     is_active: bool = True
 
     @field_validator("email")
@@ -17,6 +20,9 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     email: str | None = Field(None, max_length=255)
+    phone: str | None = Field(None, max_length=20)
+    display_name: str | None = Field(None, max_length=100)
+    position: str | None = Field(None, max_length=100)
     is_active: bool | None = None
 
     @field_validator("email")
@@ -35,16 +41,9 @@ class UpdateUserRolesRequest(BaseModel):
     role_ids: list[int]
 
 
-class UpdateUserOrganizationsRequest(BaseModel):
-    organization_ids: list[int]
+class UpdateUserDepartmentsRequest(BaseModel):
+    department_ids: list[int]
 
 
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    email: str
-    is_active: bool
-    is_admin: bool
-    created_at: str
-    roles: list[dict] = []
-    organizations: list[dict] = []
+class UpdateUserProjectsRequest(BaseModel):
+    project_ids: list[int]

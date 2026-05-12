@@ -12,19 +12,19 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 
 ## Backend (apps/)
 
-**Architecture**: Router(api/) → Service(services/) → Database. Router has no business logic. Service never returns HTTP response.
+**Architecture**: Router(api/) → Service(services/) → Repository(repositories/) → Database. Router has no business logic. Service handles business logic, never returns HTTP response. Repository handles all database operations via SQLAlchemy.
 
 **Style**:
 - Format with black, lint with ruff, follow pyproject.toml
 - All functions have complete type annotations, no `Any`
 - Use `X | None` not `Optional[X]`, use `list[str]` not `List[str]`
-- asyncpg parameterized queries (`$1`), never concatenate SQL
+- SQLAlchemy 2.0 async style, models in `models/db.py`, queries in `repositories/`
 - Config via `core/config.py`, never `os.getenv()`
 - Logging via `logging.getLogger(__name__)`, never `print()`
 - No sensitive info in logs (passwords, tokens, keys)
 - Pydantic v2, request models with Field validators
 - File ≤500 lines, function ≤50 lines, nesting ≤3 levels, params ≤5
-- No ORM, no `import *`, no commented-out code
+- No `import *`, no commented-out code
 
 **Naming**: snake_case functions/variables, PascalCase classes, UPPER_SNAKE_CASE constants
 
@@ -50,17 +50,19 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 
 ## Database
 
-- asyncpg parameterized queries, business tables in `aihelms` schema
+- SQLAlchemy 2.0 async + asyncpg driver, business tables in `aihelms` schema
+- ORM models in `apps/models/db.py`, one model per table
+- Repository layer in `apps/repositories/`, one file per resource (e.g., `user_repo.py`)
 - Schema managed via `docker/db/init.sql` (complete structure) + `docker/db/migrations/` (local incremental changes, not committed)
 - Table names: snake_case plural. Column names: snake_case. Index: `idx_table_column`
 - API paths: plural nouns, kebab-case (`/api/v1/api-keys`)
-- **数据库结构变更时，必须更新 `init.sql`，迁移文件仅本地使用不提交**
-- 提交代码前执行 `./dev/migrate` 验证迁移可正常执行
+- When database schema changes, `init.sql` must be updated; migration files are local only, not committed
+- Run `./dev/migrate` before committing to verify migrations execute correctly
 
 ## LiteLLM
 
-- 后端内部调用 via HTTP `http://litellm:4000`，authenticate with `LITELLM_MASTER_KEY`
-- 外部 AI 客户端通过 `LITELLM_PORT` 直接访问 litellm
+- Backend internal calls via HTTP `http://litellm:4000`, authenticate with `LITELLM_MASTER_KEY`
+- External AI clients access litellm directly via `LITELLM_PORT`
 - Never call model provider APIs directly
 - Provider keys configured via admin UI, not in env files
 

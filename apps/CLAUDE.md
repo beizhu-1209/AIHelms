@@ -2,13 +2,14 @@
 
 ## Architecture
 
-Layered architecture: Router(api/) → Service(services/) → Database
+Layered architecture: Router(api/) → Service(services/) → Repository(repositories/) → Database
 
 - **Router layer**: Parse params, validate request (Pydantic), call Service, return response. No business logic.
-- **Service layer**: Business logic, database operations, external calls. Never return HTTP response objects.
-- **Core layer**: Config, security, database connections — infrastructure concerns.
+- **Service layer**: Business logic, orchestration, external calls (e.g., LiteLLM sync). Never return HTTP response objects. Never write SQL directly.
+- **Repository layer**: All database operations via SQLAlchemy 2.0 async. One file per resource. Returns ORM model instances or lists.
+- **Core layer**: Config, security, database session management — infrastructure concerns.
 
-No cross-layer calls: Router must not operate database directly. Service must not import FastAPI Request/Response.
+No cross-layer calls: Router must not operate database directly. Service must not import FastAPI Request/Response. Repository must not contain business logic.
 
 ## Tooling
 
@@ -93,15 +94,24 @@ print(f"password: {password}")  # leaking sensitive info
 ### Database Queries
 
 ```python
-# ✅ Good — parameterized query
-async def get_user(pool, user_id: str) -> dict[str, Any] | None:
-    row = await pool.fetchrow(
-        "SELECT id, email, nickname FROM aihelms.users WHERE id = $1",
-        user_id,
-    )
-    return dict(row) if row else None
+# ✅ Good — SQLAlchemy 2.0 async in repository layer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from models.db import User
 
-# ❌ Bad — SQL concatenation (injection risk)
+async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
+    result = await session.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+# ✅ Good — repository returns model, service converts to dict
+async def list_users(session: AsyncSession, page: int, page_size: int) -> list[User]:
+    offset = (page - 1) * page_size
+    result = await session.execute(
+        select(User).order_by(User.id).limit(page_size).offset(offset)
+    )
+    return list(result.scalars().all())
+
+# ❌ Bad — SQL string concatenation (injection risk)
 async def get_user(pool, user_id: str):
     row = await pool.fetchrow(
         f"SELECT * FROM users WHERE id = '{user_id}'"
@@ -193,7 +203,8 @@ async def create_user(req: CreateUserRequest):
 ## Constraints
 
 - File ≤500 lines, function ≤50 lines, nesting ≤3 levels, params ≤5
-- No ORM, no `import *`
+- Use SQLAlchemy 2.0 async for all database operations, no raw SQL in service layer
+- No `import *`
 - No commented-out code, no TODO comments
 - No `print()` debug statements
 - Test naming: `test_<feature>_<scenario>_<expected>`

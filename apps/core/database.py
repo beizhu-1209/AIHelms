@@ -1,21 +1,17 @@
-import asyncpg
+from collections.abc import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.config import settings
 
-_pool: asyncpg.Pool | None = None
+engine = create_async_engine(settings.database_url, echo=False, pool_size=10, max_overflow=20)
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-async def get_pool() -> asyncpg.Pool:
-    global _pool
-    if _pool is None:
-        # asyncpg 使用原生 postgresql:// URL
-        dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
-        _pool = await asyncpg.create_pool(dsn)
-    return _pool
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session() as session:
+        yield session
 
 
-async def close_pool():
-    global _pool
-    if _pool:
-        await _pool.close()
-        _pool = None
+async def close_engine() -> None:
+    await engine.dispose()

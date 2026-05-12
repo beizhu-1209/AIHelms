@@ -4,13 +4,13 @@
 
 ## Roadmap
 
-- 每次完成工作后，必须更新 `dev/roadmap/` 目录中对应模块的进度
-- `dev/roadmap/` 不提交 git，仅本地追踪开发进度
+- After completing work, always update the corresponding module progress in `dev/roadmap/`
+- `dev/roadmap/` is not committed to git, local progress tracking only
 
 ## Resource
 
-- 开发资料都放在 `dev/resource/` 目录中，之后提到的资料都放在这里面
-- `dev/resource/` 不提交 git，仅本地追踪开发进度
+- Development resources are stored in `dev/resource/` directory
+- `dev/resource/` is not committed to git, local reference only
 
 ## Investigate First
 
@@ -39,6 +39,17 @@
 - Do not skip git hooks, do not use --no-verify
 - Do not push directly to main branch
 - For changes involving auth, permissions, or data deletion: state the impact scope
+
+## Testing
+
+- Functional tests must use Playwright browser automation, never call APIs directly (curl/fetch etc.)
+- Test cases simulate real user workflows, WYSIWYG, minimize steps
+- Test URLs must read from `.env` config (WEB_PORT etc.), never hardcode localhost or port numbers
+- API auth must use platform tokens (JWT or API Key), never use username/password to call APIs directly in tests
+- Test flow: login via page → page operations → verify page results
+- Backend unit tests use pytest, integration and E2E tests must use Playwright
+- After completing each feature module, add corresponding test cases and record in roadmap
+- All Playwright screenshots and artifacts must be saved to `.playwright-mcp/` directory, never in the project root or source directories
 
 ## Efficiency
 

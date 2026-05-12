@@ -54,7 +54,7 @@ function handleEdit(role: Role): void {
 
 function handleEditPermissions(role: Role): void {
   selectedRole.value = role
-  selectedPermissionIds.value = role.permissions.map((p) => p.id)
+  selectedPermissionIds.value = role.permissions.map((p: { id: number }) => p.id)
   showPermissionEditor.value = true
 }
 

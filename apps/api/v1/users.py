@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import require_permission
+from core.deps import get_db, require_permission
 from exceptions import NotFoundError, ConflictError
 from models.user import (
     CreateUserRequest,
     UpdateUserRequest,
     ResetPasswordRequest,
     UpdateUserRolesRequest,
-    UpdateUserOrganizationsRequest,
+    UpdateUserDepartmentsRequest,
+    UpdateUserProjectsRequest,
 )
 from services import user_service
 
@@ -19,19 +21,30 @@ async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     keyword: str = Query("", max_length=64),
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("user:read")),
 ):
-    result = await user_service.list_users(page, page_size, keyword)
+    result = await user_service.list_users(session, page, page_size, keyword)
     return {"code": 200, "message": "ok", "data": result}
 
 
 @router.post("")
 async def create_user(
     req: CreateUserRequest,
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("user:create")),
 ):
     try:
-        user = await user_service.create_user(req.username, req.email, req.password, req.is_active)
+        user = await user_service.create_user(
+            session,
+            username=req.username,
+            email=req.email,
+            password=req.password,
+            phone=req.phone,
+            display_name=req.display_name,
+            position=req.position,
+            is_active=req.is_active,
+        )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return {"code": 200, "message": "ok", "data": user}
@@ -40,10 +53,11 @@ async def create_user(
 @router.get("/{user_id}")
 async def get_user(
     user_id: int,
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("user:read")),
 ):
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await user_service.get_user_by_id(session, user_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
     return {"code": 200, "message": "ok", "data": user}
@@ -53,10 +67,18 @@ async def get_user(
 async def update_user(
     user_id: int,
     req: UpdateUserRequest,
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("user:update")),
 ):
     try:
-        user = await user_service.update_user(user_id, req.email, req.is_active)
+        user = await user_service.update_user(
+            session, user_id,
+            email=req.email,
+            phone=req.phone,
+            display_name=req.display_name,
+            position=req.position,
+            is_active=req.is_active,
+        )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
     except ConflictError as e:
@@ -67,10 +89,11 @@ async def update_user(
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: int,
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("user:delete")),
 ):
     try:
-        await user_service.delete_user(user_id)
+        await user_service.delete_user(session, user_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
     except ConflictError as e:
@@ -82,10 +105,11 @@ async def delete_user(
 async def reset_user_password(
     user_id: int,
     req: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("user:update")),
 ):
     try:
-        await user_service.reset_password(user_id, req.new_password)
+        await user_service.reset_password(session, user_id, req.new_password)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
     return {"code": 200, "message": "ok", "data": None}
@@ -95,23 +119,39 @@ async def reset_user_password(
 async def update_user_roles(
     user_id: int,
     req: UpdateUserRolesRequest,
+    session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("role:update")),
 ):
     try:
-        await user_service.update_user_roles(user_id, req.role_ids)
+        await user_service.update_user_roles(session, user_id, req.role_ids)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
     return {"code": 200, "message": "ok", "data": None}
 
 
-@router.put("/{user_id}/organizations")
-async def update_user_organizations(
+@router.put("/{user_id}/departments")
+async def update_user_departments(
     user_id: int,
-    req: UpdateUserOrganizationsRequest,
-    _: dict = Depends(require_permission("organization:update")),
+    req: UpdateUserDepartmentsRequest,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:update")),
 ):
     try:
-        await user_service.update_user_organizations(user_id, req.organization_ids)
+        await user_service.update_user_departments(session, user_id, req.department_ids)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return {"code": 200, "message": "ok", "data": None}
+
+
+@router.put("/{user_id}/projects")
+async def update_user_projects(
+    user_id: int,
+    req: UpdateUserProjectsRequest,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:update")),
+):
+    try:
+        await user_service.update_user_projects(session, user_id, req.project_ids)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
     return {"code": 200, "message": "ok", "data": None}

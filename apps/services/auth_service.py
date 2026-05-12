@@ -1,129 +1,116 @@
 import logging
 
-from core.database import get_pool
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.database import async_session
 from core.security import verify_password, get_password_hash, create_access_token
 from exceptions import NotFoundError, UnauthorizedError
+from models.db import User, Role, UserRole, RolePermission, Permission
 
 logger = logging.getLogger(__name__)
 
 
-async def authenticate(username: str, password: str) -> dict:
-    pool = await get_pool()
-    row = await pool.fetchrow(
-        "SELECT id, username, email, hashed_password, is_active, is_admin "
-        "FROM aihelms.users WHERE username = $1",
-        username,
-    )
-    if not row:
+async def authenticate(session: AsyncSession, username: str, password: str) -> User:
+    result = await session.execute(select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
+    if not user:
         raise UnauthorizedError("用户名或密码错误")
-    if not row["is_active"]:
+    if not user.is_active:
         raise UnauthorizedError("账户已被禁用")
-    if not verify_password(password, row["hashed_password"]):
+    if not verify_password(password, user.hashed_password):
         raise UnauthorizedError("用户名或密码错误")
-    return dict(row)
+    return user
 
 
-async def login(username: str, password: str) -> str:
-    user = await authenticate(username, password)
-    permissions = await get_user_permissions(user["id"])
+async def login(session: AsyncSession, username: str, password: str) -> str:
+    user = await authenticate(session, username, password)
+    permissions = await get_user_permissions(session, user.id)
     token_data = {
-        "sub": str(user["id"]),
-        "username": user["username"],
-        "is_admin": user["is_admin"],
+        "sub": str(user.id),
+        "username": user.username,
+        "is_admin": user.is_admin,
         "permissions": permissions,
     }
     return create_access_token(token_data)
 
 
-async def get_user_permissions(user_id: int) -> list[str]:
-    pool = await get_pool()
-    rows = await pool.fetch(
-        "SELECT DISTINCT p.code FROM aihelms.permissions p "
-        "JOIN aihelms.role_permissions rp ON rp.permission_id = p.id "
-        "JOIN aihelms.user_roles ur ON ur.role_id = rp.role_id "
-        "WHERE ur.user_id = $1",
-        user_id,
+async def get_user_permissions(session: AsyncSession, user_id: int) -> list[str]:
+    result = await session.execute(
+        select(Permission.code)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .join(UserRole, UserRole.role_id == RolePermission.role_id)
+        .where(UserRole.user_id == user_id)
+        .distinct()
     )
-    return [row["code"] for row in rows]
+    return list(result.scalars().all())
 
 
-async def get_current_user_info(user_id: int) -> dict:
-    pool = await get_pool()
-    row = await pool.fetchrow(
-        "SELECT id, username, email, is_active, is_admin, created_at "
-        "FROM aihelms.users WHERE id = $1",
-        user_id,
-    )
-    if not row:
+async def get_current_user_info(session: AsyncSession, user_id: int) -> dict:
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
         raise NotFoundError("user", user_id)
-    user = dict(row)
-    user["created_at"] = user["created_at"].isoformat()
-    user["permissions"] = await get_user_permissions(user_id)
-    roles = await pool.fetch(
-        "SELECT r.id, r.name, r.display_name FROM aihelms.roles r "
-        "JOIN aihelms.user_roles ur ON ur.role_id = r.id "
-        "WHERE ur.user_id = $1",
-        user_id,
-    )
-    user["roles"] = [dict(r) for r in roles]
-    return user
+    permissions = await get_user_permissions(session, user_id)
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "phone": user.phone,
+        "display_name": user.display_name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "permissions": permissions,
+        "roles": [{"id": ur.role.id, "name": ur.role.name, "display_name": ur.role.display_name} for ur in user.roles],
+    }
 
 
-async def change_password(user_id: int, old_password: str, new_password: str) -> None:
-    pool = await get_pool()
-    row = await pool.fetchrow(
-        "SELECT hashed_password FROM aihelms.users WHERE id = $1",
-        user_id,
-    )
-    if not row:
+async def change_password(session: AsyncSession, user_id: int, old_password: str, new_password: str) -> None:
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
         raise NotFoundError("user", user_id)
-    if not verify_password(old_password, row["hashed_password"]):
+    if not verify_password(old_password, user.hashed_password):
         raise UnauthorizedError("原密码错误")
-    hashed = get_password_hash(new_password)
-    await pool.execute(
-        "UPDATE aihelms.users SET hashed_password = $1, updated_at = NOW() WHERE id = $2",
-        hashed,
-        user_id,
-    )
+    user.hashed_password = get_password_hash(new_password)
+    await session.commit()
 
 
 async def ensure_super_admin(password: str) -> None:
-    pool = await get_pool()
-    admin_role = await pool.fetchrow(
-        "SELECT id FROM aihelms.roles WHERE name = 'super_admin'"
-    )
-    if not admin_role:
-        return
-    has_super_admin = await pool.fetchrow(
-        "SELECT ur.user_id FROM aihelms.user_roles ur WHERE ur.role_id = $1 LIMIT 1",
-        admin_role["id"],
-    )
-    if has_super_admin:
-        return
-    existing_admin = await pool.fetchrow(
-        "SELECT id FROM aihelms.users WHERE is_admin = true LIMIT 1"
-    )
-    if existing_admin:
-        await pool.execute(
-            "INSERT INTO aihelms.user_roles (user_id, role_id) VALUES ($1, $2) "
-            "ON CONFLICT (user_id, role_id) DO NOTHING",
-            existing_admin["id"],
-            admin_role["id"],
+    async with async_session() as session:
+        result = await session.execute(select(Role).where(Role.name == "super_admin"))
+        admin_role = result.scalar_one_or_none()
+        if not admin_role:
+            return
+
+        result = await session.execute(
+            select(UserRole).where(UserRole.role_id == admin_role.id).limit(1)
         )
-        logger.info("assigned super_admin role to existing admin user %d", existing_admin["id"])
-        return
-    hashed = get_password_hash(password)
-    user_id = await pool.fetchval(
-        "INSERT INTO aihelms.users (username, email, hashed_password, is_active, is_admin) "
-        "VALUES ('admin', 'admin@aihelms.local', $1, true, true) "
-        "ON CONFLICT (username) DO UPDATE SET hashed_password = $1 "
-        "RETURNING id",
-        hashed,
-    )
-    await pool.execute(
-        "INSERT INTO aihelms.user_roles (user_id, role_id) VALUES ($1, $2) "
-        "ON CONFLICT (user_id, role_id) DO NOTHING",
-        user_id,
-        admin_role["id"],
-    )
-    logger.info("created super_admin user 'admin'")
+        if result.scalar_one_or_none():
+            return
+
+        result = await session.execute(
+            select(User).where(User.is_admin == True).limit(1)
+        )
+        existing_admin = result.scalar_one_or_none()
+
+        if existing_admin:
+            session.add(UserRole(user_id=existing_admin.id, role_id=admin_role.id))
+            await session.commit()
+            logger.info("assigned super_admin role to existing admin user %d", existing_admin.id)
+            return
+
+        hashed = get_password_hash(password)
+        user = User(
+            username="admin",
+            email="admin@aihelms.local",
+            hashed_password=hashed,
+            is_active=True,
+            is_admin=True,
+        )
+        session.add(user)
+        await session.flush()
+        session.add(UserRole(user_id=user.id, role_id=admin_role.id))
+        await session.commit()
+        logger.info("created super_admin user 'admin'")

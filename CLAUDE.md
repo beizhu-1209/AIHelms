@@ -27,7 +27,7 @@ docker/         — Docker configs
   nginx/        — Nginx templates + entrypoint
   litellm/      — LiteLLM config
   db/           — PostgreSQL init scripts
-roadmap/        — 开发路线图，各模块任务与进度汇总 (see roadmap/README.md)
+dev/roadmap/    — Development roadmap, task tracking per module (local only, not committed)
 Dockerfile      — Production image (gunicorn)
 docker-compose.yml              — Production deployment
 docker-compose.middleware.yaml  — Dev middleware (db, redis, litellm)
@@ -35,36 +35,36 @@ docker-compose.middleware.yaml  — Dev middleware (db, redis, litellm)
 
 ## Development Environment
 
-开发模式：Docker 只跑中间件，应用代码在宿主机运行。
+Dev mode: Docker runs middleware only, application code runs on host.
 
 ```bash
-# 首次 setup（复制 env、安装依赖）
+# First-time setup (copy env, install deps)
 ./dev/setup
 
-# 启动中间件（db + redis + litellm + nginx）
+# Start middleware (db + redis + litellm + nginx)
 ./dev/start-docker-compose
 
-# 启动后端 + celery worker（另一个终端）
+# Start backend + celery worker (separate terminal)
 ./dev/start-api
 
-# 启动前端（另一个终端）
+# Start frontend (separate terminal)
 ./dev/start-web
 ```
 
 ## Common Commands
 
 ```bash
-# 后端测试（需先启动中间件）
+# Backend tests (requires middleware running)
 cd apps && python -m pytest -v
 
-# 后端 lint
+# Backend lint
 cd apps && black . && ruff check .
 
-# 前端 test/lint
+# Frontend test/lint
 cd ui && npm test
 cd ui && npm run lint
 
-# Build production image (多阶段构建，自动包含前端)
+# Build production image (multi-stage, includes frontend)
 docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
 
 # Production deployment
@@ -73,11 +73,11 @@ docker compose up -d
 
 ## Backend Runtime
 
-| Mode | Command | 说明 |
-|------|---------|------|
-| Production | `gunicorn main:app -c gunicorn_conf.py` | 多 worker，UvicornWorker |
-| Development | `uvicorn main:app --reload` | 单 worker，热重载 |
-| Celery Worker | `celery -A celery_app worker --loglevel=info` | 异步任务处理 |
+| Mode | Command | Description |
+|------|---------|-------------|
+| Production | `gunicorn main:app -c gunicorn_conf.py` | Multi-worker, UvicornWorker |
+| Development | `uvicorn main:app --reload` | Single worker, hot reload |
+| Celery Worker | `celery -A celery_app worker --loglevel=info` | Async task processing |
 
 ## Image Registry
 
@@ -92,16 +92,16 @@ docker compose up -d
 
 ## Testing Rules
 
-- 后端测试在宿主机运行，需先启动中间件（`./dev/start-docker-compose`）
-- 使用 `cd apps && python -m pytest -v` 执行测试
-- 前端测试可以直接运行（不依赖后端服务）
+- Backend tests run on host, require middleware running (`./dev/start-docker-compose`)
+- Run with `cd apps && python -m pytest -v`
+- Frontend tests run independently (no backend dependency)
 
-## Docker/Env 规范
+## Docker/Env Rules
 
-- docker-compose 中所有端口、密码、配置必须通过 env 变量控制，不允许硬编码
-- 新增环境变量必须同步更新 `.env.example`
-- 后端通过 `core/config.py` 读取配置，不允许 `os.getenv()`
-- 内部容器端口固定不可配置（aihelms:8000、litellm:4000）
+- All ports, passwords, and config in docker-compose must use env variables, no hardcoding
+- New env variables must be added to `.env.example`
+- Backend reads config via `core/config.py`, never use `os.getenv()`
+- Internal container ports are fixed and not configurable (aihelms:8000, litellm:4000)
 
 ## Subdirectory Guides
 
@@ -111,6 +111,7 @@ docker compose up -d
 - Project conventions (API format, database, auth, etc.) → `.claude/rules/project-rules.md`
 - Code review checklist → `.claude/commands/code-review.md`
 
-## 项目进度
-- 项目进度和任务规划在`dev/roadmap`文件夹
-- 每次工作完成要更新`dev/roadmap`文件
+## Progress Tracking
+
+- Project progress and task planning in `dev/roadmap/` folder
+- Update `dev/roadmap/` after completing work

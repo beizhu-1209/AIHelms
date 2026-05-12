@@ -12,8 +12,13 @@ CREATE TABLE IF NOT EXISTS aihelms.users (
     username VARCHAR(64) NOT NULL UNIQUE,
     email VARCHAR(255) NOT NULL UNIQUE,
     hashed_password VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) DEFAULT '',
+    display_name VARCHAR(100) DEFAULT '',
+    avatar VARCHAR(500) DEFAULT '',
+    position VARCHAR(100) DEFAULT '',
     is_active BOOLEAN DEFAULT true,
     is_admin BOOLEAN DEFAULT false,
+    litellm_user_id VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -40,28 +45,47 @@ CREATE TABLE IF NOT EXISTS aihelms.usage_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 组织表（department=树形部门/分支机构, group=扁平项目组）
-CREATE TABLE IF NOT EXISTS aihelms.organizations (
+-- 部门表（树形多层级，叶子节点同步为 LiteLLM Team）
+CREATE TABLE IF NOT EXISTS aihelms.departments (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
-    type VARCHAR(16) NOT NULL CHECK (type IN ('department', 'group')),
-    parent_id BIGINT REFERENCES aihelms.organizations(id),
+    parent_id BIGINT REFERENCES aihelms.departments(id),
     description TEXT DEFAULT '',
     sort_order INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT true,
+    litellm_team_id VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT chk_group_no_parent CHECK (type != 'group' OR parent_id IS NULL)
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 用户-组织 多对多（归属关系）
-CREATE TABLE IF NOT EXISTS aihelms.user_organizations (
+-- 项目表（扁平一级，每个项目同步为 LiteLLM Team）
+CREATE TABLE IF NOT EXISTS aihelms.projects (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES aihelms.users(id),
-    organization_id BIGINT NOT NULL REFERENCES aihelms.organizations(id),
+    name VARCHAR(128) NOT NULL,
+    description TEXT DEFAULT '',
+    is_active BOOLEAN DEFAULT true,
+    litellm_team_id VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 用户-部门 多对多
+CREATE TABLE IF NOT EXISTS aihelms.user_departments (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES aihelms.users(id) ON DELETE CASCADE,
+    department_id BIGINT NOT NULL REFERENCES aihelms.departments(id) ON DELETE CASCADE,
     is_manager BOOLEAN DEFAULT false,
     joined_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (user_id, organization_id)
+    UNIQUE (user_id, department_id)
+);
+
+-- 用户-项目 多对多
+CREATE TABLE IF NOT EXISTS aihelms.user_projects (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES aihelms.users(id) ON DELETE CASCADE,
+    project_id BIGINT NOT NULL REFERENCES aihelms.projects(id) ON DELETE CASCADE,
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, project_id)
 );
 
 -- 角色表
@@ -105,10 +129,11 @@ CREATE TABLE IF NOT EXISTS aihelms.user_roles (
 CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON aihelms.usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON aihelms.usage_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON aihelms.api_keys(user_id);
-CREATE INDEX IF NOT EXISTS idx_organizations_parent_id ON aihelms.organizations(parent_id);
-CREATE INDEX IF NOT EXISTS idx_organizations_type ON aihelms.organizations(type);
-CREATE INDEX IF NOT EXISTS idx_user_organizations_user_id ON aihelms.user_organizations(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_organizations_org_id ON aihelms.user_organizations(organization_id);
+CREATE INDEX IF NOT EXISTS idx_departments_parent_id ON aihelms.departments(parent_id);
+CREATE INDEX IF NOT EXISTS idx_user_departments_user_id ON aihelms.user_departments(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_departments_dept_id ON aihelms.user_departments(department_id);
+CREATE INDEX IF NOT EXISTS idx_user_projects_user_id ON aihelms.user_projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_projects_project_id ON aihelms.user_projects(project_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON aihelms.user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON aihelms.user_roles(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON aihelms.role_permissions(role_id);
@@ -127,10 +152,14 @@ INSERT INTO aihelms.permissions (code, name, resource, action, description) VALU
     ('user:read', '查看用户', 'user', 'read', '查看用户列表和详情'),
     ('user:update', '编辑用户', 'user', 'update', '编辑用户信息'),
     ('user:delete', '删除用户', 'user', 'delete', '删除用户'),
-    ('organization:create', '创建组织', 'organization', 'create', '创建部门或项目组'),
-    ('organization:read', '查看组织', 'organization', 'read', '查看组织架构'),
-    ('organization:update', '编辑组织', 'organization', 'update', '编辑组织信息'),
-    ('organization:delete', '删除组织', 'organization', 'delete', '删除组织'),
+    ('department:create', '创建部门', 'department', 'create', '创建部门'),
+    ('department:read', '查看部门', 'department', 'read', '查看部门架构'),
+    ('department:update', '编辑部门', 'department', 'update', '编辑部门信息'),
+    ('department:delete', '删除部门', 'department', 'delete', '删除部门'),
+    ('project:create', '创建项目', 'project', 'create', '创建项目'),
+    ('project:read', '查看项目', 'project', 'read', '查看项目列表'),
+    ('project:update', '编辑项目', 'project', 'update', '编辑项目信息'),
+    ('project:delete', '删除项目', 'project', 'delete', '删除项目'),
     ('role:create', '创建角色', 'role', 'create', '创建新角色'),
     ('role:read', '查看角色', 'role', 'read', '查看角色列表'),
     ('role:update', '编辑角色', 'role', 'update', '编辑角色和权限分配'),
@@ -150,10 +179,10 @@ SELECT r.id, p.id FROM aihelms.roles r, aihelms.permissions p
 WHERE r.name = 'admin' AND p.code NOT IN ('role:create', 'role:update', 'role:delete')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- department_manager 拥有查看权限 + 组织查看
+-- department_manager 拥有查看权限 + 部门/项目查看
 INSERT INTO aihelms.role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM aihelms.roles r, aihelms.permissions p
-WHERE r.name = 'department_manager' AND p.code IN ('user:read', 'organization:read', 'role:read', 'permission:read')
+WHERE r.name = 'department_manager' AND p.code IN ('user:read', 'department:read', 'project:read', 'role:read', 'permission:read')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- user 只有基础查看权限

@@ -7,8 +7,13 @@ import {
   updateUser,
   resetUserPassword,
   updateUserRoles,
+  updateUserDepartments,
+  updateUserProjects,
   getRoles,
+  getDepartmentTree,
+  getProjects,
   type Role,
+  type DeptTreeNode,
 } from '@aihelms/shared'
 
 const route = useRoute()
@@ -20,21 +25,54 @@ const isEdit = computed(() => !!userId.value)
 const username = ref('')
 const email = ref('')
 const password = ref('')
+const phone = ref('')
+const displayName = ref('')
+const position = ref('')
 const isActive = ref(true)
 const selectedRoleIds = ref<number[]>([])
+const selectedDeptIds = ref<number[]>([])
+const selectedProjectIds = ref<number[]>([])
 const allRoles = ref<Role[]>([])
+const deptTree = ref<DeptTreeNode[]>([])
+const allProjects = ref<{ id: number; name: string }[]>([])
 const newPassword = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
 
+function flattenDeptTree(nodes: DeptTreeNode[], depth: number = 0): { id: number; name: string; depth: number }[] {
+  const result: { id: number; name: string; depth: number }[] = []
+  for (const node of nodes) {
+    result.push({ id: node.id, name: node.name, depth })
+    if (node.children.length > 0) {
+      result.push(...flattenDeptTree(node.children, depth + 1))
+    }
+  }
+  return result
+}
+
+const flatDepts = computed(() => flattenDeptTree(deptTree.value))
+
 async function fetchData(): Promise<void> {
-  allRoles.value = await getRoles()
+  const [roles, tree, projects] = await Promise.all([
+    getRoles(),
+    getDepartmentTree(),
+    getProjects(1, 100),
+  ])
+  allRoles.value = roles
+  deptTree.value = tree
+  allProjects.value = projects.items.map((p: { id: number; name: string }) => ({ id: p.id, name: p.name }))
+
   if (isEdit.value && userId.value) {
     const user = await getUserById(userId.value)
     username.value = user.username
     email.value = user.email
+    phone.value = user.phone || ''
+    displayName.value = user.display_name || ''
+    position.value = user.position || ''
     isActive.value = user.is_active
-    selectedRoleIds.value = user.roles.map((r) => r.id)
+    selectedRoleIds.value = user.roles.map((r: { id: number }) => r.id)
+    selectedDeptIds.value = user.departments.map((d: { id: number }) => d.id)
+    selectedProjectIds.value = user.projects.map((p: { id: number }) => p.id)
   }
 }
 
@@ -43,8 +81,18 @@ async function handleSubmit(): Promise<void> {
   isLoading.value = true
   try {
     if (isEdit.value && userId.value) {
-      await updateUser(userId.value, { email: email.value, is_active: isActive.value })
-      await updateUserRoles(userId.value, selectedRoleIds.value)
+      await updateUser(userId.value, {
+        email: email.value,
+        phone: phone.value,
+        display_name: displayName.value,
+        position: position.value,
+        is_active: isActive.value,
+      })
+      await Promise.all([
+        updateUserRoles(userId.value, selectedRoleIds.value),
+        updateUserDepartments(userId.value, selectedDeptIds.value),
+        updateUserProjects(userId.value, selectedProjectIds.value),
+      ])
       if (newPassword.value) {
         await resetUserPassword(userId.value, newPassword.value)
       }
@@ -53,12 +101,20 @@ async function handleSubmit(): Promise<void> {
         errorMessage.value = '请填写所有必填项'
         return
       }
-      await createUser({
+      const user = await createUser({
         username: username.value,
         email: email.value,
         password: password.value,
+        phone: phone.value,
+        display_name: displayName.value,
+        position: position.value,
         is_active: isActive.value,
       })
+      await Promise.all([
+        updateUserRoles(user.id, selectedRoleIds.value),
+        updateUserDepartments(user.id, selectedDeptIds.value),
+        updateUserProjects(user.id, selectedProjectIds.value),
+      ])
     }
     router.push({ name: 'UserList' })
   } catch (e) {
@@ -81,6 +137,24 @@ function toggleRole(roleId: number): void {
   }
 }
 
+function toggleDept(deptId: number): void {
+  const idx = selectedDeptIds.value.indexOf(deptId)
+  if (idx >= 0) {
+    selectedDeptIds.value.splice(idx, 1)
+  } else {
+    selectedDeptIds.value.push(deptId)
+  }
+}
+
+function toggleProject(projectId: number): void {
+  const idx = selectedProjectIds.value.indexOf(projectId)
+  if (idx >= 0) {
+    selectedProjectIds.value.splice(idx, 1)
+  } else {
+    selectedProjectIds.value.push(projectId)
+  }
+}
+
 onMounted(fetchData)
 </script>
 
@@ -93,7 +167,7 @@ onMounted(fetchData)
     <div class="max-w-lg rounded-2xl border border-slate-200/60 bg-white/70 p-6 shadow-sm backdrop-blur-xl">
       <form @submit.prevent="handleSubmit">
         <div class="mb-4">
-          <label class="mb-1.5 block text-sm font-medium text-slate-700">用户名</label>
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">用户名 *</label>
           <input
             v-model="username"
             type="text"
@@ -103,7 +177,7 @@ onMounted(fetchData)
         </div>
 
         <div class="mb-4">
-          <label class="mb-1.5 block text-sm font-medium text-slate-700">邮箱</label>
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">邮箱 *</label>
           <input
             v-model="email"
             type="email"
@@ -111,8 +185,36 @@ onMounted(fetchData)
           />
         </div>
 
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">手机号</label>
+            <input
+              v-model="phone"
+              type="text"
+              class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            />
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">姓名</label>
+            <input
+              v-model="displayName"
+              type="text"
+              class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            />
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">职位</label>
+          <input
+            v-model="position"
+            type="text"
+            class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+          />
+        </div>
+
         <div v-if="!isEdit" class="mb-4">
-          <label class="mb-1.5 block text-sm font-medium text-slate-700">密码</label>
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">密码 *</label>
           <input
             v-model="password"
             type="password"
@@ -159,6 +261,49 @@ onMounted(fetchData)
               {{ role.display_name }}
             </label>
           </div>
+        </div>
+
+        <div class="mb-5">
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">部门</label>
+          <div class="flex flex-wrap gap-2">
+            <label
+              v-for="dept in flatDepts"
+              :key="dept.id"
+              class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+              :class="selectedDeptIds.includes(dept.id) ? 'border-blue-300 bg-blue-50 text-blue-700' : ''"
+              :style="{ marginLeft: dept.depth * 16 + 'px' }"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedDeptIds.includes(dept.id)"
+                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20"
+                @change="toggleDept(dept.id)"
+              />
+              {{ dept.name }}
+            </label>
+          </div>
+          <p v-if="flatDepts.length === 0" class="text-sm text-slate-400">暂无部门</p>
+        </div>
+
+        <div class="mb-5">
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">项目</label>
+          <div class="flex flex-wrap gap-2">
+            <label
+              v-for="proj in allProjects"
+              :key="proj.id"
+              class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+              :class="selectedProjectIds.includes(proj.id) ? 'border-green-300 bg-green-50 text-green-700' : ''"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedProjectIds.includes(proj.id)"
+                class="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500/20"
+                @change="toggleProject(proj.id)"
+              />
+              {{ proj.name }}
+            </label>
+          </div>
+          <p v-if="allProjects.length === 0" class="text-sm text-slate-400">暂无项目</p>
         </div>
 
         <p v-if="errorMessage" class="mb-4 text-sm text-red-500">{{ errorMessage }}</p>

@@ -68,7 +68,7 @@ dev/resource
 
 # playwright test
 
-.playwright
+.playwright*
 
 # agent
 .agents

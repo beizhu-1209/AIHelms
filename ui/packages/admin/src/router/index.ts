@@ -20,6 +20,18 @@ const router = createRouter({
           component: () => import('../views/Dashboard.vue'),
         },
         {
+          path: 'departments',
+          name: 'DepartmentManage',
+          component: () => import('../views/departments/DepartmentManage.vue'),
+          meta: { permission: 'department:read' },
+        },
+        {
+          path: 'projects',
+          name: 'ProjectManage',
+          component: () => import('../views/projects/ProjectManage.vue'),
+          meta: { permission: 'project:read' },
+        },
+        {
           path: 'users',
           name: 'UserList',
           component: () => import('../views/users/UserList.vue'),
@@ -36,18 +48,6 @@ const router = createRouter({
           name: 'UserEdit',
           component: () => import('../views/users/UserForm.vue'),
           meta: { permission: 'user:update' },
-        },
-        {
-          path: 'organizations',
-          name: 'OrgList',
-          component: () => import('../views/organizations/OrgList.vue'),
-          meta: { permission: 'organization:read' },
-        },
-        {
-          path: 'branches',
-          name: 'BranchList',
-          component: () => import('../views/organizations/BranchList.vue'),
-          meta: { permission: 'organization:read' },
         },
         {
           path: 'roles',

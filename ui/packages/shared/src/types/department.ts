@@ -1,51 +1,54 @@
-export interface Organization {
+export interface Department {
   id: number
   name: string
-  type: 'department' | 'group'
   parent_id: number | null
   description: string
   sort_order: number
   is_active: boolean
+  litellm_team_id: string | null
   created_at: string
   updated_at: string
-  managers: OrgManager[]
+  managers?: DeptManager[]
 }
 
-export interface OrgManager {
+export interface DeptManager {
   id: number
   username: string
+  display_name: string
 }
 
-export interface OrgTreeNode {
+export interface DeptTreeNode {
   id: number
   name: string
-  type: string
+  parent_id: number | null
   description: string
   sort_order: number
   is_active: boolean
-  managers: OrgManager[]
-  children: OrgTreeNode[]
+  litellm_team_id: string | null
+  created_at: string
+  updated_at: string
+  children: DeptTreeNode[]
 }
 
-export interface CreateOrganizationParams {
+export interface CreateDepartmentParams {
   name: string
-  type: 'department' | 'group'
   parent_id?: number | null
   description?: string
-  sort_order?: number
 }
 
-export interface UpdateOrganizationParams {
+export interface UpdateDepartmentParams {
   name?: string
   description?: string
   sort_order?: number
-  is_active?: boolean
 }
 
-export interface OrgMember {
+export interface DeptMember {
   id: number
   username: string
   email: string
+  phone: string
+  display_name: string
+  position: string
   is_active: boolean
   is_manager: boolean
   joined_at: string

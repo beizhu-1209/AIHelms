@@ -10,7 +10,6 @@ import {
   Brain,
   Zap,
   Plug,
-  CheckCircle,
   Factory,
   Package,
   Wallet,
@@ -49,10 +48,10 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     title: 'AI身份',
     icon: Fingerprint,
     items: [
-      { label: '部门管理', icon: FolderTree, path: '/organizations', permission: 'organization:read' },
+      { label: '部门管理', icon: FolderTree, path: '/departments', permission: 'department:read' },
+      { label: '项目管理', icon: GitBranch, path: '/projects', permission: 'project:read' },
       { label: '人员管理', icon: Users, path: '/users', permission: 'user:read' },
       { label: '角色管理', icon: KeyRound, path: '/roles', permission: 'role:read' },
-      { label: '分支机构', icon: GitBranch, path: '/branches', permission: 'organization:read' },
       { label: 'AI身份管理', icon: Key, path: '/ai-identity', disabled: true },
     ],
   },
@@ -69,7 +68,6 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     items: [
       { label: 'Skill管理', icon: Zap, path: '/skills', disabled: true },
       { label: 'MCP管理', icon: Plug, path: '/mcp', disabled: true },
-      { label: '审批管理', icon: CheckCircle, path: '/approvals', disabled: true },
     ],
   },
   {
