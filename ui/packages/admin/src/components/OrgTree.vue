@@ -20,12 +20,12 @@ function handleSelect(node: OrgTreeNode): void {
   <ul :class="level ? 'ml-4' : ''">
     <li v-for="node in nodes" :key="node.id" class="my-1">
       <div
-        class="flex cursor-pointer items-center rounded-md px-2 py-1 text-sm hover:bg-gray-100"
+        class="flex cursor-pointer items-center rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-slate-100/80"
         @click="handleSelect(node)"
       >
-        <span v-if="node.children.length" class="mr-1 text-gray-400">▸</span>
-        <span v-else class="mr-1 text-gray-300">·</span>
-        <span class="text-gray-800">{{ node.name }}</span>
+        <span v-if="node.children.length" class="mr-1.5 text-slate-400">▸</span>
+        <span v-else class="mr-1.5 text-slate-300">·</span>
+        <span class="text-slate-700">{{ node.name }}</span>
         <span v-if="!node.is_active" class="ml-2 text-xs text-red-400">(已禁用)</span>
       </div>
       <OrgTree

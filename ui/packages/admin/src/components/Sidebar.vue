@@ -1,7 +1,35 @@
 <script setup lang="ts">
 import { useAuth, usePermission } from '@aihelms/shared'
 import { useRoute } from 'vue-router'
-import { ref } from 'vue'
+import { ref, type Component } from 'vue'
+import {
+  FolderTree,
+  Users,
+  KeyRound,
+  GitBranch,
+  Brain,
+  Zap,
+  Plug,
+  CheckCircle,
+  Factory,
+  Package,
+  Wallet,
+  FileText,
+  Shield,
+  Search,
+  Database,
+  Ruler,
+  File,
+  Key,
+  Fingerprint,
+  Bot,
+  Store,
+  Cpu,
+  BarChart3,
+  Lock,
+  FlaskConical,
+  LayoutDashboard,
+} from 'lucide-vue-next'
 
 const route = useRoute()
 const { hasPermission } = usePermission()
@@ -9,80 +37,77 @@ const { currentUser } = useAuth()
 
 interface MenuItem {
   label: string
+  icon?: Component
   path?: string
   permission?: string
   children?: MenuItem[]
   disabled?: boolean
 }
 
-const menuGroups = ref<{ title: string; items: MenuItem[] }[]>([
+const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>([
   {
     title: 'AI身份',
+    icon: Fingerprint,
     items: [
-      {
-        label: '组织管理',
-        children: [
-          { label: '部门管理', path: '/admin/organizations', permission: 'organization:read' },
-          { label: '人员管理', path: '/admin/users', permission: 'user:read' },
-          { label: '角色管理', path: '/admin/roles', permission: 'role:read' },
-          { label: '分支机构', path: '/admin/branches', permission: 'organization:read' },
-          { label: 'SSO集成', path: '/admin/sso', disabled: true },
-        ],
-      },
-      {
-        label: 'AI身份',
-        children: [
-          { label: 'API Key管理', path: '/admin/api-keys', disabled: true },
-        ],
-      },
+      { label: '部门管理', icon: FolderTree, path: '/organizations', permission: 'organization:read' },
+      { label: '人员管理', icon: Users, path: '/users', permission: 'user:read' },
+      { label: '角色管理', icon: KeyRound, path: '/roles', permission: 'role:read' },
+      { label: '分支机构', icon: GitBranch, path: '/branches', permission: 'organization:read' },
+      { label: 'AI身份管理', icon: Key, path: '/ai-identity', disabled: true },
     ],
   },
   {
-    title: '智能体管理',
+    title: '智能体中心',
+    icon: Bot,
     items: [
-      { label: '智能体列表', path: '/admin/agents', disabled: true },
+      { label: '智能体列表', icon: Brain, path: '/agents', disabled: true },
     ],
   },
   {
     title: 'AI市场',
+    icon: Store,
     items: [
-      { label: 'Skill管理', path: '/admin/skills', disabled: true },
-      { label: 'MCP管理', path: '/admin/mcp', disabled: true },
-      { label: '审批管理', path: '/admin/approvals', disabled: true },
+      { label: 'Skill管理', icon: Zap, path: '/skills', disabled: true },
+      { label: 'MCP管理', icon: Plug, path: '/mcp', disabled: true },
+      { label: '审批管理', icon: CheckCircle, path: '/approvals', disabled: true },
     ],
   },
   {
     title: '模型纳管',
+    icon: Cpu,
     items: [
-      { label: '供应商管理', path: '/admin/providers', disabled: true },
-      { label: '模型管理', path: '/admin/models', disabled: true },
+      { label: '供应商管理', icon: Factory, path: '/providers', disabled: true },
+      { label: '模型管理', icon: Package, path: '/models', disabled: true },
     ],
   },
   {
     title: '数据中心',
+    icon: BarChart3,
     items: [
-      { label: '成本中心', path: '/admin/cost', disabled: true },
-      { label: '日志管理', path: '/admin/logs', disabled: true },
+      { label: '成本中心', icon: Wallet, path: '/cost', disabled: true },
+      { label: '日志管理', icon: FileText, path: '/logs', disabled: true },
     ],
   },
   {
     title: '安全',
+    icon: Lock,
     items: [
-      { label: '管理员日志', path: '/admin/audit', disabled: true },
-      { label: '敏感信息识别', path: '/admin/sensitive', disabled: true },
+      { label: '管理员日志', icon: Shield, path: '/audit', disabled: true },
+      { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
     ],
   },
   {
     title: 'AI实验室',
+    icon: FlaskConical,
     items: [
-      { label: '上下文缓存', path: '/admin/caching', disabled: true },
-      { label: '策略管理', path: '/admin/policies', disabled: true },
-      { label: '文件处理', path: '/admin/files', disabled: true },
+      { label: '上下文缓存', icon: Database, path: '/caching', disabled: true },
+      { label: '策略管理', icon: Ruler, path: '/policies', disabled: true },
+      { label: '文件处理', icon: File, path: '/files', disabled: true },
     ],
   },
 ])
 
-const expandedGroups = ref<Set<string>>(new Set(['AI身份']))
+const expandedGroups = ref<Set<string>>(new Set(['AI身份', '智能体中心', 'AI市场', '模型纳管', '数据中心', '安全', 'AI实验室']))
 
 function toggleGroup(title: string): void {
   if (expandedGroups.value.has(title)) {
@@ -94,7 +119,7 @@ function toggleGroup(title: string): void {
 
 function isActive(path: string | undefined): boolean {
   if (!path) return false
-  return route.path.startsWith(path)
+  return route.path === path || route.path.startsWith(path + '/')
 }
 
 function isVisible(item: MenuItem): boolean {
@@ -104,67 +129,81 @@ function isVisible(item: MenuItem): boolean {
 </script>
 
 <template>
-  <aside class="flex w-56 flex-col overflow-y-auto bg-gray-900">
-    <div class="flex h-14 shrink-0 items-center justify-center border-b border-gray-700">
-      <h1 class="text-lg font-bold text-white">AIHelms</h1>
+  <aside class="relative z-10 flex w-[13rem] flex-col overflow-hidden border-r border-slate-200/60 bg-white/60 backdrop-blur-xl">
+    <div class="flex h-14 shrink-0 items-center justify-center border-b border-slate-200/60">
+      <img src="/static/img/logo.png" alt="AIHelms" class="h-7" />
     </div>
 
-    <nav class="mt-2 flex-1 px-2">
-      <div v-for="group in menuGroups" :key="group.title" class="mb-1">
+    <nav class="flex-1 overflow-y-auto p-2">
+      <!-- Dashboard 独立项 -->
+      <RouterLink
+        to="/"
+        class="mb-2 flex h-9 items-center gap-2 rounded-md px-2 text-sm font-semibold transition-all duration-150"
+        :class="route.path === '/'
+          ? 'bg-purple-50 text-purple-700'
+          : 'text-slate-900 hover:bg-slate-100 active:bg-slate-200'"
+      >
+        <LayoutDashboard class="h-4 w-4" :class="route.path === '/' ? 'text-purple-500' : 'text-slate-500'" />
+        Dashboard
+      </RouterLink>
+
+      <div v-for="group in menuGroups" :key="group.title" class="mb-3">
+        <!-- 一级：分组标题（可折叠） -->
         <button
-          class="flex w-full items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-200"
+          class="flex h-9 w-full items-center justify-between rounded-md px-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100"
           @click="toggleGroup(group.title)"
         >
-          {{ group.title }}
-          <span class="text-[10px]">{{ expandedGroups.has(group.title) ? '▾' : '▸' }}</span>
+          <span class="flex items-center gap-2">
+            <component :is="group.icon" v-if="group.icon" class="h-4 w-4 text-slate-500" />
+            {{ group.title }}
+          </span>
+          <svg
+            class="h-3.5 w-3.5 text-slate-400 transition-transform duration-200"
+            :class="expandedGroups.has(group.title) ? 'rotate-90' : ''"
+            viewBox="0 0 16 16"
+          >
+            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
+          </svg>
         </button>
 
-        <div v-if="expandedGroups.has(group.title)" class="ml-1">
+        <!-- 展开内容 -->
+        <div v-if="expandedGroups.has(group.title)" class="mt-0.5 ml-3">
           <template v-for="item in group.items" :key="item.label">
-            <template v-if="item.children">
-              <div class="mb-1 mt-1 px-2 text-[11px] font-medium text-gray-500">{{ item.label }}</div>
-              <template v-for="child in item.children" :key="child.label">
-                <RouterLink
-                  v-if="!child.disabled && isVisible(child) && child.path"
-                  :to="child.path"
-                  class="block rounded-md px-3 py-1.5 text-sm transition-colors"
-                  :class="isActive(child.path) ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'"
-                >
-                  {{ child.label }}
-                </RouterLink>
-                <span
-                  v-else-if="child.disabled"
-                  class="block cursor-not-allowed rounded-md px-3 py-1.5 text-sm text-gray-600"
-                >
-                  {{ child.label }}
-                  <span class="ml-1 text-[10px] text-gray-700">即将上线</span>
-                </span>
-              </template>
-            </template>
-            <template v-else>
-              <RouterLink
-                v-if="!item.disabled && isVisible(item) && item.path"
-                :to="item.path"
-                class="block rounded-md px-3 py-1.5 text-sm transition-colors"
-                :class="isActive(item.path) ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'"
-              >
-                {{ item.label }}
-              </RouterLink>
-              <span
-                v-else-if="item.disabled"
-                class="block cursor-not-allowed rounded-md px-3 py-1.5 text-sm text-gray-600"
-              >
-                {{ item.label }}
-                <span class="ml-1 text-[10px] text-gray-700">即将上线</span>
-              </span>
-            </template>
+            <RouterLink
+              v-if="!item.disabled && isVisible(item) && item.path"
+              :to="item.path"
+              class="flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-all duration-150"
+              :class="isActive(item.path)
+                ? 'bg-purple-50 font-medium text-purple-700'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200'"
+            >
+              <component
+                :is="item.icon"
+                v-if="item.icon"
+                class="h-4 w-4 shrink-0 transition-colors"
+                :class="isActive(item.path) ? 'text-purple-500' : 'text-slate-400'"
+              />
+              {{ item.label }}
+            </RouterLink>
+            <span
+              v-else-if="item.disabled"
+              class="flex h-8 cursor-not-allowed items-center gap-2 rounded-md px-2 text-sm text-slate-400"
+            >
+              <component :is="item.icon" v-if="item.icon" class="h-4 w-4 shrink-0 opacity-40" />
+              {{ item.label }}
+            </span>
           </template>
         </div>
       </div>
     </nav>
 
-    <div class="shrink-0 border-t border-gray-700 p-4">
-      <p class="truncate text-xs text-gray-400">{{ currentUser?.username }}</p>
+    <div class="shrink-0 border-t border-slate-200/60 p-2">
+      <div class="flex items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-slate-100">
+        <div class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-xs font-medium text-white">
+          {{ currentUser?.username?.charAt(0)?.toUpperCase() }}
+        </div>
+        <span class="truncate text-sm text-slate-700">{{ currentUser?.username }}</span>
+      </div>
     </div>
   </aside>
 </template>

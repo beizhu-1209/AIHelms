@@ -121,62 +121,62 @@ onMounted(fetchData)
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <h2 class="text-xl font-semibold text-gray-900">角色权限</h2>
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-xl font-semibold text-slate-900">角色权限</h2>
       <button
         v-if="hasPermission('role:create')"
-        class="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+        class="rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 active:scale-[0.98]"
         @click="handleCreate"
       >
         新建角色
       </button>
     </div>
 
-    <div class="overflow-hidden rounded-lg bg-white shadow-sm">
+    <div class="overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 shadow-sm backdrop-blur-xl">
       <table class="w-full text-left text-sm">
-        <thead class="border-b bg-gray-50">
+        <thead class="border-b border-slate-200/60 bg-slate-50/50">
           <tr>
-            <th class="px-4 py-3 font-medium text-gray-700">角色名</th>
-            <th class="px-4 py-3 font-medium text-gray-700">显示名</th>
-            <th class="px-4 py-3 font-medium text-gray-700">描述</th>
-            <th class="px-4 py-3 font-medium text-gray-700">权限数</th>
-            <th class="px-4 py-3 font-medium text-gray-700">类型</th>
-            <th class="px-4 py-3 font-medium text-gray-700">操作</th>
+            <th class="px-4 py-3 font-medium text-slate-600">角色名</th>
+            <th class="px-4 py-3 font-medium text-slate-600">显示名</th>
+            <th class="px-4 py-3 font-medium text-slate-600">描述</th>
+            <th class="px-4 py-3 font-medium text-slate-600">权限数</th>
+            <th class="px-4 py-3 font-medium text-slate-600">类型</th>
+            <th class="px-4 py-3 font-medium text-slate-600">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="role in roles" :key="role.id" class="border-b last:border-0">
-            <td class="px-4 py-3 font-medium">{{ role.name }}</td>
-            <td class="px-4 py-3">{{ role.display_name }}</td>
-            <td class="px-4 py-3 text-gray-600">{{ role.description || '-' }}</td>
-            <td class="px-4 py-3">{{ role.permissions.length }}</td>
+          <tr v-for="role in roles" :key="role.id" class="border-b border-slate-100 last:border-0">
+            <td class="px-4 py-3 font-medium text-slate-900">{{ role.name }}</td>
+            <td class="px-4 py-3 text-slate-700">{{ role.display_name }}</td>
+            <td class="px-4 py-3 text-slate-500">{{ role.description || '-' }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ role.permissions.length }}</td>
             <td class="px-4 py-3">
               <span
-                :class="role.is_system ? 'bg-gray-100 text-gray-700' : 'bg-blue-100 text-blue-700'"
-                class="rounded-full px-2 py-0.5 text-xs"
+                :class="role.is_system ? 'bg-slate-100 text-slate-600' : 'bg-purple-50 text-purple-700'"
+                class="rounded-full px-2.5 py-0.5 text-xs font-medium"
               >
                 {{ role.is_system ? '系统' : '自定义' }}
               </span>
             </td>
             <td class="px-4 py-3">
-              <div class="flex gap-2">
+              <div class="flex gap-3">
                 <button
                   v-if="hasPermission('role:update') && !role.is_system"
-                  class="text-blue-600 hover:text-blue-800"
+                  class="text-sm text-blue-600 transition-colors hover:text-blue-700"
                   @click="handleEdit(role)"
                 >
                   编辑
                 </button>
                 <button
                   v-if="hasPermission('role:update') && !role.is_system"
-                  class="text-blue-600 hover:text-blue-800"
+                  class="text-sm text-blue-600 transition-colors hover:text-blue-700"
                   @click="handleEditPermissions(role)"
                 >
                   权限
                 </button>
                 <button
                   v-if="hasPermission('role:delete') && !role.is_system"
-                  class="text-red-600 hover:text-red-800"
+                  class="text-sm text-red-500 transition-colors hover:text-red-600"
                   @click="deleteTarget = role"
                 >
                   删除
@@ -188,54 +188,89 @@ onMounted(fetchData)
       </table>
     </div>
 
-    <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-        <h3 class="mb-4 text-lg font-semibold">{{ isEditing ? '编辑角色' : '新建角色' }}</h3>
+    <!-- 新建/编辑角色弹窗 -->
+    <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+      <div class="w-full max-w-md rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur-xl">
+        <h3 class="mb-4 text-lg font-semibold text-slate-900">{{ isEditing ? '编辑角色' : '新建角色' }}</h3>
         <form @submit.prevent="handleSubmit">
-          <div v-if="!isEditing" class="mb-3">
-            <label class="mb-1 block text-sm font-medium text-gray-700">角色标识</label>
-            <input v-model="formName" class="w-full rounded-md border px-3 py-2 text-sm" placeholder="如 editor" />
+          <div v-if="!isEditing" class="mb-4">
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">角色标识</label>
+            <input
+              v-model="formName"
+              placeholder="如 editor"
+              class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            />
           </div>
-          <div class="mb-3">
-            <label class="mb-1 block text-sm font-medium text-gray-700">显示名称</label>
-            <input v-model="formDisplayName" class="w-full rounded-md border px-3 py-2 text-sm" />
+          <div class="mb-4">
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">显示名称</label>
+            <input
+              v-model="formDisplayName"
+              class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            />
           </div>
-          <div class="mb-3">
-            <label class="mb-1 block text-sm font-medium text-gray-700">描述</label>
-            <textarea v-model="formDescription" rows="2" class="w-full rounded-md border px-3 py-2 text-sm" />
+          <div class="mb-4">
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">描述</label>
+            <textarea
+              v-model="formDescription"
+              rows="2"
+              class="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            />
           </div>
-          <p v-if="errorMessage" class="mb-3 text-sm text-red-600">{{ errorMessage }}</p>
+          <p v-if="errorMessage" class="mb-4 text-sm text-red-500">{{ errorMessage }}</p>
           <div class="flex justify-end gap-3">
-            <button type="button" class="rounded-md border px-4 py-2 text-sm" @click="showForm = false">取消</button>
-            <button type="submit" class="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">保存</button>
+            <button
+              type="button"
+              class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
+              @click="showForm = false"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              class="rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 active:scale-[0.98]"
+            >
+              保存
+            </button>
           </div>
         </form>
       </div>
     </div>
 
-    <div v-if="showPermissionEditor" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-        <h3 class="mb-4 text-lg font-semibold">
+    <!-- 编辑权限弹窗 -->
+    <div v-if="showPermissionEditor" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+      <div class="w-full max-w-lg rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur-xl">
+        <h3 class="mb-4 text-lg font-semibold text-slate-900">
           编辑权限 - {{ selectedRole?.display_name }}
         </h3>
-        <div class="mb-4 max-h-64 overflow-y-auto">
+        <div class="mb-4 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
           <div
             v-for="perm in allPermissions"
             :key="perm.id"
-            class="flex items-center gap-2 border-b py-2 last:border-0"
+            class="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50"
           >
             <input
               type="checkbox"
               :checked="selectedPermissionIds.includes(perm.id)"
+              class="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500/20"
               @change="togglePermission(perm.id)"
             />
-            <span class="text-sm font-medium text-gray-800">{{ perm.name }}</span>
-            <span class="text-xs text-gray-500">({{ perm.code }})</span>
+            <span class="text-sm font-medium text-slate-700">{{ perm.name }}</span>
+            <span class="text-xs text-slate-400">({{ perm.code }})</span>
           </div>
         </div>
         <div class="flex justify-end gap-3">
-          <button class="rounded-md border px-4 py-2 text-sm" @click="showPermissionEditor = false">取消</button>
-          <button class="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700" @click="handleSavePermissions">保存</button>
+          <button
+            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
+            @click="showPermissionEditor = false"
+          >
+            取消
+          </button>
+          <button
+            class="rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 active:scale-[0.98]"
+            @click="handleSavePermissions"
+          >
+            保存
+          </button>
         </div>
       </div>
     </div>

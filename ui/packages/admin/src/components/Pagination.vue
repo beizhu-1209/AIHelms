@@ -28,20 +28,20 @@ function handleNext(): void {
 </script>
 
 <template>
-  <div class="flex items-center justify-between border-t pt-4">
-    <span class="text-sm text-gray-600">共 {{ total }} 条</span>
+  <div class="mt-4 flex items-center justify-between">
+    <span class="text-sm text-slate-500">共 {{ total }} 条</span>
     <div class="flex items-center gap-2">
       <button
         :disabled="page <= 1"
-        class="rounded-md border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         @click="handlePrev"
       >
         上一页
       </button>
-      <span class="text-sm text-gray-700">{{ page }} / {{ totalPages() }}</span>
+      <span class="text-sm text-slate-600">{{ page }} / {{ totalPages() }}</span>
       <button
         :disabled="page >= totalPages()"
-        class="rounded-md border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         @click="handleNext"
       >
         下一页
