@@ -7,6 +7,7 @@ from exceptions import NotFoundError, ConflictError
 from models.db import User
 from repositories import user_repo
 from services import litellm_client
+from services import ai_key_service
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ async def create_user(
         user.litellm_user_id = litellm_user_id
     except litellm_client.LiteLLMError:
         logger.warning("litellm sync failed for user %s, skipping", user.id)
+
+    # Auto-create personal main key (disabled by default)
+    await ai_key_service.create_personal_main_key(session, user.id, username)
 
     await session.commit()
     return _serialize_user(user)

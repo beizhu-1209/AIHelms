@@ -74,6 +74,16 @@ async def update_team(team_id: str, team_alias: str) -> dict:
     return await _request("POST", "/team/update", json_data=data)
 
 
+async def block_team(team_id: str) -> dict:
+    data = {"team_id": team_id, "blocked": True}
+    return await _request("POST", "/team/update", json_data=data)
+
+
+async def unblock_team(team_id: str) -> dict:
+    data = {"team_id": team_id, "blocked": False}
+    return await _request("POST", "/team/update", json_data=data)
+
+
 async def delete_team(team_id: str) -> None:
     await _request("POST", "/team/delete", json_data={"team_ids": [team_id]})
 
@@ -89,3 +99,172 @@ async def add_team_member(team_id: str, user_id: str) -> dict:
 async def remove_team_member(team_id: str, user_id: str) -> None:
     data = {"team_id": team_id, "user_id": user_id}
     await _request("POST", "/team/member_delete", json_data=data)
+
+
+# --- Key Management ---
+
+
+async def create_key(
+    key_alias: str,
+    user_id: str | None = None,
+    team_id: str | None = None,
+    models: list[str] | None = None,
+    max_budget: float | None = None,
+    metadata: dict | None = None,
+    duration: str | None = None,
+) -> dict:
+    data: dict = {"key_alias": key_alias}
+    if user_id:
+        data["user_id"] = user_id
+    if team_id:
+        data["team_id"] = team_id
+    if models:
+        data["models"] = models
+    if max_budget is not None:
+        data["max_budget"] = max_budget
+    if metadata:
+        data["metadata"] = metadata
+    if duration:
+        data["duration"] = duration
+    return await _request("POST", "/key/generate", json_data=data)
+
+
+async def delete_key(key_id: str) -> None:
+    await _request("POST", "/key/delete", json_data={"keys": [key_id]})
+
+
+async def update_key(
+    key_id: str,
+    models: list[str] | None = None,
+    max_budget: float | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    data: dict = {"key": key_id}
+    if models is not None:
+        data["models"] = models
+    if max_budget is not None:
+        data["max_budget"] = max_budget
+    elif max_budget is None and "max_budget" not in data:
+        pass
+    if metadata is not None:
+        data["metadata"] = metadata
+    return await _request("POST", "/key/update", json_data=data)
+
+
+async def update_key_budget(key_id: str, max_budget: float | None) -> dict:
+    data: dict = {"key": key_id, "max_budget": max_budget}
+    return await _request("POST", "/key/update", json_data=data)
+
+
+async def get_key_info(key_id: str) -> dict:
+    return await _request("GET", "/key/info", params={"key": key_id})
+
+
+async def list_models() -> list[dict]:
+    result = await _request("GET", "/model/info")
+    if isinstance(result, dict) and "data" in result:
+        return result["data"]
+    if isinstance(result, list):
+        return result
+    return []
+
+
+async def add_model(
+    model_name: str,
+    litellm_params: dict,
+    model_info: dict | None = None,
+) -> dict:
+    data: dict = {
+        "model_name": model_name,
+        "litellm_params": litellm_params,
+    }
+    if model_info:
+        data["model_info"] = model_info
+    return await _request("POST", "/model/new", json_data=data)
+
+
+async def delete_model(litellm_model_id: str) -> None:
+    await _request("POST", "/model/delete", json_data={"id": litellm_model_id})
+
+
+async def update_model(
+    litellm_model_id: str,
+    model_name: str,
+    litellm_params: dict,
+    model_info: dict | None = None,
+) -> dict:
+    data: dict = {
+        "id": litellm_model_id,
+        "model_name": model_name,
+        "litellm_params": litellm_params,
+    }
+    if model_info:
+        data["model_info"] = model_info
+    return await _request("POST", "/model/update", json_data=data)
+
+
+# --- Credential Management ---
+
+
+async def create_credential(
+    credential_name: str,
+    credential_values: dict,
+    credential_info: dict | None = None,
+) -> dict:
+    data: dict = {
+        "credential_name": credential_name,
+        "credential_values": credential_values,
+        "credential_info": credential_info or {},
+    }
+    return await _request("POST", "/credentials", json_data=data)
+
+
+async def update_credential(
+    credential_name: str,
+    credential_values: dict | None = None,
+    credential_info: dict | None = None,
+) -> dict:
+    data: dict = {"credential_name": credential_name}
+    if credential_values:
+        data["credential_values"] = credential_values
+    if credential_info:
+        data["credential_info"] = credential_info
+    return await _request("PATCH", f"/credentials/{credential_name}", json_data=data)
+
+
+async def delete_credential(credential_name: str) -> None:
+    await _request("DELETE", f"/credentials/{credential_name}")
+
+
+async def list_credentials() -> list[dict]:
+    result = await _request("GET", "/credentials")
+    if isinstance(result, dict) and "credentials" in result:
+        return result["credentials"]
+    return []
+
+
+async def get_provider_fields() -> list[dict]:
+    url = f"{settings.litellm_url}/public/providers/fields"
+    try:
+        async with httpx.AsyncClient(timeout=LITELLM_TIMEOUT) as client:
+            response = await client.get(url)
+            if response.status_code >= 400:
+                logger.error(
+                    "litellm get_provider_fields failed: %s", response.status_code
+                )
+                return []
+            return response.json()
+    except httpx.HTTPError as e:
+        logger.error("litellm get_provider_fields connection error: %s", str(e))
+        return []
+
+
+# --- Router Settings ---
+
+
+async def get_router_settings() -> dict:
+    return await _request("GET", "/router/settings")
+
+
+async def update_router_settings(settings: dict) -> dict:
+    return await _request("POST", "/router/settings", json_data=settings)

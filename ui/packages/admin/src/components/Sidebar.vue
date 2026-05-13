@@ -51,8 +51,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
       { label: '部门管理', icon: FolderTree, path: '/departments', permission: 'department:read' },
       { label: '项目管理', icon: GitBranch, path: '/projects', permission: 'project:read' },
       { label: '人员管理', icon: Users, path: '/users', permission: 'user:read' },
-      { label: '角色管理', icon: KeyRound, path: '/roles', permission: 'role:read' },
-      { label: 'AI身份管理', icon: Key, path: '/ai-identity', disabled: true },
+      { label: 'AI身份管理', icon: Key, path: '/ai-keys', permission: 'user:read' },
     ],
   },
   {
@@ -74,8 +73,8 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     title: '模型纳管',
     icon: Cpu,
     items: [
-      { label: '供应商管理', icon: Factory, path: '/providers', disabled: true },
-      { label: '模型管理', icon: Package, path: '/models', disabled: true },
+      { label: '供应商管理', icon: Factory, path: '/providers', permission: 'user:read' },
+      { label: '模型管理', icon: Package, path: '/models', permission: 'user:read' },
     ],
   },
   {
@@ -92,6 +91,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     items: [
       { label: '管理员日志', icon: Shield, path: '/audit', disabled: true },
       { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
+      { label: 'API Key', icon: KeyRound, path: '/api-keys', disabled: true },
     ],
   },
   {

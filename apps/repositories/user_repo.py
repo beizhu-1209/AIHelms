@@ -5,7 +5,7 @@ from models.db import User, UserRole, UserDepartment, UserProject
 
 
 async def count_users(session: AsyncSession, keyword: str = "") -> int:
-    stmt = select(func.count(User.id))
+    stmt = select(func.count(User.id)).where(User.is_admin == False)
     if keyword:
         pattern = f"%{keyword}%"
         stmt = stmt.where(
@@ -22,7 +22,7 @@ async def count_users(session: AsyncSession, keyword: str = "") -> int:
 
 async def find_users(session: AsyncSession, page: int, page_size: int, keyword: str = "") -> list[User]:
     offset = (page - 1) * page_size
-    stmt = select(User).order_by(User.id)
+    stmt = select(User).where(User.is_admin == False).order_by(User.id)
     if keyword:
         pattern = f"%{keyword}%"
         stmt = stmt.where(
@@ -97,3 +97,12 @@ async def replace_user_projects(session: AsyncSession, user_id: int, project_ids
     for proj_id in project_ids:
         session.add(UserProject(user_id=user_id, project_id=proj_id))
     await session.flush()
+
+
+async def find_users_paginated(
+    session: AsyncSession, page: int, page_size: int, keyword: str | None = None
+) -> tuple[list[User], int]:
+    kw = keyword or ""
+    total = await count_users(session, kw)
+    users = await find_users(session, page, page_size, kw)
+    return users, total

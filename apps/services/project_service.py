@@ -70,9 +70,9 @@ async def delete_project(session: AsyncSession, project_id: int) -> None:
 
     if project.litellm_team_id:
         try:
-            await litellm_client.delete_team(project.litellm_team_id)
+            await litellm_client.block_team(project.litellm_team_id)
         except litellm_client.LiteLLMError:
-            logger.warning("litellm delete team failed for project %s", project_id)
+            logger.warning("litellm block team failed for project %s", project_id)
 
 
 async def get_project_members(session: AsyncSession, project_id: int) -> list[dict]:

@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS aihelms.usage_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 部门表（树形多层级，叶子节点同步为 LiteLLM Team）
+-- 部门表（树形多层级，所有部门同步为 LiteLLM Team）
 CREATE TABLE IF NOT EXISTS aihelms.departments (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
@@ -125,6 +125,131 @@ CREATE TABLE IF NOT EXISTS aihelms.user_roles (
     UNIQUE (user_id, role_id)
 );
 
+-- AI 身份 Key 表
+CREATE TABLE IF NOT EXISTS aihelms.ai_keys (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    description TEXT DEFAULT '',
+    key_type VARCHAR(20) NOT NULL,          -- 'personal_main' | 'personal_scene' | 'dept_shared' | 'project_shared'
+    owner_type VARCHAR(20) NOT NULL,        -- 'user' | 'department' | 'project'
+    owner_id BIGINT NOT NULL,
+    tags JSONB DEFAULT '[]',
+    litellm_key_id VARCHAR(100),
+    litellm_key_alias VARCHAR(200),
+    models JSONB DEFAULT '[]',
+    budget_limit NUMERIC(12,4),
+    budget_type VARCHAR(10) DEFAULT 'money',   -- 'money' | 'count'
+    budget_hard_limit BOOLEAN DEFAULT true,
+    is_active BOOLEAN DEFAULT false,
+    created_by BIGINT REFERENCES aihelms.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ
+);
+
+-- 供应商（平台独有，组织凭证 + 额度监控）
+CREATE TABLE IF NOT EXISTS aihelms.providers (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    provider_type VARCHAR(50) NOT NULL,       -- 'anthropic' | 'openai' | 'azure' | 'vertex_ai' | 'bedrock' | 'deepseek' | 'custom'
+    billing_type VARCHAR(20) NOT NULL DEFAULT 'token',  -- 'token' | 'per_call' | 'monthly_quota'
+    monthly_budget NUMERIC(12,4),
+    monthly_used NUMERIC(12,4) DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    description TEXT DEFAULT '',
+    config JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 凭证（对齐 LiteLLM CredentialsTable）
+CREATE TABLE IF NOT EXISTS aihelms.credentials (
+    id BIGSERIAL PRIMARY KEY,
+    credential_name VARCHAR(128) NOT NULL UNIQUE,  -- 凭证名（同步到 LiteLLM）
+    provider_id BIGINT REFERENCES aihelms.providers(id) ON DELETE SET NULL,
+    credential_values JSONB NOT NULL DEFAULT '{}', -- 加密存储的认证信息（api_key, api_base 等）
+    credential_info JSONB DEFAULT '{}',            -- 描述/元信息
+    litellm_synced BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 平台统一模型（展示层）
+CREATE TABLE IF NOT EXISTS aihelms.models (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    model_id VARCHAR(128) NOT NULL UNIQUE,    -- 用户请求时用的名称 = LiteLLM model_name
+    category VARCHAR(50) DEFAULT 'chat',
+    capabilities JSONB DEFAULT '[]',
+    description TEXT DEFAULT '',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 模型部署（对齐 LiteLLM ProxyModelTable）
+CREATE TABLE IF NOT EXISTS aihelms.model_deployments (
+    id BIGSERIAL PRIMARY KEY,
+    model_id BIGINT NOT NULL REFERENCES aihelms.models(id) ON DELETE CASCADE,
+    credential_id BIGINT REFERENCES aihelms.credentials(id) ON DELETE SET NULL,
+    -- LiteLLM 原生字段
+    litellm_model_id VARCHAR(100),                 -- LiteLLM 返回的 deployment UUID
+    litellm_params JSONB NOT NULL DEFAULT '{}',    -- 完整 litellm_params JSON
+    model_info JSONB DEFAULT '{}',                 -- LiteLLM model_info
+    -- 平台扩展字段
+    deploy_name VARCHAR(128) DEFAULT '',           -- 部署别名
+    billing_type VARCHAR(20) DEFAULT 'token',      -- 'token' | 'per_call' | 'monthly_quota'
+    cost_per_call NUMERIC(8,4),                    -- 按次计费单价
+    monthly_call_quota INT,                        -- 包月次数上限
+    monthly_call_used INT DEFAULT 0,               -- 当月已用次数
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 模型访问组
+CREATE TABLE IF NOT EXISTS aihelms.model_access_groups (
+    id BIGSERIAL PRIMARY KEY,
+    group_name VARCHAR(128) NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    model_ids JSONB DEFAULT '[]',                  -- 关联的 models.model_id 列表
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 路由配置（全局单行）
+CREATE TABLE IF NOT EXISTS aihelms.router_settings (
+    id BIGSERIAL PRIMARY KEY,
+    routing_strategy VARCHAR(50) DEFAULT 'simple-shuffle',
+    fallbacks JSONB DEFAULT '[]',
+    allowed_fails INT DEFAULT 3,
+    cooldown_time INT DEFAULT 60,
+    num_retries INT DEFAULT 2,
+    timeout INT DEFAULT 30,
+    config JSONB DEFAULT '{}',
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 插入默认路由配置
+INSERT INTO aihelms.router_settings (routing_strategy) VALUES ('simple-shuffle') ON CONFLICT DO NOTHING;
+
+-- Key 模型限制（每个 key 对每个模型的速率限制）
+CREATE TABLE IF NOT EXISTS aihelms.ai_key_model_limits (
+    id BIGSERIAL PRIMARY KEY,
+    ai_key_id BIGINT NOT NULL REFERENCES aihelms.ai_keys(id) ON DELETE CASCADE,
+    model_id BIGINT NOT NULL REFERENCES aihelms.models(id) ON DELETE CASCADE,
+    tpm INT,                                  -- 每分钟 token 上限（NULL=不限制）
+    rpm INT,                                  -- 每分钟请求上限（NULL=不限制）
+    max_tokens INT,                           -- 单次最大 token（NULL=不限制）
+    max_calls INT,                            -- 总调用次数上限（NULL=不限制）
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(ai_key_id, model_id)
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON aihelms.usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON aihelms.usage_logs(created_at);
@@ -137,6 +262,18 @@ CREATE INDEX IF NOT EXISTS idx_user_projects_project_id ON aihelms.user_projects
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON aihelms.user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON aihelms.user_roles(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON aihelms.role_permissions(role_id);
+CREATE INDEX IF NOT EXISTS idx_ai_keys_owner ON aihelms.ai_keys(owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS idx_ai_keys_type ON aihelms.ai_keys(key_type);
+CREATE INDEX IF NOT EXISTS idx_ai_keys_created_by ON aihelms.ai_keys(created_by);
+CREATE INDEX IF NOT EXISTS idx_providers_type ON aihelms.providers(provider_type);
+CREATE INDEX IF NOT EXISTS idx_credentials_provider ON aihelms.credentials(provider_id);
+CREATE INDEX IF NOT EXISTS idx_credentials_name ON aihelms.credentials(credential_name);
+CREATE INDEX IF NOT EXISTS idx_models_model_id ON aihelms.models(model_id);
+CREATE INDEX IF NOT EXISTS idx_models_category ON aihelms.models(category);
+CREATE INDEX IF NOT EXISTS idx_deployments_model ON aihelms.model_deployments(model_id);
+CREATE INDEX IF NOT EXISTS idx_ai_key_model_limits_key ON aihelms.ai_key_model_limits(ai_key_id);
+CREATE INDEX IF NOT EXISTS idx_ai_key_model_limits_model ON aihelms.ai_key_model_limits(model_id);
+CREATE INDEX IF NOT EXISTS idx_deployments_credential ON aihelms.model_deployments(credential_id);
 
 -- 初始角色
 INSERT INTO aihelms.roles (name, display_name, description, is_system) VALUES
