@@ -208,7 +208,7 @@ onMounted(fetchTree)
           :key="node.id"
           class="group mb-0.5 flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors"
           :class="selectedDept?.id === node.id ? 'bg-purple-50 font-medium text-purple-700' : 'text-slate-700 hover:bg-slate-100'"
-          :style="{ paddingLeft: (depth * 16 + 12) + 'px' }"
+          :style="{ paddingLeft: (depth * 24 + 12) + 'px' }"
           @click="handleSelectDept(node)"
         >
           <span class="truncate">{{ node.name }}</span>

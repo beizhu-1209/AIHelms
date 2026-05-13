@@ -53,6 +53,7 @@ async def create_department(session: AsyncSession, name: str, parent_id: int | N
             parent.litellm_team_id = None
 
     await session.commit()
+    await session.refresh(dept)
     data = _serialize_dept(dept)
     data["managers"] = []
     return data
