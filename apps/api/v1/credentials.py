@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db, require_permission
 from exceptions import NotFoundError, ConflictError
-from services import credential_service
+from services import credential_service, model_service
 from services import litellm_client
 
 router = APIRouter(prefix="/credentials", tags=["credentials"])
@@ -52,7 +52,7 @@ async def create_credential(
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": credential}
+    return {"code": 200, "message": "凭证添加成功", "data": credential}
 
 
 @router.get("/provider-fields")
@@ -93,7 +93,7 @@ async def update_credential(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="凭证不存在")
-    return {"code": 200, "message": "ok", "data": credential}
+    return {"code": 200, "message": "凭证更新成功", "data": credential}
 
 
 @router.delete("/{credential_id}")
@@ -108,4 +108,30 @@ async def delete_credential(
         raise HTTPException(status_code=404, detail="凭证不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "凭证删除成功", "data": None}
+
+
+@router.get("/{credential_id}/models")
+async def get_credential_models(
+    credential_id: int,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:read")),
+):
+    """获取使用该凭证的模型 ID 列表"""
+    model_ids = await model_service.get_model_ids_by_credential_ids(
+        session, [credential_id]
+    )
+    return {"code": 200, "message": "ok", "data": model_ids}
+
+
+@router.get("/by-provider/{provider_id}/models")
+async def get_provider_models(
+    provider_id: int,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:read")),
+):
+    """获取该供应商所有凭证关联的模型 ID 列表"""
+    creds = await credential_service.list_credentials(session, 1, 100, provider_id)
+    cred_ids = [item["id"] for item in creds["items"]]
+    model_ids = await model_service.get_model_ids_by_credential_ids(session, cred_ids)
+    return {"code": 200, "message": "ok", "data": model_ids}

@@ -4,6 +4,8 @@ import type {
   AiKeyListResult,
   CreateAiKeyParams,
   UpdateAiKeyParams,
+  BatchCreateAiKeyParams,
+  BatchCreateResult,
   MyKeysResult,
   IdentityListResult,
   IdentityUserItem,
@@ -33,6 +35,13 @@ export function getAiKeyById(id: number): Promise<AiKey> {
 
 export function createAiKey(params: CreateAiKeyParams): Promise<AiKey> {
   return request<AiKey>('/api/v1/ai-keys', {
+    method: 'POST',
+    body: params,
+  })
+}
+
+export function batchCreateAiKeys(params: BatchCreateAiKeyParams): Promise<BatchCreateResult[]> {
+  return request<BatchCreateResult[]>('/api/v1/ai-keys/batch', {
     method: 'POST',
     body: params,
   })

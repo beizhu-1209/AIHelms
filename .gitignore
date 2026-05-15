@@ -66,6 +66,9 @@ dev/roadmap
 # local dev resouce
 dev/resource
 
+# Test reports (local only)
+dev/test/
+
 # playwright test
 
 .playwright*

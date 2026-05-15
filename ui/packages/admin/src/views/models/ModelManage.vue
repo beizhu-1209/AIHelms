@@ -29,6 +29,8 @@ import {
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+import AccessTestDialog from '../../components/AccessTestDialog.vue'
+import ProviderIcon from '../../components/ProviderIcon.vue'
 
 const { hasPermission } = usePermission()
 
@@ -46,6 +48,11 @@ const editingDeployId = ref<number | null>(null)
 const deleteModelTarget = ref<ModelInfo | null>(null)
 const deleteDeployTarget = ref<Deployment | null>(null)
 const errorMessage = ref('')
+
+// Access Test
+const showTestDialog = ref(false)
+const testDefaultModel = ref('')
+const testAvailableModels = ref<string[]>([])
 
 // Left nav: group filter
 const selectedGroupId = ref<number | null>(null)
@@ -162,6 +169,32 @@ function getCredentialProviderType(credId: number | null): string {
   if (!credId) return ''
   const cred = credentials.value.find(c => c.id === credId)
   return cred?.provider_type || (cred?.credential_info?.custom_llm_provider as string) || ''
+}
+
+function getModelProviderType(model: ModelInfo): string {
+  const id = model.model_id || ''
+  if (id.includes('/')) return id.split('/')[0]
+  const lower = id.toLowerCase()
+  if (lower.startsWith('gpt') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) return 'openai'
+  if (lower.startsWith('claude')) return 'anthropic'
+  if (lower.startsWith('gemini') || lower.startsWith('gemma')) return 'google'
+  if (lower.startsWith('deepseek')) return 'deepseek'
+  if (lower.startsWith('qwen') || lower.startsWith('qwq')) return 'dashscope'
+  if (lower.startsWith('glm') || lower.startsWith('chatglm') || lower.startsWith('z.ai')) return 'zhipu'
+  if (lower.startsWith('moonshot') || lower.startsWith('kimi')) return 'moonshot'
+  if (lower.startsWith('abab') || lower.startsWith('minimax')) return 'minimax'
+  if (lower.includes('doubao') || lower.startsWith('ep-')) return 'volcengine'
+  if (lower.startsWith('llama') || lower.startsWith('mistral') || lower.startsWith('mixtral')) return 'ollama'
+  return ''
+}
+
+const categoryLabels: Record<string, string> = {
+  chat: '对话',
+  embedding: '向量',
+  image: '图像',
+  audio: '语音',
+  rerank: '重排',
+  completion: '补全',
 }
 
 function buildLitellmModelId(credId: number | null, modelName: string): string {
@@ -329,6 +362,12 @@ function resetDeployForm(): void {
   deployInternalCostPerCall.value = ''
   deployUseInPassThrough.value = false
   deployDropParams.value = false
+}
+
+function handleTestDeployment(d: Deployment): void {
+  testDefaultModel.value = selectedModel.value?.model_id || ''
+  testAvailableModels.value = []
+  showTestDialog.value = true
 }
 
 function handleAddDeployment(): void {
@@ -669,12 +708,31 @@ onMounted(() => {
         <div
           v-for="model in filteredModels"
           :key="model.id"
-          class="mb-0.5 flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors"
-          :class="selectedModel?.id === model.id ? 'bg-purple-50 font-medium text-purple-700' : 'text-slate-700 hover:bg-slate-100'"
+          class="mb-1 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
+          :class="selectedModel?.id === model.id ? 'bg-purple-50 ring-1 ring-purple-200' : 'hover:bg-slate-50'"
           @click="handleSelectModel(model)"
         >
-          <span>{{ model.name }}</span>
-          <span class="text-xs text-slate-400">{{ model.deployment_count }}凭证</span>
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+            <ProviderIcon v-if="getModelProviderType(model)" :type="getModelProviderType(model)" :size="20" />
+            <svg v-else class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-2.47 2.47a2.25 2.25 0 01-1.591.659H9.061a2.25 2.25 0 01-1.591-.659L5 14.5m14 0V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
+            </svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="truncate text-sm font-medium" :class="selectedModel?.id === model.id ? 'text-purple-700' : 'text-slate-900'">{{ model.name }}</span>
+              <span v-if="model.deployment_count" class="shrink-0 text-[10px] text-slate-400">{{ model.deployment_count }}凭证</span>
+            </div>
+            <div class="mt-0.5 flex items-center gap-1.5">
+              <span class="rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600">{{ categoryLabels[model.category] || model.category }}</span>
+              <span
+                v-for="cap in model.capabilities.slice(0, 2)"
+                :key="cap"
+                class="rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-500"
+              >{{ cap }}</span>
+              <span v-if="model.capabilities.length > 2" class="text-[10px] text-slate-400">+{{ model.capabilities.length - 2 }}</span>
+            </div>
+          </div>
         </div>
         <div v-if="filteredModels.length === 0" class="py-8 text-center text-sm text-slate-400">暂无模型</div>
       </div>
@@ -689,7 +747,7 @@ onMounted(() => {
             <span class="rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">{{ selectedModel.model_id }}</span>
             <span class="text-xs text-slate-400">{{ selectedModel.category }}</span>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-1.5">
             <button
               v-if="hasPermission('user:update')"
               class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200"
@@ -774,9 +832,9 @@ onMounted(() => {
                 </span>
               </div>
               <!-- 操作 -->
-              <div class="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2">
+              <div class="mt-3 flex items-center gap-1.5 border-t border-slate-100 pt-2">
                 <button
-                  class="rounded-full px-2 py-0.5 text-xs font-medium transition-colors"
+                  class="rounded-md px-2 py-1 text-xs font-medium transition-colors"
                   :class="d.is_active ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
                   @click="handleToggleDeployment(d)"
                 >
@@ -784,17 +842,23 @@ onMounted(() => {
                 </button>
                 <button
                   v-if="hasPermission('user:update')"
-                  class="text-xs text-purple-500 transition-colors hover:text-purple-600"
+                  class="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200"
                   @click="handleEditDeployment(d)"
                 >
                   编辑
                 </button>
                 <button
                   v-if="hasPermission('user:delete')"
-                  class="text-xs text-red-500 transition-colors hover:text-red-600"
+                  class="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
                   @click="deleteDeployTarget = d"
                 >
                   删除
+                </button>
+                <button
+                  class="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-100"
+                  @click="handleTestDeployment(d)"
+                >
+                  测试
                 </button>
               </div>
             </div>
@@ -1229,6 +1293,13 @@ onMounted(() => {
       :message="`确定要删除分组「${deleteGroupTarget?.group_name}」吗？`"
       @confirm="handleConfirmDeleteGroup"
       @cancel="deleteGroupTarget = null"
+    />
+
+    <AccessTestDialog
+      :visible="showTestDialog"
+      :default-model="testDefaultModel"
+      :available-models="testAvailableModels"
+      @close="showTestDialog = false"
     />
   </div>
 </template>

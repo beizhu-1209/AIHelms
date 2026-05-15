@@ -39,6 +39,7 @@ async def create_project(session: AsyncSession, name: str, description: str = ""
         logger.warning("litellm sync failed for project %s", project.id)
 
     await session.commit()
+    await session.refresh(project)
     return _serialize_project(project)
 
 
@@ -53,6 +54,7 @@ async def update_project(session: AsyncSession, project_id: int, name: str | Non
         project.description = description
 
     await session.commit()
+    await session.refresh(project)
     return _serialize_project(project)
 
 

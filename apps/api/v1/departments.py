@@ -48,7 +48,7 @@ async def create_department(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="父部门不存在")
-    return {"code": 200, "message": "ok", "data": dept}
+    return {"code": 200, "message": "部门创建成功", "data": dept}
 
 
 @router.put("/{dept_id}")
@@ -64,7 +64,7 @@ async def update_department(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="部门不存在")
-    return {"code": 200, "message": "ok", "data": dept}
+    return {"code": 200, "message": "部门更新成功", "data": dept}
 
 
 @router.delete("/{dept_id}")
@@ -79,7 +79,7 @@ async def delete_department(
         raise HTTPException(status_code=404, detail="部门不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "部门删除成功", "data": None}
 
 
 @router.get("/{dept_id}/members")
@@ -108,7 +108,7 @@ async def add_department_member(
         raise HTTPException(status_code=404, detail=str(e))
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "成员添加成功", "data": None}
 
 
 @router.delete("/{dept_id}/members/{user_id}")
@@ -122,7 +122,7 @@ async def remove_department_member(
         await department_service.remove_department_member(session, dept_id, user_id)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "成员移除成功", "data": None}
 
 
 @router.put("/{dept_id}/managers")
@@ -138,4 +138,4 @@ async def update_department_managers(
         raise HTTPException(status_code=404, detail="部门不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "管理员更新成功", "data": None}

@@ -47,7 +47,7 @@ async def create_user(
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": user}
+    return {"code": 200, "message": "用户创建成功", "data": user}
 
 
 @router.get("/{user_id}")
@@ -83,7 +83,7 @@ async def update_user(
         raise HTTPException(status_code=404, detail="用户不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": user}
+    return {"code": 200, "message": "用户更新成功", "data": user}
 
 
 @router.delete("/{user_id}")
@@ -98,7 +98,7 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="用户不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "用户删除成功", "data": None}
 
 
 @router.put("/{user_id}/password")
@@ -112,7 +112,7 @@ async def reset_user_password(
         await user_service.reset_password(session, user_id, req.new_password)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "密码重置成功", "data": None}
 
 
 @router.put("/{user_id}/roles")
@@ -126,7 +126,7 @@ async def update_user_roles(
         await user_service.update_user_roles(session, user_id, req.role_ids)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "角色更新成功", "data": None}
 
 
 @router.put("/{user_id}/departments")
@@ -140,7 +140,7 @@ async def update_user_departments(
         await user_service.update_user_departments(session, user_id, req.department_ids)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "部门更新成功", "data": None}
 
 
 @router.put("/{user_id}/projects")
@@ -154,4 +154,4 @@ async def update_user_projects(
         await user_service.update_user_projects(session, user_id, req.project_ids)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "项目更新成功", "data": None}

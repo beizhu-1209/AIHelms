@@ -125,6 +125,16 @@ CREATE TABLE IF NOT EXISTS aihelms.user_roles (
     UNIQUE (user_id, role_id)
 );
 
+-- 使用场景标签
+CREATE TABLE IF NOT EXISTS aihelms.key_scenarios (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- AI 身份 Key 表
 CREATE TABLE IF NOT EXISTS aihelms.ai_keys (
     id BIGSERIAL PRIMARY KEY,
@@ -138,8 +148,10 @@ CREATE TABLE IF NOT EXISTS aihelms.ai_keys (
     litellm_key_alias VARCHAR(200),
     models JSONB DEFAULT '[]',
     budget_limit NUMERIC(12,4),
-    budget_type VARCHAR(10) DEFAULT 'money',   -- 'money' | 'count'
-    budget_hard_limit BOOLEAN DEFAULT true,
+    budget_hard_limit BOOLEAN DEFAULT false,
+    budget_duration VARCHAR(10) DEFAULT '30d',  -- '30d' | '7d' | '1d'
+    model_budgets JSONB DEFAULT '{}',           -- {"claude-opus-4-6": 50.0, "gpt-4": 20.0}
+    scenario_id BIGINT REFERENCES aihelms.key_scenarios(id),
     is_active BOOLEAN DEFAULT false,
     created_by BIGINT REFERENCES aihelms.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),

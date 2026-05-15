@@ -39,6 +39,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}?schema=public
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      STORE_MODEL_IN_DB: "True"
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:
@@ -71,6 +72,9 @@ services:
       CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-0}
       CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
       CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
+      LOG_DIR: /logs
+    volumes:
+      - ./logs:/logs
     command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
     networks:
       - internal

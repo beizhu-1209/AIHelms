@@ -158,8 +158,10 @@ class AiKey(Base):
     litellm_key_alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
     models: Mapped[list] = mapped_column(JSONB, default=list)
     budget_limit: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
-    budget_type: Mapped[str] = mapped_column(String(10), default="money")
-    budget_hard_limit: Mapped[bool] = mapped_column(Boolean, default=True)
+    budget_hard_limit: Mapped[bool] = mapped_column(Boolean, default=False)
+    budget_duration: Mapped[str | None] = mapped_column(String(10), default="30d")
+    model_budgets: Mapped[dict] = mapped_column(JSONB, default=dict)
+    scenario_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.key_scenarios.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -286,5 +288,17 @@ class AiKeyModelLimit(Base):
     rpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
+class KeyScenario(Base):
+    __tablename__ = "key_scenarios"
+    __table_args__ = {"schema": "aihelms"}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

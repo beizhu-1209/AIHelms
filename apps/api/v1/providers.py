@@ -54,7 +54,7 @@ async def create_provider(
         description=req.description,
         config=req.config,
     )
-    return {"code": 200, "message": "ok", "data": provider}
+    return {"code": 200, "message": "供应商创建成功", "data": provider}
 
 
 @router.get("/{provider_id}")
@@ -90,7 +90,7 @@ async def update_provider(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    return {"code": 200, "message": "ok", "data": provider}
+    return {"code": 200, "message": "供应商更新成功", "data": provider}
 
 
 @router.delete("/{provider_id}")
@@ -105,4 +105,4 @@ async def delete_provider(
         raise HTTPException(status_code=404, detail="供应商不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "供应商删除成功", "data": None}

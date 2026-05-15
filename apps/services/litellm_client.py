@@ -138,16 +138,17 @@ async def update_key(
     models: list[str] | None = None,
     max_budget: float | None = None,
     metadata: dict | None = None,
+    model_max_budget: dict[str, float] | None = None,
 ) -> dict:
     data: dict = {"key": key_id}
     if models is not None:
         data["models"] = models
     if max_budget is not None:
         data["max_budget"] = max_budget
-    elif max_budget is None and "max_budget" not in data:
-        pass
     if metadata is not None:
         data["metadata"] = metadata
+    if model_max_budget is not None:
+        data["model_max_budget"] = model_max_budget
     return await _request("POST", "/key/update", json_data=data)
 
 
@@ -197,9 +198,8 @@ async def update_model(
         "id": litellm_model_id,
         "model_name": model_name,
         "litellm_params": litellm_params,
+        "model_info": model_info or {},
     }
-    if model_info:
-        data["model_info"] = model_info
     return await _request("POST", "/model/update", json_data=data)
 
 

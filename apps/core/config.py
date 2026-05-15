@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     litellm_port: int = 4000
     litellm_master_key: str = ""
 
+    # 日志
+    log_level: str = "WARNING"
+
     # 应用
     secret_key: str = "dev-secret-key"
     access_token_expire_minutes: int = 60 * 24

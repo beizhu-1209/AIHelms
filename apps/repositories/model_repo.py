@@ -98,6 +98,19 @@ async def find_all_active_deployments(session: AsyncSession) -> list[ModelDeploy
     return list(result.scalars().all())
 
 
+async def find_model_ids_by_credential_ids(
+    session: AsyncSession, credential_ids: list[int]
+) -> list[str]:
+    """Return distinct model_id strings for models that have deployments using given credentials."""
+    result = await session.execute(
+        select(Model.model_id)
+        .join(ModelDeployment, ModelDeployment.model_id == Model.id)
+        .where(ModelDeployment.credential_id.in_(credential_ids))
+        .distinct()
+    )
+    return [row[0] for row in result.all()]
+
+
 # --- Access Groups ---
 
 

@@ -15,7 +15,7 @@ async def login(req: LoginRequest, session: AsyncSession = Depends(get_db)):
         token = await auth_service.login(session, req.username, req.password)
     except UnauthorizedError as e:
         raise HTTPException(status_code=401, detail=str(e))
-    return {"code": 200, "message": "ok", "data": {"access_token": token, "token_type": "bearer"}}
+    return {"code": 200, "message": "登录成功", "data": {"access_token": token, "token_type": "bearer"}}
 
 
 @router.get("/me")
@@ -42,4 +42,4 @@ async def change_password(
         raise HTTPException(status_code=400, detail=str(e))
     except NotFoundError:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "密码修改成功", "data": None}

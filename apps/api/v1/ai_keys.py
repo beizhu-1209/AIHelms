@@ -17,15 +17,19 @@ router = APIRouter(prefix="/ai-keys", tags=["ai-keys"])
 
 class CreateKeyRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
-    key_type: str = Field(..., pattern=r"^(personal_main|personal_scene|dept_shared|project_shared)$")
+    key_type: str = Field(..., pattern=r"^(personal_main|personal_scene|dept_main|dept_scene|project_main|project_scene)$")
     owner_type: str = Field(..., pattern=r"^(user|department|project)$")
     owner_id: int
     description: str = Field("", max_length=500)
     tags: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     budget_limit: Decimal | None = None
-    budget_hard_limit: bool = True
+    budget_hard_limit: bool = False
+    budget_duration: str | None = Field("30d", pattern=r"^(1d|7d|30d)$")
+    model_budgets: dict[str, float] | None = None
+    scenario_id: int | None = None
     duration: str | None = None
+    rate_limits: list[dict] | None = None
 
 
 class UpdateKeyRequest(BaseModel):
@@ -35,7 +39,10 @@ class UpdateKeyRequest(BaseModel):
     models: list[str] | None = None
     budget_limit: Decimal | None = None
     budget_hard_limit: bool | None = None
-    budget_type: str | None = Field(None, pattern=r"^(money|count)$")
+    budget_duration: str | None = Field(None, pattern=r"^(1d|7d|30d)$")
+    model_budgets: dict[str, float] | None = None
+    scenario_id: int | None = None
+    rate_limits: list[dict] | None = None
 
 
 class BatchUpdateRequest(BaseModel):
@@ -43,7 +50,21 @@ class BatchUpdateRequest(BaseModel):
     models: list[str] | None = None
     budget_limit: Decimal | None = None
     budget_hard_limit: bool | None = None
-    budget_type: str | None = Field(None, pattern=r"^(money|count)$")
+    budget_duration: str | None = Field(None, pattern=r"^(1d|7d|30d)$")
+
+
+class BatchCreateRequest(BaseModel):
+    user_ids: list[int] = Field(..., min_length=1)
+    key_type: str = Field(..., pattern=r"^(personal_main|personal_scene)$")
+    name_template: str = Field(..., min_length=1, max_length=128)
+    description: str = Field("", max_length=500)
+    models: list[str] = Field(default_factory=list)
+    budget_limit: Decimal | None = None
+    budget_hard_limit: bool = False
+    budget_duration: str | None = Field("30d", pattern=r"^(1d|7d|30d)$")
+    model_budgets: dict[str, float] | None = None
+    scenario_id: int | None = None
+    rate_limits: list[dict] | None = None
 
 
 class ModelLimitItem(BaseModel):
@@ -91,13 +112,50 @@ async def create_key(
             models=req.models,
             budget_limit=req.budget_limit,
             budget_hard_limit=req.budget_hard_limit,
+            budget_duration=req.budget_duration,
+            model_budgets=req.model_budgets,
+            scenario_id=req.scenario_id,
             duration=req.duration,
+            rate_limits=req.rate_limits,
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"code": 200, "message": "ok", "data": key}
+    return {"code": 200, "message": "AI Key 创建成功", "data": key}
+
+
+@router.post("/batch")
+async def batch_create_keys(
+    req: BatchCreateRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_permission("user:update")),
+):
+    from exceptions import ValidationError as VE
+    try:
+        results = await ai_key_service.batch_create_keys(
+            session,
+            user_ids=req.user_ids,
+            key_type=req.key_type,
+            name_template=req.name_template,
+            created_by=current_user["id"],
+            description=req.description,
+            models=req.models,
+            budget_limit=req.budget_limit,
+            budget_hard_limit=req.budget_hard_limit,
+            budget_duration=req.budget_duration,
+            model_budgets=req.model_budgets,
+            scenario_id=req.scenario_id,
+            rate_limits=req.rate_limits,
+        )
+    except VE as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    success_count = sum(1 for r in results if r["success"])
+    return {
+        "code": 200,
+        "message": f"批量创建完成，成功 {success_count}/{len(results)}",
+        "data": results,
+    }
 
 
 @router.get("/my")
@@ -153,7 +211,7 @@ async def set_model_limits(
         raise HTTPException(status_code=404, detail=str(e))
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"code": 200, "message": "ok", "data": limits}
+    return {"code": 200, "message": "模型限制更新成功", "data": limits}
 
 
 @router.delete("/{key_id}/model-limits/{model_id}")
@@ -167,7 +225,7 @@ async def delete_model_limit(
         await ai_key_service.delete_model_limit(session, key_id, model_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="限制记录不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "模型限制删除成功", "data": None}
 
 
 @router.get("/{key_id}")
@@ -199,10 +257,14 @@ async def update_key(
             models=req.models,
             budget_limit=req.budget_limit,
             budget_hard_limit=req.budget_hard_limit,
+            budget_duration=req.budget_duration,
+            model_budgets=req.model_budgets,
+            scenario_id=req.scenario_id,
+            rate_limits=req.rate_limits,
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Key 不存在")
-    return {"code": 200, "message": "ok", "data": key}
+    return {"code": 200, "message": "AI Key 更新成功", "data": key}
 
 
 @router.put("/{key_id}/toggle")
@@ -215,7 +277,7 @@ async def toggle_key(
         key = await ai_key_service.toggle_key(session, key_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Key 不存在")
-    return {"code": 200, "message": "ok", "data": key}
+    return {"code": 200, "message": "状态切换成功", "data": key}
 
 
 @router.delete("/{key_id}")
@@ -228,7 +290,7 @@ async def delete_key(
         await ai_key_service.delete_key(session, key_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Key 不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "AI Key 删除成功", "data": None}
 
 
 @router.get("/available-models")
@@ -263,4 +325,4 @@ async def batch_update_keys(
             results.append(key)
         except NotFoundError:
             pass
-    return {"code": 200, "message": "ok", "data": {"updated": len(results)}}
+    return {"code": 200, "message": "批量更新成功", "data": {"updated": len(results)}}

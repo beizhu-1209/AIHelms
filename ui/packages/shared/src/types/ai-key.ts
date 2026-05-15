@@ -2,7 +2,7 @@ export interface AiKey {
   id: number
   name: string
   description: string
-  key_type: 'personal_main' | 'personal_scene' | 'dept_shared' | 'project_shared'
+  key_type: 'personal_main' | 'personal_scene' | 'dept_main' | 'dept_scene' | 'project_main' | 'project_scene'
   owner_type: 'user' | 'department' | 'project'
   owner_id: number
   tags: string[]
@@ -10,8 +10,10 @@ export interface AiKey {
   litellm_key_alias: string | null
   models: string[]
   budget_limit: string | null
-  budget_type: 'money' | 'count'
   budget_hard_limit: boolean
+  budget_duration: string | null
+  model_budgets: Record<string, number>
+  scenario_id: number | null
   is_active: boolean
   created_by: number | null
   created_at: string | null
@@ -30,9 +32,12 @@ export interface CreateAiKeyParams {
   tags?: string[]
   models?: string[]
   budget_limit?: number | null
-  budget_type?: 'money' | 'count'
   budget_hard_limit?: boolean
+  budget_duration?: string | null
+  model_budgets?: Record<string, number> | null
+  scenario_id?: number | null
   duration?: string | null
+  rate_limits?: RateLimitItem[] | null
 }
 
 export interface UpdateAiKeyParams {
@@ -41,8 +46,40 @@ export interface UpdateAiKeyParams {
   tags?: string[]
   models?: string[]
   budget_limit?: number | null
-  budget_type?: 'money' | 'count'
   budget_hard_limit?: boolean
+  budget_duration?: string | null
+  model_budgets?: Record<string, number> | null
+  scenario_id?: number | null
+  rate_limits?: RateLimitItem[] | null
+}
+
+export interface BatchCreateAiKeyParams {
+  user_ids: number[]
+  key_type: 'personal_main' | 'personal_scene'
+  name_template: string
+  description?: string
+  models?: string[]
+  budget_limit?: number | null
+  budget_hard_limit?: boolean
+  budget_duration?: string | null
+  model_budgets?: Record<string, number> | null
+  scenario_id?: number | null
+  rate_limits?: RateLimitItem[] | null
+}
+
+export interface BatchCreateResult {
+  user_id: number
+  success: boolean
+  error?: string
+  key?: AiKey
+}
+
+export interface RateLimitItem {
+  model_id: number
+  tpm?: number | null
+  rpm?: number | null
+  max_tokens?: number | null
+  max_calls?: number | null
 }
 
 export interface AiKeyListResult {
@@ -73,11 +110,15 @@ export interface IdentityUserItem {
 
 export interface IdentityDepartmentItem {
   department: { id: number; name: string }
+  main_key: AiKey | null
+  scene_keys: AiKey[]
   keys: AiKey[]
 }
 
 export interface IdentityProjectItem {
   project: { id: number; name: string }
+  main_key: AiKey | null
+  scene_keys: AiKey[]
   keys: AiKey[]
 }
 

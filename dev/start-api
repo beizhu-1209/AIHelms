@@ -10,6 +10,10 @@ cd "$ROOT/apps"
 eval "$(conda shell.bash hook)"
 conda activate aihelms
 
+# 开发环境日志目录
+export LOG_DIR="$ROOT/logs"
+mkdir -p "$LOG_DIR"
+
 PIDS=()
 trap 'kill "${PIDS[@]}" 2>/dev/null; wait' EXIT
 

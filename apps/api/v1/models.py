@@ -110,7 +110,7 @@ async def create_model(
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": model}
+    return {"code": 200, "message": "模型创建成功", "data": model}
 
 
 @router.get("/{model_id}")
@@ -144,7 +144,7 @@ async def update_model(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="模型不存在")
-    return {"code": 200, "message": "ok", "data": model}
+    return {"code": 200, "message": "模型更新成功", "data": model}
 
 
 @router.delete("/{model_id}")
@@ -157,7 +157,7 @@ async def delete_model(
         await model_service.delete_model(session, model_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="模型不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "模型删除成功", "data": None}
 
 
 # --- Deployments ---
@@ -185,7 +185,7 @@ async def create_deployment(
         )
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"code": 200, "message": "ok", "data": deployment}
+    return {"code": 200, "message": "渠道创建成功", "data": deployment}
 
 
 @router.put("/{model_id}/deployments/{deployment_id}")
@@ -210,7 +210,7 @@ async def update_deployment(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="部署不存在")
-    return {"code": 200, "message": "ok", "data": deployment}
+    return {"code": 200, "message": "渠道更新成功", "data": deployment}
 
 
 @router.delete("/{model_id}/deployments/{deployment_id}")
@@ -224,7 +224,7 @@ async def delete_deployment(
         await model_service.delete_deployment(session, deployment_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="部署不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "渠道删除成功", "data": None}
 
 
 # --- Access Groups ---
@@ -254,7 +254,7 @@ async def create_access_group(
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": group}
+    return {"code": 200, "message": "访问组创建成功", "data": group}
 
 
 @router.put("/access-groups/{group_id}")
@@ -274,7 +274,7 @@ async def update_access_group(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="访问组不存在")
-    return {"code": 200, "message": "ok", "data": group}
+    return {"code": 200, "message": "访问组更新成功", "data": group}
 
 
 @router.delete("/access-groups/{group_id}")
@@ -287,7 +287,7 @@ async def delete_access_group(
         await model_service.delete_access_group(session, group_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="访问组不存在")
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "访问组删除成功", "data": None}
 
 
 # --- Router Settings ---
@@ -318,4 +318,4 @@ async def update_router_settings(
         timeout=req.timeout,
         config=req.config,
     )
-    return {"code": 200, "message": "ok", "data": settings}
+    return {"code": 200, "message": "路由设置更新成功", "data": settings}

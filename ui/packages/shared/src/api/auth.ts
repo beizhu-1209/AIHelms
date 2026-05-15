@@ -5,6 +5,7 @@ export function login(username: string, password: string): Promise<TokenData> {
   return request<TokenData>('/api/v1/auth/login', {
     method: 'POST',
     body: { username, password },
+    silent: true,
   })
 }
 

@@ -17,10 +17,16 @@ logger = logging.getLogger(__name__)
 
 KEY_TYPE_PERSONAL_MAIN = "personal_main"
 KEY_TYPE_PERSONAL_SCENE = "personal_scene"
-KEY_TYPE_DEPT_SHARED = "dept_shared"
-KEY_TYPE_PROJECT_SHARED = "project_shared"
+KEY_TYPE_DEPT_MAIN = "dept_main"
+KEY_TYPE_DEPT_SCENE = "dept_scene"
+KEY_TYPE_PROJECT_MAIN = "project_main"
+KEY_TYPE_PROJECT_SCENE = "project_scene"
 
-VALID_KEY_TYPES = {KEY_TYPE_PERSONAL_MAIN, KEY_TYPE_PERSONAL_SCENE, KEY_TYPE_DEPT_SHARED, KEY_TYPE_PROJECT_SHARED}
+VALID_KEY_TYPES = {
+    KEY_TYPE_PERSONAL_MAIN, KEY_TYPE_PERSONAL_SCENE,
+    KEY_TYPE_DEPT_MAIN, KEY_TYPE_DEPT_SCENE,
+    KEY_TYPE_PROJECT_MAIN, KEY_TYPE_PROJECT_SCENE,
+}
 VALID_OWNER_TYPES = {"user", "department", "project"}
 
 
@@ -60,8 +66,12 @@ async def create_key(
     tags: list[str] | None = None,
     models: list[str] | None = None,
     budget_limit: Decimal | None = None,
-    budget_hard_limit: bool = True,
+    budget_hard_limit: bool = False,
+    budget_duration: str | None = "30d",
+    model_budgets: dict[str, float] | None = None,
+    scenario_id: int | None = None,
     duration: str | None = None,
+    rate_limits: list[dict] | None = None,
 ) -> dict:
     if key_type not in VALID_KEY_TYPES:
         raise ConflictError(f"无效的 key 类型: {key_type}")
@@ -72,11 +82,12 @@ async def create_key(
     team_id = await _resolve_owner(session, owner_type, owner_id)
     litellm_user_id = await _resolve_litellm_user(session, owner_type, owner_id)
 
-    # Check personal_main uniqueness
-    if key_type == KEY_TYPE_PERSONAL_MAIN:
-        existing = await ai_key_repo.find_personal_main(session, owner_id)
+    # Check main key uniqueness (only one main key per owner)
+    main_types = {KEY_TYPE_PERSONAL_MAIN, KEY_TYPE_DEPT_MAIN, KEY_TYPE_PROJECT_MAIN}
+    if key_type in main_types:
+        existing = await ai_key_repo.find_main_key(session, owner_type, owner_id, key_type)
         if existing:
-            raise ConflictError("该用户已有主 Key")
+            raise ConflictError("该归属已有主 Key")
 
     # Build key alias
     key_alias = _build_key_alias(key_type, owner_type, owner_id, name)
@@ -91,6 +102,9 @@ async def create_key(
         models=models or [],
         budget_limit=budget_limit,
         budget_hard_limit=budget_hard_limit,
+        budget_duration=budget_duration,
+        model_budgets=model_budgets or {},
+        scenario_id=scenario_id,
         is_active=False,
         created_by=created_by,
     )
@@ -98,6 +112,7 @@ async def create_key(
 
     # Sync to LiteLLM
     max_budget = float(budget_limit) if budget_limit and budget_hard_limit else None
+    litellm_duration = budget_duration if budget_duration and budget_limit else duration
     try:
         result = await litellm_client.create_key(
             key_alias=key_alias,
@@ -106,15 +121,29 @@ async def create_key(
             models=models or [],
             max_budget=max_budget,
             metadata={"aihelms_key_id": ai_key.id, "key_type": key_type},
-            duration=duration,
+            duration=litellm_duration,
         )
         ai_key.litellm_key_id = result.get("key")
         ai_key.litellm_key_alias = key_alias
+
+        # Sync model_max_budget if set
+        if model_budgets and ai_key.litellm_key_id:
+            try:
+                await litellm_client.update_key(
+                    key_id=ai_key.litellm_key_id,
+                    model_max_budget=model_budgets,
+                )
+            except litellm_client.LiteLLMError:
+                logger.warning("litellm sync model_max_budget failed for ai_key %s", ai_key.id)
     except litellm_client.LiteLLMError:
         logger.warning("litellm create key failed for ai_key %s", ai_key.id)
 
     await session.commit()
     await session.refresh(ai_key)
+
+    # Save rate limits if provided
+    if rate_limits:
+        await _save_rate_limits(session, ai_key.id, rate_limits)
 
     data = _serialize_key(ai_key)
     # Return full key value only on creation
@@ -131,6 +160,10 @@ async def update_key(
     models: list[str] | None = None,
     budget_limit: Decimal | None = None,
     budget_hard_limit: bool | None = None,
+    budget_duration: str | None = None,
+    model_budgets: dict[str, float] | None = None,
+    scenario_id: int | None = None,
+    rate_limits: list[dict] | None = None,
 ) -> dict:
     key = await ai_key_repo.find_by_id(session, key_id)
     if not key:
@@ -148,9 +181,15 @@ async def update_key(
         key.budget_limit = budget_limit
     if budget_hard_limit is not None:
         key.budget_hard_limit = budget_hard_limit
+    if budget_duration is not None:
+        key.budget_duration = budget_duration
+    if model_budgets is not None:
+        key.model_budgets = model_budgets
+    if scenario_id is not None:
+        key.scenario_id = scenario_id
 
     # Sync model/budget changes to LiteLLM
-    if key.litellm_key_id and (models is not None or budget_limit is not None or budget_hard_limit is not None):
+    if key.litellm_key_id and (models is not None or budget_limit is not None or budget_hard_limit is not None or model_budgets is not None or budget_duration is not None):
         effective_hard = key.budget_hard_limit
         effective_budget = float(key.budget_limit) if key.budget_limit and effective_hard else None
         try:
@@ -158,12 +197,18 @@ async def update_key(
                 key_id=key.litellm_key_id,
                 models=key.models if models is not None else None,
                 max_budget=effective_budget,
+                model_max_budget=key.model_budgets if model_budgets is not None else None,
             )
         except litellm_client.LiteLLMError:
             logger.warning("litellm update key failed for ai_key %s", key_id)
 
     await session.commit()
     await session.refresh(key)
+
+    # Save rate limits if provided
+    if rate_limits is not None:
+        await _save_rate_limits(session, key_id, rate_limits)
+
     return _serialize_key(key)
 
 
@@ -203,6 +248,64 @@ async def delete_key(session: AsyncSession, key_id: int) -> None:
 
     await session.delete(key)
     await session.commit()
+
+
+async def batch_create_keys(
+    session: AsyncSession,
+    user_ids: list[int],
+    key_type: str,
+    name_template: str,
+    created_by: int,
+    description: str = "",
+    models: list[str] | None = None,
+    budget_limit: Decimal | None = None,
+    budget_hard_limit: bool = False,
+    budget_duration: str | None = "30d",
+    model_budgets: dict[str, float] | None = None,
+    scenario_id: int | None = None,
+    rate_limits: list[dict] | None = None,
+) -> list[dict]:
+    if key_type not in {KEY_TYPE_PERSONAL_MAIN, KEY_TYPE_PERSONAL_SCENE}:
+        raise ValidationError("批量创建仅支持个人主 Key 和场景 Key")
+
+    results = []
+    for user_id in user_ids:
+        user = await user_repo.find_user_by_id(session, user_id)
+        if not user:
+            results.append({"user_id": user_id, "success": False, "error": "用户不存在"})
+            continue
+
+        name = name_template.replace("{username}", user.username or "")
+        name = name.replace("{display_name}", user.display_name or user.username or "")
+
+        if key_type == KEY_TYPE_PERSONAL_MAIN:
+            existing = await ai_key_repo.find_personal_main(session, user_id)
+            if existing:
+                results.append({"user_id": user_id, "success": False, "error": "已有主 Key"})
+                continue
+
+        try:
+            key_data = await create_key(
+                session,
+                name=name,
+                key_type=key_type,
+                owner_type="user",
+                owner_id=user_id,
+                created_by=created_by,
+                description=description,
+                models=models,
+                budget_limit=budget_limit,
+                budget_hard_limit=budget_hard_limit,
+                budget_duration=budget_duration,
+                model_budgets=model_budgets,
+                scenario_id=scenario_id,
+                rate_limits=rate_limits,
+            )
+            results.append({"user_id": user_id, "success": True, "key": key_data})
+        except (ConflictError, NotFoundError) as e:
+            results.append({"user_id": user_id, "success": False, "error": str(e)})
+
+    return results
 
 
 async def get_my_keys(session: AsyncSession, user_id: int) -> dict:
@@ -323,9 +426,13 @@ async def _list_identity_departments(
     items = []
     for dept in depts:
         dept_keys = await ai_key_repo.find_by_owner(session, "department", dept.id)
+        main_key = next((k for k in dept_keys if k.key_type == KEY_TYPE_DEPT_MAIN), None)
+        scene_keys = [k for k in dept_keys if k.key_type == KEY_TYPE_DEPT_SCENE]
         items.append({
             "department": {"id": dept.id, "name": dept.name},
-            "keys": [_serialize_key_with_models(k, session) for k in dept_keys],
+            "main_key": _serialize_key(main_key) if main_key else None,
+            "scene_keys": [_serialize_key(k) for k in scene_keys],
+            "keys": [_serialize_key(k) for k in dept_keys],
         })
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
@@ -337,9 +444,13 @@ async def _list_identity_projects(
     items = []
     for proj in projects:
         proj_keys = await ai_key_repo.find_by_owner(session, "project", proj.id)
+        main_key = next((k for k in proj_keys if k.key_type == KEY_TYPE_PROJECT_MAIN), None)
+        scene_keys = [k for k in proj_keys if k.key_type == KEY_TYPE_PROJECT_SCENE]
         items.append({
             "project": {"id": proj.id, "name": proj.name},
-            "keys": [_serialize_key_with_models(k, session) for k in proj_keys],
+            "main_key": _serialize_key(main_key) if main_key else None,
+            "scene_keys": [_serialize_key(k) for k in scene_keys],
+            "keys": [_serialize_key(k) for k in proj_keys],
         })
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
@@ -462,11 +573,42 @@ def _build_key_alias(key_type: str, owner_type: str, owner_id: int, name: str) -
         return f"user:{owner_id}/main"
     elif key_type == KEY_TYPE_PERSONAL_SCENE:
         return f"user:{owner_id}/{name}"
-    elif key_type == KEY_TYPE_DEPT_SHARED:
+    elif key_type == KEY_TYPE_DEPT_MAIN:
+        return f"dept:{owner_id}/main"
+    elif key_type == KEY_TYPE_DEPT_SCENE:
         return f"dept:{owner_id}/{name}"
-    elif key_type == KEY_TYPE_PROJECT_SHARED:
+    elif key_type == KEY_TYPE_PROJECT_MAIN:
+        return f"proj:{owner_id}/main"
+    elif key_type == KEY_TYPE_PROJECT_SCENE:
         return f"proj:{owner_id}/{name}"
     return f"{owner_type}:{owner_id}/{name}"
+
+
+async def _save_rate_limits(session: AsyncSession, key_id: int, rate_limits: list[dict]) -> None:
+    """Save rate limits (TPM/RPM per model) for a key."""
+    incoming_model_ids = set()
+    for item in rate_limits:
+        mid = item.get("model_id")
+        if not mid:
+            continue
+        incoming_model_ids.add(mid)
+        await ai_key_model_limit_repo.upsert(
+            session,
+            ai_key_id=key_id,
+            model_id=mid,
+            tpm=item.get("tpm"),
+            rpm=item.get("rpm"),
+            max_tokens=item.get("max_tokens"),
+            max_calls=item.get("max_calls"),
+        )
+
+    # Remove limits for models not in the incoming list
+    existing = await ai_key_model_limit_repo.find_by_key_id(session, key_id)
+    for limit in existing:
+        if limit.model_id not in incoming_model_ids:
+            await ai_key_model_limit_repo.delete_by_key_and_model(session, key_id, limit.model_id)
+
+    await session.commit()
 
 
 def _serialize_key(key: AiKey) -> dict:
@@ -483,6 +625,9 @@ def _serialize_key(key: AiKey) -> dict:
         "models": key.models,
         "budget_limit": str(key.budget_limit) if key.budget_limit else None,
         "budget_hard_limit": key.budget_hard_limit,
+        "budget_duration": key.budget_duration,
+        "model_budgets": key.model_budgets or {},
+        "scenario_id": key.scenario_id,
         "is_active": key.is_active,
         "created_by": key.created_by,
         "created_at": key.created_at.isoformat() if key.created_at else None,

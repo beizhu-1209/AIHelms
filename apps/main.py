@@ -5,7 +5,12 @@ from fastapi import FastAPI
 from api.v1.router import router as api_v1_router
 from core.config import settings
 from core.database import close_engine
+from core.exception_handlers import register_exception_handlers
+from core.logging import setup_logging
 from services.auth_service import ensure_super_admin
+
+# Initialize logging before anything else
+setup_logging()
 
 
 @asynccontextmanager
@@ -24,6 +29,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+register_exception_handlers(app)
 app.include_router(api_v1_router, prefix="/api/v1")
 
 

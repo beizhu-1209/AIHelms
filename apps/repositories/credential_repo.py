@@ -1,5 +1,6 @@
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from models.db import Credential
 
@@ -12,7 +13,11 @@ async def create(session: AsyncSession, credential: Credential) -> Credential:
 
 
 async def find_by_id(session: AsyncSession, credential_id: int) -> Credential | None:
-    result = await session.execute(select(Credential).where(Credential.id == credential_id))
+    result = await session.execute(
+        select(Credential)
+        .where(Credential.id == credential_id)
+        .options(selectinload(Credential.provider), selectinload(Credential.deployments))
+    )
     return result.scalar_one_or_none()
 
 
@@ -30,7 +35,11 @@ async def find_all(
     provider_id: int | None = None,
     is_active: bool | None = None,
 ) -> list[Credential]:
-    stmt = select(Credential).order_by(Credential.id)
+    stmt = (
+        select(Credential)
+        .options(selectinload(Credential.provider), selectinload(Credential.deployments))
+        .order_by(Credential.id)
+    )
     if provider_id is not None:
         stmt = stmt.where(Credential.provider_id == provider_id)
     if is_active is not None:

@@ -44,6 +44,15 @@ async def get_all_active_models(session: AsyncSession) -> list[dict]:
     return [{"id": m.id, "name": m.name, "model_id": m.model_id} for m in models]
 
 
+async def get_model_ids_by_credential_ids(
+    session: AsyncSession, credential_ids: list[int]
+) -> list[str]:
+    """Return model_id strings for models deployed with given credentials."""
+    if not credential_ids:
+        return []
+    return await model_repo.find_model_ids_by_credential_ids(session, credential_ids)
+
+
 async def create_model(
     session: AsyncSession,
     name: str,

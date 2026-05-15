@@ -64,7 +64,7 @@ async def create_credential(
         logger.warning("failed to sync credential to litellm: %s", credential_name)
 
     await session.commit()
-    await session.refresh(credential)
+    credential = await credential_repo.find_by_id(session, credential.id)
     return _serialize(credential)
 
 
@@ -102,7 +102,7 @@ async def update_credential(
             logger.warning("failed to sync credential update to litellm: %s", credential.credential_name)
 
     await session.commit()
-    await session.refresh(credential)
+    credential = await credential_repo.find_by_id(session, credential.id)
     return _serialize(credential)
 
 

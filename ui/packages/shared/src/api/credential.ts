@@ -33,3 +33,11 @@ export async function getProviderFields(): Promise<ProviderFieldsInfo[]> {
   const result = await request<ProviderFieldsInfo[]>('/api/v1/credentials/provider-fields')
   return result
 }
+
+export function getCredentialModels(credentialId: number): Promise<string[]> {
+  return request<string[]>(`/api/v1/credentials/${credentialId}/models`)
+}
+
+export function getProviderModels(providerId: number): Promise<string[]> {
+  return request<string[]>(`/api/v1/credentials/by-provider/${providerId}/models`)
+}

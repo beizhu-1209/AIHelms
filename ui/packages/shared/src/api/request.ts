@@ -1,3 +1,5 @@
+import { toast } from '../utils/toast'
+
 export interface ApiResponse<T = unknown> {
   code: number
   message: string
@@ -8,6 +10,7 @@ interface RequestOptions {
   method?: string
   body?: unknown
   params?: Record<string, string | number | boolean | undefined>
+  silent?: boolean
 }
 
 function getToken(): string | null {
@@ -15,7 +18,7 @@ function getToken(): string | null {
 }
 
 export async function request<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, params } = options
+  const { method = 'GET', body, params, silent = false } = options
 
   let fullUrl = url
   if (params) {
@@ -45,7 +48,14 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     fetchOptions.body = JSON.stringify(body)
   }
 
-  const response = await fetch(fullUrl, fetchOptions)
+  let response: Response
+  try {
+    response = await fetch(fullUrl, fetchOptions)
+  } catch {
+    const message = '网络连接失败，请检查网络'
+    if (!silent) toast.error(message)
+    throw new Error(message)
+  }
 
   if (response.status === 401) {
     localStorage.removeItem('aihelms_token')
@@ -56,7 +66,13 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
   const json: ApiResponse<T> = await response.json()
 
   if (!response.ok) {
-    throw new Error(json.message || `请求失败: ${response.status}`)
+    const message = json.message || `请求失败: ${response.status}`
+    if (!silent) toast.error(message)
+    throw new Error(message)
+  }
+
+  if (!silent && method !== 'GET' && json.message && json.message !== 'ok') {
+    toast.success(json.message)
   }
 
   return json.data

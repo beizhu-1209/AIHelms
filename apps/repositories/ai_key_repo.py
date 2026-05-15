@@ -49,6 +49,17 @@ async def find_personal_main(session: AsyncSession, user_id: int) -> AiKey | Non
     return result.scalar_one_or_none()
 
 
+async def find_main_key(session: AsyncSession, owner_type: str, owner_id: int, key_type: str) -> AiKey | None:
+    result = await session.execute(
+        select(AiKey).where(
+            AiKey.owner_type == owner_type,
+            AiKey.owner_id == owner_id,
+            AiKey.key_type == key_type,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def find_all(
     session: AsyncSession,
     page: int = 1,
