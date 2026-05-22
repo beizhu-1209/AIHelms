@@ -32,7 +32,7 @@ services:
       retries: 5
 
   litellm:
-    image: docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.3
+    image: docker.litellm.ai/berriai/litellm:v1.85.1
     restart: unless-stopped
     env_file: .env
     environment:
@@ -72,10 +72,13 @@ services:
       CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-0}
       CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
       CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
+      AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
       LOG_DIR: /logs
+      DATA_DIR: /data
     volumes:
       - ./logs:/logs
-    command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
+      - ./data:/data
+    command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & celery -A celery_app beat --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
     networks:
       - internal
       - external

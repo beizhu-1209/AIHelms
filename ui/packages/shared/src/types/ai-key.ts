@@ -1,3 +1,6 @@
+export type BudgetScope = 'unified' | 'per_type' | 'per_resource'
+export type BudgetSubScope = 'unified' | 'each'
+
 export interface AiKey {
   id: number
   name: string
@@ -9,10 +12,19 @@ export interface AiKey {
   litellm_key_id: string | null
   litellm_key_alias: string | null
   models: string[]
+  mcps: number[]
+  skills: number[]
+  agents: number[]
   budget_limit: string | null
   budget_hard_limit: boolean
   budget_duration: string | null
+  budget_scope: BudgetScope
+  budget_models_total: string | null
+  budget_mcps_total: string | null
+  budget_models_per: BudgetSubScope
+  budget_mcps_per: BudgetSubScope
   model_budgets: Record<string, number>
+  mcp_budgets: Record<string, number>
   scenario_id: number | null
   is_active: boolean
   created_by: number | null
@@ -31,10 +43,19 @@ export interface CreateAiKeyParams {
   description?: string
   tags?: string[]
   models?: string[]
+  mcps?: number[]
+  skills?: number[]
+  agents?: number[]
   budget_limit?: number | null
   budget_hard_limit?: boolean
   budget_duration?: string | null
+  budget_scope?: BudgetScope
+  budget_models_total?: number | null
+  budget_mcps_total?: number | null
+  budget_models_per?: BudgetSubScope
+  budget_mcps_per?: BudgetSubScope
   model_budgets?: Record<string, number> | null
+  mcp_budgets?: Record<string, number> | null
   scenario_id?: number | null
   duration?: string | null
   rate_limits?: RateLimitItem[] | null
@@ -45,10 +66,19 @@ export interface UpdateAiKeyParams {
   description?: string
   tags?: string[]
   models?: string[]
+  mcps?: number[]
+  skills?: number[]
+  agents?: number[]
   budget_limit?: number | null
   budget_hard_limit?: boolean
   budget_duration?: string | null
+  budget_scope?: BudgetScope
+  budget_models_total?: number | null
+  budget_mcps_total?: number | null
+  budget_models_per?: BudgetSubScope
+  budget_mcps_per?: BudgetSubScope
   model_budgets?: Record<string, number> | null
+  mcp_budgets?: Record<string, number> | null
   scenario_id?: number | null
   rate_limits?: RateLimitItem[] | null
 }
@@ -59,10 +89,19 @@ export interface BatchCreateAiKeyParams {
   name_template: string
   description?: string
   models?: string[]
+  mcps?: number[]
+  skills?: number[]
+  agents?: number[]
   budget_limit?: number | null
   budget_hard_limit?: boolean
   budget_duration?: string | null
+  budget_scope?: BudgetScope
+  budget_models_total?: number | null
+  budget_mcps_total?: number | null
+  budget_models_per?: BudgetSubScope
+  budget_mcps_per?: BudgetSubScope
   model_budgets?: Record<string, number> | null
+  mcp_budgets?: Record<string, number> | null
   scenario_id?: number | null
   rate_limits?: RateLimitItem[] | null
 }

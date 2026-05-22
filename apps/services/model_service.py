@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions import NotFoundError, ConflictError
-from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings
+from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility
 from repositories import model_repo, credential_repo
 from services import litellm_client
 
@@ -40,8 +40,20 @@ async def get_model_by_id(session: AsyncSession, model_id: int) -> dict:
 
 
 async def get_all_active_models(session: AsyncSession) -> list[dict]:
-    models = await model_repo.find_all_active(session)
-    return [{"id": m.id, "name": m.name, "model_id": m.model_id} for m in models]
+    models = await model_repo.find_all_active(session, published_only=True)
+    return [
+        {
+            "id": m.id,
+            "name": m.name,
+            "model_id": m.model_id,
+            "category": m.category,
+            "capabilities": m.capabilities,
+            "description": m.description,
+            "is_active": m.is_active,
+            "is_published": m.is_published,
+        }
+        for m in models
+    ]
 
 
 async def get_model_ids_by_credential_ids(
@@ -375,6 +387,67 @@ async def update_router_settings(
     return _serialize_router_settings(settings)
 
 
+# --- Model Publish / Visibility ---
+
+
+async def get_model_visibility(session: AsyncSession, model_id: int) -> dict:
+    model = await model_repo.find_by_id(session, model_id)
+    if not model:
+        raise NotFoundError("model", model_id)
+
+    dept_records = await model_repo.find_visibility_by_model(session, model_id)
+    user_records = await model_repo.find_user_visibility_by_model(session, model_id)
+
+    return {
+        "is_published": model.is_published,
+        "visibility_type": model.visibility_type,
+        "requires_approval": model.requires_approval,
+        "department_ids": [r.department_id for r in dept_records],
+        "departments": [
+            {"id": r.department_id, "name": r.department.name if r.department else ""}
+            for r in dept_records
+        ],
+        "user_ids": [r.user_id for r in user_records],
+        "user_count": len(user_records),
+    }
+
+
+async def update_model_publish(
+    session: AsyncSession,
+    model_id: int,
+    is_published: bool | None = None,
+    visibility_type: str | None = None,
+    department_ids: list[int] | None = None,
+    requires_approval: bool | None = None,
+) -> dict:
+    from repositories import department_repo
+
+    model = await model_repo.find_by_id(session, model_id)
+    if not model:
+        raise NotFoundError("model", model_id)
+
+    if is_published is not None:
+        model.is_published = is_published
+    if visibility_type is not None:
+        model.visibility_type = visibility_type
+    if requires_approval is not None:
+        model.requires_approval = requires_approval
+
+    if department_ids is not None:
+        await model_repo.set_visibility_departments(session, model_id, department_ids)
+        # Resolve department members to user-level visibility
+        user_ids: set[int] = set()
+        for dept_id in department_ids:
+            members = await department_repo.find_members(session, dept_id)
+            for user, _ in members:
+                user_ids.add(user.id)
+        await model_repo.set_visibility_users(session, model_id, list(user_ids))
+
+    await session.commit()
+    await session.refresh(model)
+    return await get_model_visibility(session, model_id)
+
+
 # --- Private helpers ---
 
 
@@ -411,6 +484,8 @@ def _serialize_model(model: Model) -> dict:
         "capabilities": model.capabilities,
         "description": model.description,
         "is_active": model.is_active,
+        "is_published": model.is_published,
+        "visibility_type": model.visibility_type,
         "deployment_count": len(model.deployments) if model.deployments else 0,
         "created_at": model.created_at.isoformat() if model.created_at else None,
         "updated_at": model.updated_at.isoformat() if model.updated_at else None,

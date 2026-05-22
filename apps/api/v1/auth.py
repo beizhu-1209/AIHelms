@@ -1,20 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_db, get_current_user
-from exceptions import UnauthorizedError, NotFoundError
-from models.auth import LoginRequest, ChangePasswordRequest
+from core.deps import get_current_user, get_db
+from exceptions import NotFoundError, UnauthorizedError
+from models.auth import ChangePasswordRequest, LoginRequest
 from services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login")
-async def login(req: LoginRequest, session: AsyncSession = Depends(get_db)):
+@router.post("/login", summary="用户登录")
+async def login(req: LoginRequest, request: Request, session: AsyncSession = Depends(get_db)):
     try:
-        token = await auth_service.login(session, req.username, req.password)
+        token, user = await auth_service.login(session, req.username, req.password)
     except UnauthorizedError as e:
         raise HTTPException(status_code=401, detail=str(e))
+    request.state.current_user = {
+        "id": user.id,
+        "username": user.username,
+        "is_admin": user.is_admin,
+    }
     return {"code": 200, "message": "登录成功", "data": {"access_token": token, "token_type": "bearer"}}
 
 
@@ -30,7 +35,7 @@ async def get_me(
     return {"code": 200, "message": "ok", "data": user_info}
 
 
-@router.put("/password")
+@router.put("/password", summary="修改密码")
 async def change_password(
     req: ChangePasswordRequest,
     session: AsyncSession = Depends(get_db),

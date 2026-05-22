@@ -1,4 +1,5 @@
 import { toast } from '../utils/toast'
+import { getLoginUrl } from '../utils/auth-redirect'
 
 export interface ApiResponse<T = unknown> {
   code: number
@@ -34,8 +35,10 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     }
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+  const isFormData = body instanceof FormData
+  const headers: Record<string, string> = {}
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json'
   }
 
   const token = getToken()
@@ -45,7 +48,7 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
   const fetchOptions: RequestInit = { method, headers }
   if (body && method !== 'GET') {
-    fetchOptions.body = JSON.stringify(body)
+    fetchOptions.body = isFormData ? (body as FormData) : JSON.stringify(body)
   }
 
   let response: Response
@@ -59,7 +62,7 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
   if (response.status === 401) {
     localStorage.removeItem('aihelms_token')
-    window.location.href = '/admin/login'
+    window.location.href = getLoginUrl()
     throw new Error('未认证')
   }
 

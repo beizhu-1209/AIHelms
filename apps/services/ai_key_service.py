@@ -65,10 +65,19 @@ async def create_key(
     description: str = "",
     tags: list[str] | None = None,
     models: list[str] | None = None,
+    mcps: list[int] | None = None,
+    skills: list[int] | None = None,
+    agents: list[int] | None = None,
     budget_limit: Decimal | None = None,
     budget_hard_limit: bool = False,
     budget_duration: str | None = "30d",
+    budget_scope: str = "unified",
+    budget_models_total: Decimal | None = None,
+    budget_mcps_total: Decimal | None = None,
+    budget_models_per: str = "unified",
+    budget_mcps_per: str = "unified",
     model_budgets: dict[str, float] | None = None,
+    mcp_budgets: dict[str, float] | None = None,
     scenario_id: int | None = None,
     duration: str | None = None,
     rate_limits: list[dict] | None = None,
@@ -100,10 +109,19 @@ async def create_key(
         owner_id=owner_id,
         tags=tags or [],
         models=models or [],
+        mcps=mcps or [],
+        skills=skills or [],
+        agents=agents or [],
         budget_limit=budget_limit,
         budget_hard_limit=budget_hard_limit,
         budget_duration=budget_duration,
+        budget_scope=budget_scope,
+        budget_models_total=budget_models_total,
+        budget_mcps_total=budget_mcps_total,
+        budget_models_per=budget_models_per,
+        budget_mcps_per=budget_mcps_per,
         model_budgets=model_budgets or {},
+        mcp_budgets=mcp_budgets or {},
         scenario_id=scenario_id,
         is_active=False,
         created_by=created_by,
@@ -158,10 +176,19 @@ async def update_key(
     description: str | None = None,
     tags: list[str] | None = None,
     models: list[str] | None = None,
+    mcps: list[int] | None = None,
+    skills: list[int] | None = None,
+    agents: list[int] | None = None,
     budget_limit: Decimal | None = None,
     budget_hard_limit: bool | None = None,
     budget_duration: str | None = None,
+    budget_scope: str | None = None,
+    budget_models_total: Decimal | None = None,
+    budget_mcps_total: Decimal | None = None,
+    budget_models_per: str | None = None,
+    budget_mcps_per: str | None = None,
     model_budgets: dict[str, float] | None = None,
+    mcp_budgets: dict[str, float] | None = None,
     scenario_id: int | None = None,
     rate_limits: list[dict] | None = None,
 ) -> dict:
@@ -177,39 +204,99 @@ async def update_key(
         key.tags = tags
     if models is not None:
         key.models = models
+    if mcps is not None:
+        key.mcps = mcps
+    if skills is not None:
+        key.skills = skills
+    if agents is not None:
+        key.agents = agents
     if budget_limit is not None:
         key.budget_limit = budget_limit
     if budget_hard_limit is not None:
         key.budget_hard_limit = budget_hard_limit
     if budget_duration is not None:
         key.budget_duration = budget_duration
+    if budget_scope is not None:
+        key.budget_scope = budget_scope
+    if budget_models_total is not None:
+        key.budget_models_total = budget_models_total
+    if budget_mcps_total is not None:
+        key.budget_mcps_total = budget_mcps_total
+    if budget_models_per is not None:
+        key.budget_models_per = budget_models_per
+    if budget_mcps_per is not None:
+        key.budget_mcps_per = budget_mcps_per
     if model_budgets is not None:
         key.model_budgets = model_budgets
+    if mcp_budgets is not None:
+        key.mcp_budgets = mcp_budgets
     if scenario_id is not None:
         key.scenario_id = scenario_id
 
-    # Sync model/budget changes to LiteLLM
-    if key.litellm_key_id and (models is not None or budget_limit is not None or budget_hard_limit is not None or model_budgets is not None or budget_duration is not None):
-        effective_hard = key.budget_hard_limit
-        effective_budget = float(key.budget_limit) if key.budget_limit and effective_hard else None
-        try:
-            await litellm_client.update_key(
-                key_id=key.litellm_key_id,
-                models=key.models if models is not None else None,
-                max_budget=effective_budget,
-                model_max_budget=key.model_budgets if model_budgets is not None else None,
-            )
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm update key failed for ai_key %s", key_id)
+    await _sync_key_to_litellm(
+        key,
+        models_changed=models is not None,
+        mcps_changed=mcps is not None,
+        budget_changed=(budget_limit is not None or budget_hard_limit is not None or budget_duration is not None),
+        model_budgets_changed=model_budgets is not None,
+    )
 
     await session.commit()
     await session.refresh(key)
 
-    # Save rate limits if provided
     if rate_limits is not None:
         await _save_rate_limits(session, key_id, rate_limits)
 
     return _serialize_key(key)
+
+
+async def update_key_resources(
+    session: AsyncSession,
+    key_id: int,
+    models: list[str] | None = None,
+    mcps: list[int] | None = None,
+    skills: list[int] | None = None,
+    agents: list[int] | None = None,
+) -> None:
+    """审批通过后给主 Key 追加资源。仅做资源同步，不动其他字段。"""
+    key = await ai_key_repo.find_by_id(session, key_id)
+    if not key:
+        return
+    if models is not None:
+        key.models = models
+    if mcps is not None:
+        key.mcps = mcps
+    if skills is not None:
+        key.skills = skills
+    if agents is not None:
+        key.agents = agents
+    await _sync_key_to_litellm(key, models is not None, mcps is not None, False, False)
+
+
+async def _sync_key_to_litellm(
+    key,
+    models_changed: bool,
+    mcps_changed: bool,
+    budget_changed: bool,
+    model_budgets_changed: bool,
+) -> None:
+    if not key.litellm_key_id:
+        return
+    if not (models_changed or mcps_changed or budget_changed or model_budgets_changed):
+        return
+
+    effective_hard = key.budget_hard_limit
+    effective_budget = float(key.budget_limit) if key.budget_limit and effective_hard else None
+
+    try:
+        await litellm_client.update_key(
+            key_id=key.litellm_key_id,
+            models=key.models if models_changed else None,
+            max_budget=effective_budget,
+            model_max_budget=key.model_budgets if model_budgets_changed else None,
+        )
+    except litellm_client.LiteLLMError:
+        logger.warning("litellm update key failed for ai_key %s", key.id)
 
 
 async def toggle_key(session: AsyncSession, key_id: int) -> dict:
@@ -258,10 +345,19 @@ async def batch_create_keys(
     created_by: int,
     description: str = "",
     models: list[str] | None = None,
+    mcps: list[int] | None = None,
+    skills: list[int] | None = None,
+    agents: list[int] | None = None,
     budget_limit: Decimal | None = None,
     budget_hard_limit: bool = False,
     budget_duration: str | None = "30d",
+    budget_scope: str = "unified",
+    budget_models_total: Decimal | None = None,
+    budget_mcps_total: Decimal | None = None,
+    budget_models_per: str = "unified",
+    budget_mcps_per: str = "unified",
     model_budgets: dict[str, float] | None = None,
+    mcp_budgets: dict[str, float] | None = None,
     scenario_id: int | None = None,
     rate_limits: list[dict] | None = None,
 ) -> list[dict]:
@@ -294,10 +390,19 @@ async def batch_create_keys(
                 created_by=created_by,
                 description=description,
                 models=models,
+                mcps=mcps,
+                skills=skills,
+                agents=agents,
                 budget_limit=budget_limit,
                 budget_hard_limit=budget_hard_limit,
                 budget_duration=budget_duration,
+                budget_scope=budget_scope,
+                budget_models_total=budget_models_total,
+                budget_mcps_total=budget_mcps_total,
+                budget_models_per=budget_models_per,
+                budget_mcps_per=budget_mcps_per,
                 model_budgets=model_budgets,
+                mcp_budgets=mcp_budgets,
                 scenario_id=scenario_id,
                 rate_limits=rate_limits,
             )
@@ -623,10 +728,19 @@ def _serialize_key(key: AiKey) -> dict:
         "litellm_key_id": key.litellm_key_id,
         "litellm_key_alias": key.litellm_key_alias,
         "models": key.models,
+        "mcps": key.mcps or [],
+        "skills": key.skills or [],
+        "agents": key.agents or [],
         "budget_limit": str(key.budget_limit) if key.budget_limit else None,
         "budget_hard_limit": key.budget_hard_limit,
         "budget_duration": key.budget_duration,
+        "budget_scope": key.budget_scope,
+        "budget_models_total": str(key.budget_models_total) if key.budget_models_total else None,
+        "budget_mcps_total": str(key.budget_mcps_total) if key.budget_mcps_total else None,
+        "budget_models_per": key.budget_models_per,
+        "budget_mcps_per": key.budget_mcps_per,
         "model_budgets": key.model_budgets or {},
+        "mcp_budgets": key.mcp_budgets or {},
         "scenario_id": key.scenario_id,
         "is_active": key.is_active,
         "created_by": key.created_by,

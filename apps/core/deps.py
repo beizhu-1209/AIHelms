@@ -1,13 +1,19 @@
+import asyncio
+import logging
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.api_key_utils import hash_api_key, looks_like_api_key
 from core.config import settings
 from core.database import async_session
 from core.security import ALGORITHM
-from exceptions import ForbiddenError
+from repositories import api_key_repo
+
+logger = logging.getLogger(__name__)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -20,6 +26,17 @@ async def get_current_user(request: Request) -> dict:
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未提供认证 token")
     token = auth_header.split(" ", 1)[1]
+
+    if looks_like_api_key(token):
+        identity = await _authenticate_api_key(token)
+    else:
+        identity = _authenticate_jwt(token)
+
+    request.state.current_user = identity
+    return identity
+
+
+def _authenticate_jwt(token: str) -> dict:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
     except JWTError:
@@ -30,9 +47,39 @@ async def get_current_user(request: Request) -> dict:
     return {
         "id": int(user_id),
         "username": payload.get("username", ""),
+        "identity_type": "user",
         "is_admin": payload.get("is_admin", False),
         "permissions": payload.get("permissions", []),
     }
+
+
+async def _authenticate_api_key(token: str) -> dict:
+    key_hash = hash_api_key(token)
+    async with async_session() as session:
+        api_key = await api_key_repo.find_by_hash(session, key_hash)
+    if not api_key or not api_key.is_active:
+        raise HTTPException(status_code=401, detail="API Key 无效或已禁用")
+    if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="API Key 已过期")
+
+    # 异步更新 last_used_at，不阻塞请求
+    asyncio.create_task(_update_last_used(api_key.id))
+
+    return {
+        "id": api_key.id,
+        "username": api_key.name,
+        "identity_type": "api_key",
+        "is_admin": True,
+        "permissions": [],
+    }
+
+
+async def _update_last_used(key_id: int) -> None:
+    try:
+        async with async_session() as session:
+            await api_key_repo.touch_last_used(session, key_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("update api key last_used failed", exc_info=True)
 
 
 def require_permission(permission_code: str):

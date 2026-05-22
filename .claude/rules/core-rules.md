@@ -6,6 +6,7 @@
 
 - After completing work, always update the corresponding module progress in `dev/roadmap/`
 - `dev/roadmap/` is not committed to git, local progress tracking only
+- 遇到无法在技术层面独立解决的产品设计大问题（如归因逻辑不明确、跨系统数据依赖、维度定义争议等），记录到 `dev/roadmap/README.md` 的「遗留产品设计大问题」章节，不要自行假设答案
 
 ## Resource
 

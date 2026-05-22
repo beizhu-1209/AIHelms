@@ -23,4 +23,7 @@ PIDS+=($!)
 celery -A celery_app worker --loglevel=info &
 PIDS+=($!)
 
+celery -A celery_app beat --loglevel=info &
+PIDS+=($!)
+
 wait

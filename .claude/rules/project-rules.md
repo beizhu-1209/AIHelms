@@ -32,6 +32,29 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 - 错误响应：message 描述具体原因，帮助用户理解问题
 - 禁止返回系统级错误信息（堆栈、SQL 错误等），统一为用户可理解的描述
 
+### Router summary 规则（强制）
+
+所有写操作（POST / PUT / DELETE / PATCH）的 router 装饰器**必须**写 `summary="动词+资源"` 中文描述。
+
+```python
+# ✅ Good
+@router.post("", summary="创建用户")
+@router.put("/{user_id}", summary="更新用户")
+@router.delete("/{user_id}", summary="删除用户")
+@router.put("/{key_id}/toggle", summary="切换 Key 启用状态")
+
+# ❌ Bad — 没有 summary，审计日志会显示 "POST /users" 原始路径
+@router.post("")
+```
+
+原因：
+
+1. **管理员日志**（安全模块）使用 `summary` 作为 action 字段固化到 DB，对运维和审计至关重要
+2. 同步用于 OpenAPI 文档（`/api/docs`）展示
+3. 不强制要求 GET 接口写 summary（GET 不进审计日志）
+
+文案规范：动词在前，资源在后；如「创建用户」「更新模型」「删除 MCP Server」「审批资源申请」「批量创建 AI 身份 Key」。新增写接口时无论开发哪个模块，都要遵守。
+
 ## Backend (apps/)
 
 **Architecture**: Router(api/) → Service(services/) → Repository(repositories/) → Database. Router has no business logic. Service handles business logic, never returns HTTP response. Repository handles all database operations via SQLAlchemy.

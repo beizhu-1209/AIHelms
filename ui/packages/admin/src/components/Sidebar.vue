@@ -28,6 +28,8 @@ import {
   Lock,
   FlaskConical,
   LayoutDashboard,
+  ClipboardCheck,
+  UserCircle2,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -55,18 +57,26 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     ],
   },
   {
+    title: '资源审计',
+    icon: ClipboardCheck,
+    items: [
+      { label: '审批管理', icon: ClipboardCheck, path: '/resource-approval', permission: 'resource_application:read' },
+      { label: '日志管理', icon: FileText, path: '/logs', permission: 'usage_log:read' },
+    ],
+  },
+  {
     title: '智能体中心',
     icon: Bot,
     items: [
-      { label: '智能体列表', icon: Brain, path: '/agents', disabled: true },
+      { label: '智能体列表', icon: Brain, path: '/agents', permission: 'agent:read' },
     ],
   },
   {
     title: 'AI市场',
     icon: Store,
     items: [
-      { label: 'Skill管理', icon: Zap, path: '/skills', disabled: true },
-      { label: 'MCP管理', icon: Plug, path: '/mcp', disabled: true },
+      { label: 'Skill管理', icon: Zap, path: '/skills', permission: 'skill:read' },
+      { label: 'MCP管理', icon: Plug, path: '/mcp', permission: 'mcp:read' },
     ],
   },
   {
@@ -78,20 +88,25 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     ],
   },
   {
-    title: '数据中心',
-    icon: BarChart3,
+    title: 'AI效能',
+    icon: Wallet,
     items: [
-      { label: '成本中心', icon: Wallet, path: '/cost', disabled: true },
-      { label: '日志管理', icon: FileText, path: '/logs', disabled: true },
+      { label: 'AI总览', icon: LayoutDashboard, path: '/efficiency', permission: 'efficiency:read' },
+      { label: '多维度分析', icon: BarChart3, path: '/efficiency/analysis', permission: 'efficiency:read' },
+      { label: '智能体经营', icon: Bot, path: '/efficiency/agents', permission: 'efficiency:read' },
+      { label: '模型偏好', icon: Cpu, path: '/efficiency/models', permission: 'efficiency:read' },
+      { label: '预算管控', icon: Wallet, path: '/efficiency/budget', permission: 'efficiency:read' },
+      { label: '分析报告', icon: FileText, path: '/efficiency/reports', permission: 'efficiency:read' },
+      { label: 'AI能力评估', icon: Brain, path: '/efficiency/capability', disabled: true },
     ],
   },
   {
     title: '安全',
     icon: Lock,
     items: [
-      { label: '管理员日志', icon: Shield, path: '/audit', disabled: true },
+      { label: '管理员日志', icon: Shield, path: '/audit', permission: 'audit_log:read' },
       { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
-      { label: 'API Key', icon: KeyRound, path: '/api-keys', disabled: true },
+      { label: 'API Key', icon: KeyRound, path: '/api-keys', permission: 'api_key:read' },
     ],
   },
   {
@@ -105,7 +120,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
   },
 ])
 
-const expandedGroups = ref<Set<string>>(new Set(['AI身份', '智能体中心', 'AI市场', '模型纳管', '数据中心', '安全', 'AI实验室']))
+const expandedGroups = ref<Set<string>>(new Set(['AI身份', '资源审计', '智能体中心', 'AI市场', '模型纳管', 'AI效能', '安全', 'AI实验室']))
 
 function toggleGroup(title: string): void {
   if (expandedGroups.value.has(title)) {
@@ -117,7 +132,16 @@ function toggleGroup(title: string): void {
 
 function isActive(path: string | undefined): boolean {
   if (!path) return false
-  return route.path === path || route.path.startsWith(path + '/')
+  // 精确匹配优先：如果有其他菜单项的 path 是当前 path 的更长前缀，则当前项不应高亮
+  if (route.path === path) return true
+  // 子路径匹配：仅当不存在更精确的菜单项时
+  if (!route.path.startsWith(path + '/')) return false
+  // 查找是否存在更精确（更长）的菜单 path 匹配当前路由
+  const allPaths = menuGroups.value.flatMap((g) => g.items.map((i) => i.path).filter(Boolean) as string[])
+  const moreSpecific = allPaths.some(
+    (p) => p !== path && p.startsWith(path + '/') && (route.path === p || route.path.startsWith(p + '/')),
+  )
+  return !moreSpecific
 }
 
 function isVisible(item: MenuItem): boolean {
@@ -196,6 +220,14 @@ function isVisible(item: MenuItem): boolean {
     </nav>
 
     <div class="shrink-0 border-t border-slate-200/60 p-2">
+      <a
+        href="/web/"
+        class="mb-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+        title="切换到用户端"
+      >
+        <UserCircle2 class="h-4 w-4 text-slate-400" />
+        切换到用户端
+      </a>
       <div class="flex items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-slate-100">
         <div class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-xs font-medium text-white">
           {{ currentUser?.username?.charAt(0)?.toUpperCase() }}

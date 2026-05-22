@@ -1,4 +1,4 @@
-import type { TestAccessParams, TestAccessResult } from '../types/accessTest'
+import type { TestAccessParams, TestAccessResult, TestEmbeddingParams, TestEmbeddingResult, TestRerankParams, TestRerankResult } from '../types/accessTest'
 import type { ApiResponse } from './request'
 
 function getToken(): string | null {
@@ -34,5 +34,39 @@ export async function testModelAccessSync(params: TestAccessParams): Promise<Tes
     body: JSON.stringify({ ...params, stream: false }),
   })
   const json: ApiResponse<TestAccessResult> = await response.json()
+  return json.data
+}
+
+export async function testEmbedding(params: TestEmbeddingParams): Promise<TestEmbeddingResult> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const token = getToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  const response = await fetch('/api/v1/access-test/test-embedding', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+  const json: ApiResponse<TestEmbeddingResult> = await response.json()
+  return json.data
+}
+
+export async function testRerank(params: TestRerankParams): Promise<TestRerankResult> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const token = getToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  const response = await fetch('/api/v1/access-test/test-rerank', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+  const json: ApiResponse<TestRerankResult> = await response.json()
   return json.data
 }

@@ -1,12 +1,12 @@
 import logging
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import async_session
-from core.security import verify_password, get_password_hash, create_access_token
+from core.security import create_access_token, get_password_hash, verify_password
 from exceptions import NotFoundError, UnauthorizedError
-from models.db import User, Role, UserRole, RolePermission, Permission
+from models.db import Permission, Role, RolePermission, User, UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ async def authenticate(session: AsyncSession, username: str, password: str) -> U
     return user
 
 
-async def login(session: AsyncSession, username: str, password: str) -> str:
+async def login(session: AsyncSession, username: str, password: str) -> tuple[str, User]:
     user = await authenticate(session, username, password)
     permissions = await get_user_permissions(session, user.id)
     token_data = {
@@ -32,7 +32,7 @@ async def login(session: AsyncSession, username: str, password: str) -> str:
         "is_admin": user.is_admin,
         "permissions": permissions,
     }
-    return create_access_token(token_data)
+    return create_access_token(token_data), user
 
 
 async def get_user_permissions(session: AsyncSession, user_id: int) -> list[str]:
@@ -52,17 +52,24 @@ async def get_current_user_info(session: AsyncSession, user_id: int) -> dict:
     if not user:
         raise NotFoundError("user", user_id)
     permissions = await get_user_permissions(session, user_id)
+    departments = [
+        {"id": ud.department.id, "name": ud.department.name}
+        for ud in user.departments if ud.department
+    ]
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "phone": user.phone,
         "display_name": user.display_name,
+        "avatar": user.avatar,
+        "position": user.position,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "permissions": permissions,
         "roles": [{"id": ur.role.id, "name": ur.role.name, "display_name": ur.role.display_name} for ur in user.roles],
+        "departments": departments,
     }
 
 

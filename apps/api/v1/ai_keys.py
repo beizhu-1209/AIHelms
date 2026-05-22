@@ -23,10 +23,19 @@ class CreateKeyRequest(BaseModel):
     description: str = Field("", max_length=500)
     tags: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
+    mcps: list[int] = Field(default_factory=list)
+    skills: list[int] = Field(default_factory=list)
+    agents: list[int] = Field(default_factory=list)
     budget_limit: Decimal | None = None
     budget_hard_limit: bool = False
     budget_duration: str | None = Field("30d", pattern=r"^(1d|7d|30d)$")
+    budget_scope: str = Field("unified", pattern=r"^(unified|per_type|per_resource)$")
+    budget_models_total: Decimal | None = None
+    budget_mcps_total: Decimal | None = None
+    budget_models_per: str = Field("unified", pattern=r"^(unified|each)$")
+    budget_mcps_per: str = Field("unified", pattern=r"^(unified|each)$")
     model_budgets: dict[str, float] | None = None
+    mcp_budgets: dict[str, float] | None = None
     scenario_id: int | None = None
     duration: str | None = None
     rate_limits: list[dict] | None = None
@@ -37,10 +46,19 @@ class UpdateKeyRequest(BaseModel):
     description: str | None = Field(None, max_length=500)
     tags: list[str] | None = None
     models: list[str] | None = None
+    mcps: list[int] | None = None
+    skills: list[int] | None = None
+    agents: list[int] | None = None
     budget_limit: Decimal | None = None
     budget_hard_limit: bool | None = None
     budget_duration: str | None = Field(None, pattern=r"^(1d|7d|30d)$")
+    budget_scope: str | None = Field(None, pattern=r"^(unified|per_type|per_resource)$")
+    budget_models_total: Decimal | None = None
+    budget_mcps_total: Decimal | None = None
+    budget_models_per: str | None = Field(None, pattern=r"^(unified|each)$")
+    budget_mcps_per: str | None = Field(None, pattern=r"^(unified|each)$")
     model_budgets: dict[str, float] | None = None
+    mcp_budgets: dict[str, float] | None = None
     scenario_id: int | None = None
     rate_limits: list[dict] | None = None
 
@@ -59,10 +77,19 @@ class BatchCreateRequest(BaseModel):
     name_template: str = Field(..., min_length=1, max_length=128)
     description: str = Field("", max_length=500)
     models: list[str] = Field(default_factory=list)
+    mcps: list[int] = Field(default_factory=list)
+    skills: list[int] = Field(default_factory=list)
+    agents: list[int] = Field(default_factory=list)
     budget_limit: Decimal | None = None
     budget_hard_limit: bool = False
     budget_duration: str | None = Field("30d", pattern=r"^(1d|7d|30d)$")
+    budget_scope: str = Field("unified", pattern=r"^(unified|per_type|per_resource)$")
+    budget_models_total: Decimal | None = None
+    budget_mcps_total: Decimal | None = None
+    budget_models_per: str = Field("unified", pattern=r"^(unified|each)$")
+    budget_mcps_per: str = Field("unified", pattern=r"^(unified|each)$")
     model_budgets: dict[str, float] | None = None
+    mcp_budgets: dict[str, float] | None = None
     scenario_id: int | None = None
     rate_limits: list[dict] | None = None
 
@@ -93,7 +120,7 @@ async def list_keys(
     return {"code": 200, "message": "ok", "data": result}
 
 
-@router.post("")
+@router.post("", summary="创建 AI 身份 Key")
 async def create_key(
     req: CreateKeyRequest,
     session: AsyncSession = Depends(get_db),
@@ -110,10 +137,19 @@ async def create_key(
             description=req.description,
             tags=req.tags,
             models=req.models,
+            mcps=req.mcps,
+            skills=req.skills,
+            agents=req.agents,
             budget_limit=req.budget_limit,
             budget_hard_limit=req.budget_hard_limit,
             budget_duration=req.budget_duration,
+            budget_scope=req.budget_scope,
+            budget_models_total=req.budget_models_total,
+            budget_mcps_total=req.budget_mcps_total,
+            budget_models_per=req.budget_models_per,
+            budget_mcps_per=req.budget_mcps_per,
             model_budgets=req.model_budgets,
+            mcp_budgets=req.mcp_budgets,
             scenario_id=req.scenario_id,
             duration=req.duration,
             rate_limits=req.rate_limits,
@@ -125,7 +161,7 @@ async def create_key(
     return {"code": 200, "message": "AI Key 创建成功", "data": key}
 
 
-@router.post("/batch")
+@router.post("/batch", summary="批量创建 AI 身份 Key")
 async def batch_create_keys(
     req: BatchCreateRequest,
     session: AsyncSession = Depends(get_db),
@@ -141,10 +177,19 @@ async def batch_create_keys(
             created_by=current_user["id"],
             description=req.description,
             models=req.models,
+            mcps=req.mcps,
+            skills=req.skills,
+            agents=req.agents,
             budget_limit=req.budget_limit,
             budget_hard_limit=req.budget_hard_limit,
             budget_duration=req.budget_duration,
+            budget_scope=req.budget_scope,
+            budget_models_total=req.budget_models_total,
+            budget_mcps_total=req.budget_mcps_total,
+            budget_models_per=req.budget_models_per,
+            budget_mcps_per=req.budget_mcps_per,
             model_budgets=req.model_budgets,
+            mcp_budgets=req.mcp_budgets,
             scenario_id=req.scenario_id,
             rate_limits=req.rate_limits,
         )
@@ -196,7 +241,7 @@ async def get_model_limits(
     return {"code": 200, "message": "ok", "data": limits}
 
 
-@router.put("/{key_id}/model-limits")
+@router.put("/{key_id}/model-limits", summary="更新 Key 模型限制")
 async def set_model_limits(
     key_id: int,
     req: SetModelLimitsRequest,
@@ -214,7 +259,7 @@ async def set_model_limits(
     return {"code": 200, "message": "模型限制更新成功", "data": limits}
 
 
-@router.delete("/{key_id}/model-limits/{model_id}")
+@router.delete("/{key_id}/model-limits/{model_id}", summary="删除 Key 模型限制")
 async def delete_model_limit(
     key_id: int,
     model_id: int,
@@ -241,7 +286,7 @@ async def get_key(
     return {"code": 200, "message": "ok", "data": key}
 
 
-@router.put("/{key_id}")
+@router.put("/{key_id}", summary="更新 AI 身份 Key")
 async def update_key(
     key_id: int,
     req: UpdateKeyRequest,
@@ -255,10 +300,19 @@ async def update_key(
             description=req.description,
             tags=req.tags,
             models=req.models,
+            mcps=req.mcps,
+            skills=req.skills,
+            agents=req.agents,
             budget_limit=req.budget_limit,
             budget_hard_limit=req.budget_hard_limit,
             budget_duration=req.budget_duration,
+            budget_scope=req.budget_scope,
+            budget_models_total=req.budget_models_total,
+            budget_mcps_total=req.budget_mcps_total,
+            budget_models_per=req.budget_models_per,
+            budget_mcps_per=req.budget_mcps_per,
             model_budgets=req.model_budgets,
+            mcp_budgets=req.mcp_budgets,
             scenario_id=req.scenario_id,
             rate_limits=req.rate_limits,
         )
@@ -267,7 +321,7 @@ async def update_key(
     return {"code": 200, "message": "AI Key 更新成功", "data": key}
 
 
-@router.put("/{key_id}/toggle")
+@router.put("/{key_id}/toggle", summary="切换 Key 启用状态")
 async def toggle_key(
     key_id: int,
     session: AsyncSession = Depends(get_db),
@@ -280,7 +334,7 @@ async def toggle_key(
     return {"code": 200, "message": "状态切换成功", "data": key}
 
 
-@router.delete("/{key_id}")
+@router.delete("/{key_id}", summary="删除 AI 身份 Key")
 async def delete_key(
     key_id: int,
     session: AsyncSession = Depends(get_db),
@@ -307,7 +361,7 @@ async def get_available_models(
     return {"code": 200, "message": "ok", "data": model_names}
 
 
-@router.put("/batch")
+@router.put("/batch", summary="批量更新 AI 身份 Key")
 async def batch_update_keys(
     req: BatchUpdateRequest,
     session: AsyncSession = Depends(get_db),

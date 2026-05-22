@@ -8,6 +8,7 @@ class CreateUserRequest(BaseModel):
     phone: str = Field("", max_length=20)
     display_name: str = Field("", max_length=100)
     position: str = Field("", max_length=100)
+    avatar: str = Field("", max_length=500)
     is_active: bool = True
 
     @field_validator("email")
@@ -23,6 +24,7 @@ class UpdateUserRequest(BaseModel):
     phone: str | None = Field(None, max_length=20)
     display_name: str | None = Field(None, max_length=100)
     position: str | None = Field(None, max_length=100)
+    avatar: str | None = Field(None, max_length=500)
     is_active: bool | None = None
 
     @field_validator("email")

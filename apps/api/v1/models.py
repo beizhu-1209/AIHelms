@@ -69,6 +69,13 @@ class UpdateRouterSettingsRequest(BaseModel):
     config: dict | None = None
 
 
+class UpdateModelPublishRequest(BaseModel):
+    is_published: bool | None = None
+    visibility_type: str | None = Field(None, pattern=r"^(all|selected)$")
+    department_ids: list[int] | None = None
+    requires_approval: bool | None = None
+
+
 # --- Models ---
 
 
@@ -93,7 +100,7 @@ async def get_active_models(
     return {"code": 200, "message": "ok", "data": models}
 
 
-@router.post("")
+@router.post("", summary="创建模型")
 async def create_model(
     req: CreateModelRequest,
     session: AsyncSession = Depends(get_db),
@@ -126,7 +133,7 @@ async def get_model(
     return {"code": 200, "message": "ok", "data": model}
 
 
-@router.put("/{model_id}")
+@router.put("/{model_id}", summary="更新模型")
 async def update_model(
     model_id: int,
     req: UpdateModelRequest,
@@ -147,7 +154,7 @@ async def update_model(
     return {"code": 200, "message": "模型更新成功", "data": model}
 
 
-@router.delete("/{model_id}")
+@router.delete("/{model_id}", summary="删除模型")
 async def delete_model(
     model_id: int,
     session: AsyncSession = Depends(get_db),
@@ -160,10 +167,46 @@ async def delete_model(
     return {"code": 200, "message": "模型删除成功", "data": None}
 
 
+# --- Publish / Visibility ---
+
+
+@router.get("/{model_id}/visibility")
+async def get_model_visibility(
+    model_id: int,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:read")),
+):
+    try:
+        result = await model_service.get_model_visibility(session, model_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    return {"code": 200, "message": "ok", "data": result}
+
+
+@router.put("/{model_id}/publish", summary="更新模型发布状态")
+async def update_model_publish(
+    model_id: int,
+    req: UpdateModelPublishRequest,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:update")),
+):
+    try:
+        result = await model_service.update_model_publish(
+            session, model_id,
+            is_published=req.is_published,
+            visibility_type=req.visibility_type,
+            department_ids=req.department_ids,
+            requires_approval=req.requires_approval,
+        )
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    return {"code": 200, "message": "发布设置更新成功", "data": result}
+
+
 # --- Deployments ---
 
 
-@router.post("/{model_id}/deployments")
+@router.post("/{model_id}/deployments", summary="创建模型部署")
 async def create_deployment(
     model_id: int,
     req: CreateDeploymentRequest,
@@ -188,7 +231,7 @@ async def create_deployment(
     return {"code": 200, "message": "渠道创建成功", "data": deployment}
 
 
-@router.put("/{model_id}/deployments/{deployment_id}")
+@router.put("/{model_id}/deployments/{deployment_id}", summary="更新模型部署")
 async def update_deployment(
     model_id: int,
     deployment_id: int,
@@ -213,7 +256,7 @@ async def update_deployment(
     return {"code": 200, "message": "渠道更新成功", "data": deployment}
 
 
-@router.delete("/{model_id}/deployments/{deployment_id}")
+@router.delete("/{model_id}/deployments/{deployment_id}", summary="删除模型部署")
 async def delete_deployment(
     model_id: int,
     deployment_id: int,
@@ -239,7 +282,7 @@ async def list_access_groups(
     return {"code": 200, "message": "ok", "data": groups}
 
 
-@router.post("/access-groups")
+@router.post("/access-groups", summary="创建模型访问组")
 async def create_access_group(
     req: CreateAccessGroupRequest,
     session: AsyncSession = Depends(get_db),
@@ -257,7 +300,7 @@ async def create_access_group(
     return {"code": 200, "message": "访问组创建成功", "data": group}
 
 
-@router.put("/access-groups/{group_id}")
+@router.put("/access-groups/{group_id}", summary="更新模型访问组")
 async def update_access_group(
     group_id: int,
     req: UpdateAccessGroupRequest,
@@ -277,7 +320,7 @@ async def update_access_group(
     return {"code": 200, "message": "访问组更新成功", "data": group}
 
 
-@router.delete("/access-groups/{group_id}")
+@router.delete("/access-groups/{group_id}", summary="删除模型访问组")
 async def delete_access_group(
     group_id: int,
     session: AsyncSession = Depends(get_db),
@@ -302,7 +345,7 @@ async def get_router_settings(
     return {"code": 200, "message": "ok", "data": settings}
 
 
-@router.put("/router-settings/current")
+@router.put("/router-settings/current", summary="更新路由配置")
 async def update_router_settings(
     req: UpdateRouterSettingsRequest,
     session: AsyncSession = Depends(get_db),

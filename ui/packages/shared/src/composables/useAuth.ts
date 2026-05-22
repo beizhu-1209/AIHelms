@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { login as apiLogin, getMe } from '../api/auth'
 import type { CurrentUser } from '../types/auth'
+import { getLoginUrl } from '../utils/auth-redirect'
 
 const TOKEN_KEY = 'aihelms_token'
 const currentUser = ref<CurrentUser | null>(null)
@@ -18,7 +19,7 @@ export function useAuth() {
     localStorage.removeItem(TOKEN_KEY)
     isAuthenticated.value = false
     currentUser.value = null
-    window.location.href = '/admin/login'
+    window.location.href = getLoginUrl()
   }
 
   async function fetchCurrentUser(): Promise<CurrentUser | null> {

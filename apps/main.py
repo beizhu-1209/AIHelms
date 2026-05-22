@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.v1.router import router as api_v1_router
+from core.audit import AuditLogMiddleware
 from core.config import settings
 from core.database import close_engine
 from core.exception_handlers import register_exception_handlers
@@ -29,6 +30,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(AuditLogMiddleware)
 register_exception_handlers(app)
 app.include_router(api_v1_router, prefix="/api/v1")
 

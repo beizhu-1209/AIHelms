@@ -18,6 +18,8 @@ import {
   deleteAccessGroup,
   getRouterSettings,
   updateRouterSettings,
+  getModelVisibility,
+  updateModelPublish,
   type ModelInfo,
   type Deployment,
   type Provider,
@@ -26,8 +28,10 @@ import {
   type AccessGroup,
   type RouterSettings,
   type UpdateRouterSettingsParams,
+  type ModelVisibility,
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
+import { getDepartmentTree, type DeptTreeNode } from '@aihelms/shared'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import AccessTestDialog from '../../components/AccessTestDialog.vue'
 import ProviderIcon from '../../components/ProviderIcon.vue'
@@ -53,6 +57,15 @@ const errorMessage = ref('')
 const showTestDialog = ref(false)
 const testDefaultModel = ref('')
 const testAvailableModels = ref<string[]>([])
+
+// Publish / Visibility
+const showPublishDialog = ref(false)
+const publishLoading = ref(false)
+const publishIsPublished = ref(false)
+const publishVisibilityType = ref('all')
+const publishDepartmentIds = ref<number[]>([])
+const departmentTree = ref<DeptTreeNode[]>([])
+const flatDepartments = ref<{ id: number; name: string; path: string }[]>([])
 
 // Left nav: group filter
 const selectedGroupId = ref<number | null>(null)
@@ -129,22 +142,37 @@ const deployUseInPassThrough = ref(false)
 const deployDropParams = ref(false)
 
 const categories = [
-  { value: 'chat', label: '对话' },
-  { value: 'embedding', label: '向量' },
-  { value: 'image', label: '图像' },
-  { value: 'audio', label: '音频' },
+  { value: 'chat', label: '对话', enabled: true },
+  { value: 'embedding', label: '向量', enabled: true },
+  { value: 'rerank', label: '重排', enabled: true },
+  { value: 'image', label: '文生图', enabled: false },
+  { value: 'video', label: '文生视频', enabled: false },
+  { value: 'audio', label: '语音识别', enabled: false },
+  { value: 'tts', label: '语音合成', enabled: false },
+  { value: 'completion', label: '补全', enabled: false },
 ]
 
-const modelTags = [
-  { value: '图像', label: '图像' },
-  { value: '文件', label: '文件' },
-  { value: '视频', label: '视频' },
-  { value: '音频', label: '音频' },
-  { value: '联网', label: '联网' },
-  { value: '推理', label: '推理' },
-  { value: '向量', label: '向量' },
-  { value: '重排', label: '重排' },
-]
+// 能力标签按分类联动
+const categoryTags: Record<string, { value: string; label: string }[]> = {
+  chat: [
+    { value: '图像', label: '图像' },
+    { value: '推理', label: '推理' },
+    { value: '工具调用', label: '工具调用' },
+  ],
+  embedding: [
+    { value: '多语言', label: '多语言' },
+    { value: '代码', label: '代码' },
+    { value: '长文本', label: '长文本' },
+  ],
+  rerank: [
+    { value: '多语言', label: '多语言' },
+    { value: '多模态', label: '多模态' },
+  ],
+}
+
+const modelTags = computed(() => {
+  return categoryTags[formCategory.value] || []
+})
 
 const formFilteredCredentials = computed(() => {
   if (!formProviderId.value) return []
@@ -171,6 +199,38 @@ function getCredentialProviderType(credId: number | null): string {
   return cred?.provider_type || (cred?.credential_info?.custom_llm_provider as string) || ''
 }
 
+function getProviderPrefixMap(credId: number | null): Record<string, string | null> | null {
+  if (!credId) return null
+  const cred = credentials.value.find(c => c.id === credId)
+  if (!cred) return null
+  const provider = providers.value.find(p => p.id === cred.provider_id)
+  if (!provider) return null
+  // 优先从供应商 config 中读取，fallback 到默认映射
+  const configMap = provider.config?.litellm_prefix_map as Record<string, string | null> | undefined
+  if (configMap) return configMap
+  return FALLBACK_PREFIX_MAP[provider.provider_type] || null
+}
+
+// 默认前缀映射 fallback（供应商未配置 litellm_prefix_map 时使用）
+const FALLBACK_PREFIX_MAP: Record<string, Record<string, string | null>> = {
+  openai: { chat: 'openai', embedding: 'openai', rerank: null },
+  anthropic: { chat: 'anthropic', embedding: null, rerank: null },
+  azure: { chat: 'azure', embedding: 'azure', rerank: null },
+  google: { chat: 'gemini', embedding: 'gemini', rerank: null },
+  deepseek: { chat: 'deepseek', embedding: null, rerank: null },
+  bedrock: { chat: 'bedrock', embedding: 'bedrock', rerank: null },
+  vertex_ai: { chat: 'vertex_ai', embedding: 'vertex_ai', rerank: null },
+  volcengine: { chat: 'openai', embedding: 'openai', rerank: null },
+  dashscope: { chat: 'openai', embedding: 'openai', rerank: null },
+  zhipu: { chat: 'openai', embedding: 'openai', rerank: null },
+  moonshot: { chat: 'openai', embedding: null, rerank: null },
+  minimax: { chat: 'openai', embedding: null, rerank: null },
+  vllm: { chat: 'openai', embedding: 'openai', rerank: 'hosted_vllm' },
+  sglang: { chat: 'openai', embedding: 'openai', rerank: null },
+  ollama: { chat: 'ollama', embedding: 'ollama', rerank: null },
+  lmstudio: { chat: 'openai', embedding: 'openai', rerank: null },
+}
+
 function getModelProviderType(model: ModelInfo): string {
   const id = model.model_id || ''
   if (id.includes('/')) return id.split('/')[0]
@@ -191,15 +251,25 @@ function getModelProviderType(model: ModelInfo): string {
 const categoryLabels: Record<string, string> = {
   chat: '对话',
   embedding: '向量',
-  image: '图像',
-  audio: '语音',
   rerank: '重排',
+  image: '文生图',
+  video: '文生视频',
+  audio: '语音识别',
+  tts: '语音合成',
   completion: '补全',
 }
 
-function buildLitellmModelId(credId: number | null, modelName: string): string {
+function buildLitellmModelId(credId: number | null, modelName: string, category?: string): string {
+  if (!modelName) return modelName
+  const prefixMap = getProviderPrefixMap(credId)
+  if (prefixMap && category) {
+    const prefix = prefixMap[category]
+    if (prefix === null) return modelName
+    if (prefix) return `${prefix}/${modelName}`
+  }
+  // fallback: 用凭证的 provider_type
   const providerType = getCredentialProviderType(credId)
-  if (!providerType || !modelName) return modelName
+  if (!providerType) return modelName
   return `${providerType}/${modelName}`
 }
 
@@ -304,7 +374,7 @@ async function handleSubmitModel(): Promise<void> {
       })
       // Auto-create deployment if credential selected
       if (formCredentialId.value && formDeployModelName.value) {
-        const litellmModel = buildLitellmModelId(formCredentialId.value, formDeployModelName.value)
+        const litellmModel = buildLitellmModelId(formCredentialId.value, formDeployModelName.value, formCategory.value)
         const litellmParams: Record<string, unknown> = { model: litellmModel }
         const cred = credentials.value.find(c => c.id === formCredentialId.value)
         if (cred) litellmParams.litellm_credential_name = cred.credential_name
@@ -365,7 +435,8 @@ function resetDeployForm(): void {
 }
 
 function handleTestDeployment(d: Deployment): void {
-  testDefaultModel.value = selectedModel.value?.model_id || ''
+  const params = (d.litellm_params || {}) as Record<string, unknown>
+  testDefaultModel.value = (params.model as string) || selectedModel.value?.model_id || ''
   testAvailableModels.value = []
   showTestDialog.value = true
 }
@@ -418,7 +489,7 @@ function handleEditDeployment(d: Deployment): void {
 }
 
 function buildLitellmParams(): Record<string, unknown> {
-  const litellmModel = buildLitellmModelId(deployCredentialId.value, deployModelName.value)
+  const litellmModel = buildLitellmModelId(deployCredentialId.value, deployModelName.value, selectedModel.value?.category)
   const litellmParams: Record<string, unknown> = { model: litellmModel }
   // 从凭证获取 credential_name 注入
   if (deployCredentialId.value) {
@@ -643,6 +714,86 @@ function handleRemoveFallback(index: number): void {
   routerSettings.value.fallbacks = routerSettings.value.fallbacks.filter((_, i) => i !== index)
 }
 
+// --- Publish methods ---
+
+function flattenDeptTree(nodes: DeptTreeNode[], path: string = ''): { id: number; name: string; path: string }[] {
+  const result: { id: number; name: string; path: string }[] = []
+  for (const node of nodes) {
+    const fullPath = path ? `${path} / ${node.name}` : node.name
+    result.push({ id: node.id, name: node.name, path: fullPath })
+    if (node.children && node.children.length > 0) {
+      result.push(...flattenDeptTree(node.children, fullPath))
+    }
+  }
+  return result
+}
+
+async function fetchDepartmentTree(): Promise<void> {
+  try {
+    departmentTree.value = await getDepartmentTree()
+    flatDepartments.value = flattenDeptTree(departmentTree.value)
+  } catch {
+    departmentTree.value = []
+    flatDepartments.value = []
+  }
+}
+
+async function handleOpenPublish(): Promise<void> {
+  if (!selectedModel.value) return
+  publishLoading.value = true
+  try {
+    const vis = await getModelVisibility(selectedModel.value.id)
+    publishIsPublished.value = vis.is_published
+    publishVisibilityType.value = vis.visibility_type
+    publishDepartmentIds.value = [...vis.department_ids]
+    if (flatDepartments.value.length === 0) {
+      await fetchDepartmentTree()
+    }
+    showPublishDialog.value = true
+  } finally {
+    publishLoading.value = false
+  }
+}
+
+function togglePublishDept(deptId: number): void {
+  const idx = publishDepartmentIds.value.indexOf(deptId)
+  if (idx >= 0) {
+    publishDepartmentIds.value.splice(idx, 1)
+  } else {
+    publishDepartmentIds.value.push(deptId)
+  }
+}
+
+async function handleSavePublish(): Promise<void> {
+  if (!selectedModel.value) return
+  publishLoading.value = true
+  try {
+    await updateModelPublish(selectedModel.value.id, {
+      is_published: publishIsPublished.value,
+      visibility_type: publishVisibilityType.value,
+      department_ids: publishVisibilityType.value === 'selected' ? publishDepartmentIds.value : undefined,
+    })
+    showPublishDialog.value = false
+    await fetchModelDetail(selectedModel.value.id)
+    await fetchModels()
+  } finally {
+    publishLoading.value = false
+  }
+}
+
+async function handleQuickPublish(model: ModelInfo, event: Event): Promise<void> {
+  event.stopPropagation()
+  try {
+    await updateModelPublish(model.id, { is_published: !model.is_published })
+    await fetchModels()
+    if (selectedModel.value?.id === model.id) {
+      await fetchModelDetail(model.id)
+    }
+  } catch {
+    // silent
+  }
+}
+
 onMounted(() => {
   fetchModels()
   fetchProviderList()
@@ -722,6 +873,14 @@ onMounted(() => {
             <div class="flex items-center gap-2">
               <span class="truncate text-sm font-medium" :class="selectedModel?.id === model.id ? 'text-purple-700' : 'text-slate-900'">{{ model.name }}</span>
               <span v-if="model.deployment_count" class="shrink-0 text-[10px] text-slate-400">{{ model.deployment_count }}凭证</span>
+              <button
+                v-if="hasPermission('user:update')"
+                class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium transition-colors"
+                :class="model.is_published ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'"
+                @click="handleQuickPublish(model, $event)"
+              >
+                {{ model.is_published ? '已发布' : '未发布' }}
+              </button>
             </div>
             <div class="mt-0.5 flex items-center gap-1.5">
               <span class="rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600">{{ categoryLabels[model.category] || model.category }}</span>
@@ -754,6 +913,14 @@ onMounted(() => {
               @click="handleEditModel"
             >
               编辑
+            </button>
+            <button
+              v-if="hasPermission('user:update')"
+              class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+              :class="selectedModel.is_published ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'"
+              @click="handleOpenPublish"
+            >
+              发布设置
             </button>
             <button
               v-if="hasPermission('user:update')"
@@ -1006,8 +1173,8 @@ onMounted(() => {
           </div>
           <div class="mb-3">
             <label class="mb-1.5 block text-sm font-medium text-slate-700">分类</label>
-            <select v-model="formCategory" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20">
-              <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
+            <select v-model="formCategory" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" @change="formTags = []">
+              <option v-for="c in categories" :key="c.value" :value="c.value" :disabled="!c.enabled">{{ c.label }}{{ !c.enabled ? '（即将上线）' : '' }}</option>
             </select>
           </div>
           <div class="mb-3">
@@ -1068,7 +1235,7 @@ onMounted(() => {
                   <label class="mb-1.5 block text-sm font-medium text-slate-700">厂商模型名</label>
                   <input v-model="formDeployModelName" placeholder="如 claude-sonnet-4-20250514" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   <p v-if="formDeployModelName" class="mt-1 text-xs text-slate-400">
-                    LiteLLM 标识: <span class="font-mono text-purple-600">{{ buildLitellmModelId(formCredentialId, formDeployModelName) }}</span>
+                    LiteLLM 标识: <span class="font-mono text-purple-600">{{ buildLitellmModelId(formCredentialId, formDeployModelName, formCategory) }}</span>
                   </p>
                 </div>
               </template>
@@ -1111,7 +1278,7 @@ onMounted(() => {
               <label class="mb-1.5 block text-sm font-medium text-slate-700">模型名称 <span class="text-red-400">*</span></label>
               <input v-model="deployModelName" placeholder="厂商模型名，如 claude-sonnet-4-20250514" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
               <p v-if="deployCredentialId && deployModelName" class="mt-1 text-xs text-slate-400">
-                LiteLLM 标识: <span class="font-mono text-purple-600">{{ buildLitellmModelId(deployCredentialId, deployModelName) }}</span>
+                LiteLLM 标识: <span class="font-mono text-purple-600">{{ buildLitellmModelId(deployCredentialId, deployModelName, selectedModel?.category) }}</span>
               </p>
             </div>
             <div>
@@ -1301,5 +1468,79 @@ onMounted(() => {
       :available-models="testAvailableModels"
       @close="showTestDialog = false"
     />
+
+    <!-- 发布设置弹窗 -->
+    <div v-if="showPublishDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+      <div class="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur-xl">
+        <h3 class="mb-4 text-lg font-semibold text-slate-900">发布设置</h3>
+        <p class="mb-4 text-xs text-slate-400">设置模型在用户端的可见性，权限落在用户身上，部门选择用于批量操作</p>
+
+        <!-- 发布开关 -->
+        <div class="mb-4 flex items-center justify-between rounded-lg border border-slate-200 p-3">
+          <div>
+            <span class="text-sm font-medium text-slate-700">发布到用户端</span>
+            <p class="text-xs text-slate-400">开启后用户可在用户端看到并申请此模型</p>
+          </div>
+          <button
+            class="relative h-6 w-11 rounded-full transition-colors"
+            :class="publishIsPublished ? 'bg-green-500' : 'bg-slate-300'"
+            @click="publishIsPublished = !publishIsPublished"
+          >
+            <span
+              class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+              :class="publishIsPublished ? 'left-[22px]' : 'left-0.5'"
+            />
+          </button>
+        </div>
+
+        <!-- 可见范围 -->
+        <div v-if="publishIsPublished" class="mb-4">
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">可见范围</label>
+          <div class="flex gap-3">
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors" :class="publishVisibilityType === 'all' ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-600'">
+              <input v-model="publishVisibilityType" type="radio" value="all" class="h-4 w-4 text-purple-600" />
+              全部用户
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors" :class="publishVisibilityType === 'selected' ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-600'">
+              <input v-model="publishVisibilityType" type="radio" value="selected" class="h-4 w-4 text-purple-600" />
+              指定部门
+            </label>
+          </div>
+        </div>
+
+        <!-- 部门穿梭框 -->
+        <div v-if="publishIsPublished && publishVisibilityType === 'selected'" class="mb-4">
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">选择部门（部门内用户将获得可见权限）</label>
+          <div class="max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-2">
+            <label
+              v-for="dept in flatDepartments"
+              :key="dept.id"
+              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-slate-50"
+            >
+              <input
+                type="checkbox"
+                :checked="publishDepartmentIds.includes(dept.id)"
+                class="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500/20"
+                @change="togglePublishDept(dept.id)"
+              />
+              <span class="text-slate-700">{{ dept.path }}</span>
+            </label>
+            <p v-if="flatDepartments.length === 0" class="py-2 text-center text-xs text-slate-400">暂无部门数据</p>
+          </div>
+          <p class="mt-1 text-xs text-slate-400">已选 {{ publishDepartmentIds.length }} 个部门</p>
+        </div>
+
+        <div class="flex justify-end gap-3">
+          <button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200" @click="showPublishDialog = false">取消</button>
+          <button
+            class="rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 active:scale-[0.98] disabled:opacity-50"
+            :disabled="publishLoading"
+            @click="handleSavePublish"
+          >
+            {{ publishLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

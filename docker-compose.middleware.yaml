@@ -32,7 +32,7 @@ services:
       retries: 5
 
   litellm:
-    image: docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.3
+    image: docker.litellm.ai/berriai/litellm:v1.85.1
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public

@@ -19,9 +19,14 @@ logger = logging.getLogger(__name__)
 MIGRATIONS_DIR = Path(__file__).parent.parent.parent / "docker" / "db" / "migrations"
 
 
+def _asyncpg_dsn() -> str:
+    # settings.database_url 形如 postgresql+asyncpg://...，asyncpg 需要去掉驱动后缀
+    return settings.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+
 async def run_migrations() -> None:
     """执行所有未执行的迁移文件"""
-    conn = await asyncpg.connect(str(settings.DATABASE_URL))
+    conn = await asyncpg.connect(_asyncpg_dsn())
     try:
         # 确保迁移记录表存在
         await conn.execute("""
@@ -47,8 +52,14 @@ async def run_migrations() -> None:
             if version in executed:
                 continue
 
-            logger.info(f"executing migration: {version}")
             sql = f.read_text(encoding="utf-8")
+            # 跳过含 psql meta-command 的文件（如 LiteLLM dump 中的 \restrict）
+            # asyncpg 不支持 psql meta-command，这类文件应由容器初始化负责
+            if any(line.lstrip().startswith("\\") for line in sql.splitlines()):
+                logger.info(f"skip migration with psql meta-command: {version}")
+                continue
+
+            logger.info(f"executing migration: {version}")
             await conn.execute(sql)
             await conn.execute(
                 "INSERT INTO aihelms.schema_migrations (version) VALUES ($1)",

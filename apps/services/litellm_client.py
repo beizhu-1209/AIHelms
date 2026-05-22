@@ -268,3 +268,124 @@ async def get_router_settings() -> dict:
 
 async def update_router_settings(settings: dict) -> dict:
     return await _request("POST", "/router/settings", json_data=settings)
+
+
+# --- MCP Server Management ---
+
+
+async def create_mcp_server(
+    server_name: str,
+    url: str,
+    transport: str = "sse",
+    auth_type: str | None = None,
+    credentials: dict | None = None,
+    description: str | None = None,
+    instructions: str | None = None,
+    allowed_tools: list[str] | None = None,
+    extra_headers: list[str] | None = None,
+    mcp_info: dict | None = None,
+) -> dict:
+    data: dict = {
+        "server_name": server_name,
+        "url": url,
+        "transport": transport,
+    }
+    if auth_type:
+        data["auth_type"] = auth_type
+    if credentials:
+        data["credentials"] = credentials
+    if description:
+        data["description"] = description
+    if instructions:
+        data["instructions"] = instructions
+    if allowed_tools:
+        data["allowed_tools"] = allowed_tools
+    if extra_headers:
+        data["extra_headers"] = extra_headers
+    if mcp_info:
+        data["mcp_info"] = mcp_info
+    data["allow_all_keys"] = True
+    return await _request("POST", "/v1/mcp/server", json_data=data)
+
+
+async def update_mcp_server(
+    server_id: str,
+    server_name: str | None = None,
+    url: str | None = None,
+    transport: str | None = None,
+    auth_type: str | None = None,
+    credentials: dict | None = None,
+    description: str | None = None,
+    instructions: str | None = None,
+    allowed_tools: list[str] | None = None,
+    extra_headers: list[str] | None = None,
+    mcp_info: dict | None = None,
+) -> dict:
+    data: dict = {"server_id": server_id}
+    if server_name is not None:
+        data["server_name"] = server_name
+    if url is not None:
+        data["url"] = url
+    if transport is not None:
+        data["transport"] = transport
+    if auth_type is not None:
+        data["auth_type"] = auth_type
+    if credentials is not None:
+        data["credentials"] = credentials
+    if description is not None:
+        data["description"] = description
+    if instructions is not None:
+        data["instructions"] = instructions
+    if allowed_tools is not None:
+        data["allowed_tools"] = allowed_tools
+    if extra_headers is not None:
+        data["extra_headers"] = extra_headers
+    if mcp_info is not None:
+        data["mcp_info"] = mcp_info
+    return await _request("PUT", "/v1/mcp/server", json_data=data)
+
+
+async def delete_mcp_server(server_id: str) -> None:
+    await _request("DELETE", f"/v1/mcp/server/{server_id}")
+
+
+async def get_mcp_tools(server_id: str | None = None) -> list[dict]:
+    params = {}
+    if server_id:
+        params["server_id"] = server_id
+    result = await _request("GET", "/v1/mcp/tools", params=params)
+    if isinstance(result, dict) and "tools" in result:
+        return result["tools"]
+    if isinstance(result, list):
+        return result
+    return []
+
+
+async def test_mcp_connection(
+    url: str,
+    transport: str = "sse",
+    auth_type: str | None = None,
+    credentials: dict | None = None,
+) -> dict:
+    data: dict = {"url": url, "transport": transport}
+    if auth_type:
+        data["auth_type"] = auth_type
+    if credentials:
+        data["credentials"] = credentials
+    return await _request("POST", "/mcp-rest/test/connection", json_data=data)
+
+
+async def list_mcp_tools_from_server(
+    url: str, transport: str = "sse", auth_type: str | None = None, credentials: dict | None = None
+) -> list[dict]:
+    data: dict = {"url": url, "transport": transport}
+    if auth_type:
+        data["auth_type"] = auth_type
+    if credentials:
+        data["credentials"] = credentials
+    result = await _request("POST", "/mcp-rest/test/tools/list", json_data=data)
+    if isinstance(result, dict) and "tools" in result:
+        return result["tools"]
+    if isinstance(result, list):
+        return result
+    return []

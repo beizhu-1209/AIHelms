@@ -44,7 +44,7 @@ async def get_all_scenarios(
     return {"code": 200, "message": "ok", "data": items}
 
 
-@router.post("")
+@router.post("", summary="创建使用场景")
 async def create_scenario(
     req: CreateScenarioRequest,
     session: AsyncSession = Depends(get_db),
@@ -59,7 +59,7 @@ async def create_scenario(
     return {"code": 200, "message": "场景创建成功", "data": scenario}
 
 
-@router.put("/{scenario_id}")
+@router.put("/{scenario_id}", summary="更新使用场景")
 async def update_scenario(
     scenario_id: int,
     req: UpdateScenarioRequest,
@@ -77,7 +77,7 @@ async def update_scenario(
     return {"code": 200, "message": "场景更新成功", "data": scenario}
 
 
-@router.delete("/{scenario_id}")
+@router.delete("/{scenario_id}", summary="删除使用场景")
 async def delete_scenario(
     scenario_id: int,
     session: AsyncSession = Depends(get_db),

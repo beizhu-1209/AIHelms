@@ -103,6 +103,28 @@ const providerTypes = [
   { value: 'other', label: '其他' },
 ]
 
+// 供应商类型 → 各模型分类对应的 LiteLLM 内部路由前缀
+// null 表示不支持该类型
+const DEFAULT_PREFIX_MAP: Record<string, Record<string, string | null>> = {
+  openai: { chat: 'openai', embedding: 'openai', rerank: null, completion: 'openai', image: 'openai', audio: 'openai' },
+  anthropic: { chat: 'anthropic', embedding: null, rerank: null, completion: null },
+  azure: { chat: 'azure', embedding: 'azure', rerank: null, completion: 'azure' },
+  google: { chat: 'gemini', embedding: 'gemini', rerank: null },
+  deepseek: { chat: 'deepseek', embedding: null, rerank: null },
+  bedrock: { chat: 'bedrock', embedding: 'bedrock', rerank: null },
+  vertex_ai: { chat: 'vertex_ai', embedding: 'vertex_ai', rerank: null },
+  volcengine: { chat: 'openai', embedding: 'openai', rerank: null },
+  dashscope: { chat: 'openai', embedding: 'openai', rerank: null },
+  zhipu: { chat: 'openai', embedding: 'openai', rerank: null },
+  moonshot: { chat: 'openai', embedding: null, rerank: null },
+  minimax: { chat: 'openai', embedding: null, rerank: null },
+  vllm: { chat: 'openai', embedding: 'openai', rerank: 'hosted_vllm', completion: 'openai' },
+  sglang: { chat: 'openai', embedding: 'openai', rerank: null, completion: 'openai' },
+  ollama: { chat: 'ollama', embedding: 'ollama', rerank: null },
+  lmstudio: { chat: 'openai', embedding: 'openai', rerank: null },
+  other: { chat: 'openai', embedding: 'openai', rerank: null },
+}
+
 const accessFormats = [
   { value: 'openai', label: 'OpenAI', needsKey: true },
   { value: 'anthropic', label: 'Anthropic', needsKey: true },
@@ -190,11 +212,12 @@ async function handleSubmitProvider(): Promise<void> {
     return
   }
   try {
+    const prefixMap = DEFAULT_PREFIX_MAP[formType.value] || DEFAULT_PREFIX_MAP['other']
     const params = {
       name: formName.value,
       provider_type: formType.value,
       description: formDescription.value || undefined,
-      config: { supported_formats: formFormats.value },
+      config: { supported_formats: formFormats.value, litellm_prefix_map: prefixMap },
     }
     if (isEditingProvider.value && editingProviderId.value) {
       await updateProvider(editingProviderId.value, params)

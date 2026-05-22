@@ -50,6 +50,10 @@
               <th class="px-4 py-3 font-medium">部门</th>
               <th class="px-4 py-3 font-medium">Key 值</th>
               <th class="px-4 py-3 font-medium">模型</th>
+              <th class="px-4 py-3 font-medium">MCP</th>
+              <th class="px-4 py-3 font-medium">Skill</th>
+              <th class="px-4 py-3 font-medium">智能体</th>
+              <th class="px-4 py-3 font-medium">预算</th>
               <th class="px-4 py-3 font-medium">状态</th>
               <th class="px-4 py-3 font-medium">操作</th>
             </tr>
@@ -76,11 +80,35 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-3">
-                  <template v-if="item.main_key">
+                  <template v-if="item.main_key && item.main_key.models.length">
                     <span v-for="mid in item.main_key.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
                     <span v-if="item.main_key.models.length > 3" class="text-xs text-slate-400">+{{ item.main_key.models.length - 3 }}</span>
                   </template>
                   <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.mcps.length">
+                    <span v-for="mid in item.main_key.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
+                    <span v-if="item.main_key.mcps.length > 3" class="text-xs text-slate-400">+{{ item.main_key.mcps.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.skills.length">
+                    <span v-for="sid in item.main_key.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
+                    <span v-if="item.main_key.skills.length > 3" class="text-xs text-slate-400">+{{ item.main_key.skills.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.agents.length">
+                    <span v-for="aid in item.main_key.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
+                    <span v-if="item.main_key.agents.length > 3" class="text-xs text-slate-400">+{{ item.main_key.agents.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <BudgetCell :key-data="item.main_key" />
                 </td>
                 <td class="px-4 py-3">
                   <button v-if="item.main_key" :class="['rounded-full px-3 py-1 text-xs font-medium transition', item.main_key.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500']" @click="handleToggle(item.main_key!)">
@@ -91,7 +119,7 @@
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
                     <button v-if="item.main_key" class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(item.main_key!)">编辑</button>
-                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleCreateForUser(item.user.id)">+场景Key</button>
+                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleCreateForUser(item.user.id, item.main_key)">+场景Key</button>
                   </div>
                 </td>
               </tr>
@@ -101,6 +129,7 @@
                   <span class="text-xs text-slate-500">┗</span>
                   <span class="ml-1 text-slate-700">{{ sk.name }}</span>
                 </td>
+                <td class="px-4 py-2" />
                 <td class="px-4 py-2">
                   <div v-if="sk.litellm_key_id" class="flex items-center gap-1">
                     <code class="text-xs text-slate-600">{{ revealedKeys.has(sk.id) ? sk.litellm_key_id : maskKey(sk.litellm_key_id) }}</code>
@@ -110,8 +139,35 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-2">
-                  <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
-                  <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
+                  <template v-if="sk.models.length">
+                    <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
+                    <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.mcps.length">
+                    <span v-for="mid in sk.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
+                    <span v-if="sk.mcps.length > 3" class="text-xs text-slate-400">+{{ sk.mcps.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.skills.length">
+                    <span v-for="sid in sk.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
+                    <span v-if="sk.skills.length > 3" class="text-xs text-slate-400">+{{ sk.skills.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.agents.length">
+                    <span v-for="aid in sk.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
+                    <span v-if="sk.agents.length > 3" class="text-xs text-slate-400">+{{ sk.agents.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <BudgetCell :key-data="sk" />
                 </td>
                 <td class="px-4 py-2">
                   <button :class="['rounded-full px-3 py-1 text-xs font-medium transition', sk.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500']" @click="handleToggle(sk)">
@@ -120,7 +176,6 @@
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-2">
-                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(sk)">编辑</button>
                     <button class="text-xs text-red-500 hover:text-red-700" @click="deleteTarget = sk">删除</button>
                   </div>
                 </td>
@@ -139,6 +194,10 @@
               <th class="px-4 py-3 font-medium">部门</th>
               <th class="px-4 py-3 font-medium">Key 值</th>
               <th class="px-4 py-3 font-medium">模型</th>
+              <th class="px-4 py-3 font-medium">MCP</th>
+              <th class="px-4 py-3 font-medium">Skill</th>
+              <th class="px-4 py-3 font-medium">智能体</th>
+              <th class="px-4 py-3 font-medium">预算</th>
               <th class="px-4 py-3 font-medium">状态</th>
               <th class="px-4 py-3 font-medium">操作</th>
             </tr>
@@ -166,9 +225,30 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-3">
-                  <template v-if="item.main_key">
+                  <template v-if="item.main_key && item.main_key.models.length">
                     <span v-for="mid in item.main_key.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
                     <span v-if="item.main_key.models.length > 3" class="text-xs text-slate-400">+{{ item.main_key.models.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.mcps.length">
+                    <span v-for="mid in item.main_key.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
+                    <span v-if="item.main_key.mcps.length > 3" class="text-xs text-slate-400">+{{ item.main_key.mcps.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.skills.length">
+                    <span v-for="sid in item.main_key.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
+                    <span v-if="item.main_key.skills.length > 3" class="text-xs text-slate-400">+{{ item.main_key.skills.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.agents.length">
+                    <span v-for="aid in item.main_key.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
+                    <span v-if="item.main_key.agents.length > 3" class="text-xs text-slate-400">+{{ item.main_key.agents.length - 3 }}</span>
                   </template>
                   <span v-else class="text-slate-400">-</span>
                 </td>
@@ -179,7 +259,7 @@
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
                     <button v-if="item.main_key" class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(item.main_key!)">编辑</button>
-                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleCreateForOwner('department', item.department.id)">+场景Key</button>
+                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleCreateForOwner('department', item.department.id, item.main_key)">+场景Key</button>
                   </div>
                 </td>
               </tr>
@@ -198,15 +278,38 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-2">
-                  <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
-                  <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
+                  <template v-if="sk.models.length">
+                    <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
+                    <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.mcps.length">
+                    <span v-for="mid in sk.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
+                    <span v-if="sk.mcps.length > 3" class="text-xs text-slate-400">+{{ sk.mcps.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.skills.length">
+                    <span v-for="sid in sk.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
+                    <span v-if="sk.skills.length > 3" class="text-xs text-slate-400">+{{ sk.skills.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.agents.length">
+                    <span v-for="aid in sk.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
+                    <span v-if="sk.agents.length > 3" class="text-xs text-slate-400">+{{ sk.agents.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-2">
                   <button :class="['rounded-full px-3 py-1 text-xs font-medium transition', sk.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500']" @click="handleToggle(sk)">{{ sk.is_active ? '已启用' : '已禁用' }}</button>
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-2">
-                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(sk)">编辑</button>
                     <button class="text-xs text-red-500 hover:text-red-700" @click="deleteTarget = sk">删除</button>
                   </div>
                 </td>
@@ -225,6 +328,10 @@
               <th class="px-4 py-3 font-medium">项目</th>
               <th class="px-4 py-3 font-medium">Key 值</th>
               <th class="px-4 py-3 font-medium">模型</th>
+              <th class="px-4 py-3 font-medium">MCP</th>
+              <th class="px-4 py-3 font-medium">Skill</th>
+              <th class="px-4 py-3 font-medium">智能体</th>
+              <th class="px-4 py-3 font-medium">预算</th>
               <th class="px-4 py-3 font-medium">状态</th>
               <th class="px-4 py-3 font-medium">操作</th>
             </tr>
@@ -252,9 +359,30 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-3">
-                  <template v-if="item.main_key">
+                  <template v-if="item.main_key && item.main_key.models.length">
                     <span v-for="mid in item.main_key.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
                     <span v-if="item.main_key.models.length > 3" class="text-xs text-slate-400">+{{ item.main_key.models.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.mcps.length">
+                    <span v-for="mid in item.main_key.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
+                    <span v-if="item.main_key.mcps.length > 3" class="text-xs text-slate-400">+{{ item.main_key.mcps.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.skills.length">
+                    <span v-for="sid in item.main_key.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
+                    <span v-if="item.main_key.skills.length > 3" class="text-xs text-slate-400">+{{ item.main_key.skills.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-3">
+                  <template v-if="item.main_key && item.main_key.agents.length">
+                    <span v-for="aid in item.main_key.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
+                    <span v-if="item.main_key.agents.length > 3" class="text-xs text-slate-400">+{{ item.main_key.agents.length - 3 }}</span>
                   </template>
                   <span v-else class="text-slate-400">-</span>
                 </td>
@@ -265,7 +393,7 @@
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
                     <button v-if="item.main_key" class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(item.main_key!)">编辑</button>
-                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleCreateForOwner('project', item.project.id)">+场景Key</button>
+                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleCreateForOwner('project', item.project.id, item.main_key)">+场景Key</button>
                   </div>
                 </td>
               </tr>
@@ -284,15 +412,38 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-2">
-                  <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
-                  <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
+                  <template v-if="sk.models.length">
+                    <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
+                    <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.mcps.length">
+                    <span v-for="mid in sk.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
+                    <span v-if="sk.mcps.length > 3" class="text-xs text-slate-400">+{{ sk.mcps.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.skills.length">
+                    <span v-for="sid in sk.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
+                    <span v-if="sk.skills.length > 3" class="text-xs text-slate-400">+{{ sk.skills.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
+                </td>
+                <td class="px-4 py-2">
+                  <template v-if="sk.agents.length">
+                    <span v-for="aid in sk.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
+                    <span v-if="sk.agents.length > 3" class="text-xs text-slate-400">+{{ sk.agents.length - 3 }}</span>
+                  </template>
+                  <span v-else class="text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-2">
                   <button :class="['rounded-full px-3 py-1 text-xs font-medium transition', sk.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500']" @click="handleToggle(sk)">{{ sk.is_active ? '已启用' : '已禁用' }}</button>
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-2">
-                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(sk)">编辑</button>
                     <button class="text-xs text-red-500 hover:text-red-700" @click="deleteTarget = sk">删除</button>
                   </div>
                 </td>
@@ -315,6 +466,7 @@
     <KeyFormDialog
       :visible="showKeyForm"
       :edit-key="editingKey"
+      :template-key="templateKey"
       :default-owner-type="defaultOwnerType"
       :default-owner-id="defaultOwnerId"
       @close="showKeyForm = false"
@@ -352,9 +504,15 @@ import {
   toggleAiKey,
   deleteAiKey,
   getActiveModels,
+  getMcpServers,
+  getSkills,
+  getAgents,
   usePermission,
   type AiKey,
   type ActiveModel,
+  type McpServer,
+  type Skill,
+  type Agent,
   type IdentityUserItem,
   type IdentityDepartmentItem,
   type IdentityProjectItem,
@@ -362,6 +520,7 @@ import {
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import KeyFormDialog from './KeyFormDialog.vue'
 import ScenarioTab from './ScenarioTab.vue'
+import BudgetCell from './BudgetCell.vue'
 
 const { hasPermission } = usePermission()
 
@@ -386,9 +545,13 @@ const projectItems = ref<IdentityProjectItem[]>([])
 const expandedRows = ref<Set<string>>(new Set())
 const revealedKeys = ref<Set<number>>(new Set())
 const activeModels = ref<ActiveModel[]>([])
+const mcpServers = ref<McpServer[]>([])
+const skills = ref<Skill[]>([])
+const agents = ref<Agent[]>([])
 
 const showKeyForm = ref(false)
 const editingKey = ref<AiKey | null>(null)
+const templateKey = ref<AiKey | null>(null)
 const deleteTarget = ref<AiKey | null>(null)
 const defaultOwnerType = ref<'user' | 'department' | 'project'>('user')
 const defaultOwnerId = ref<number | undefined>(undefined)
@@ -419,6 +582,36 @@ async function fetchModels(): Promise<void> {
   activeModels.value = await getActiveModels()
 }
 
+async function fetchMcps(): Promise<void> {
+  const res = await getMcpServers(1, 200)
+  mcpServers.value = res.items
+}
+
+async function fetchSkills(): Promise<void> {
+  const res = await getSkills(1, 200)
+  skills.value = res.items
+}
+
+async function fetchAgents(): Promise<void> {
+  const res = await getAgents(1, 200)
+  agents.value = res.items
+}
+
+function getMcpName(mcpId: number): string {
+  const found = mcpServers.value.find((m) => m.id === mcpId)
+  return found ? found.name : `#${mcpId}`
+}
+
+function getSkillName(skillId: number): string {
+  const found = skills.value.find((s) => s.id === skillId)
+  return found ? found.name : `#${skillId}`
+}
+
+function getAgentName(agentId: number): string {
+  const found = agents.value.find((a) => a.id === agentId)
+  return found ? found.name : `#${agentId}`
+}
+
 function handleTabChange(tab: TabType): void {
   activeTab.value = tab
   page.value = 1
@@ -434,20 +627,23 @@ function handleSearch(): void {
 
 function handleCreateNew(): void {
   editingKey.value = null
+  templateKey.value = null
   defaultOwnerType.value = activeTab.value
   defaultOwnerId.value = undefined
   showKeyForm.value = true
 }
 
-function handleCreateForUser(userId: number): void {
+function handleCreateForUser(userId: number, mainKey: AiKey | null = null): void {
   editingKey.value = null
+  templateKey.value = mainKey
   defaultOwnerType.value = 'user'
   defaultOwnerId.value = userId
   showKeyForm.value = true
 }
 
-function handleCreateForOwner(type: 'department' | 'project', id: number): void {
+function handleCreateForOwner(type: 'department' | 'project', id: number, mainKey: AiKey | null = null): void {
   editingKey.value = null
+  templateKey.value = mainKey
   defaultOwnerType.value = type
   defaultOwnerId.value = id
   showKeyForm.value = true
@@ -455,6 +651,7 @@ function handleCreateForOwner(type: 'department' | 'project', id: number): void 
 
 function handleEdit(key: AiKey): void {
   editingKey.value = key
+  templateKey.value = null
   defaultOwnerType.value = key.owner_type
   defaultOwnerId.value = key.owner_id
   showKeyForm.value = true
@@ -505,5 +702,8 @@ function copyToClipboard(text: string): void {
 onMounted(() => {
   fetchData()
   fetchModels()
+  fetchMcps()
+  fetchSkills()
+  fetchAgents()
 })
 </script>

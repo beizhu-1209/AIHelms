@@ -1,8 +1,8 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings
+from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility
 
 
 async def create(session: AsyncSession, model: Model) -> Model:
@@ -54,10 +54,11 @@ async def count_all(
     return result.scalar_one()
 
 
-async def find_all_active(session: AsyncSession) -> list[Model]:
-    result = await session.execute(
-        select(Model).where(Model.is_active == True).order_by(Model.name)
-    )
+async def find_all_active(session: AsyncSession, published_only: bool = False) -> list[Model]:
+    stmt = select(Model).where(Model.is_active == True)
+    if published_only:
+        stmt = stmt.where(Model.is_published == True)
+    result = await session.execute(stmt.order_by(Model.name))
     return list(result.scalars().all())
 
 
@@ -167,3 +168,74 @@ async def upsert_router_settings(session: AsyncSession, settings: RouterSettings
     await session.flush()
     await session.refresh(settings)
     return settings
+
+
+# --- Model Visibility ---
+
+
+async def find_visibility_by_model(session: AsyncSession, model_id: int) -> list[ModelDepartmentVisibility]:
+    result = await session.execute(
+        select(ModelDepartmentVisibility)
+        .where(ModelDepartmentVisibility.model_id == model_id)
+        .order_by(ModelDepartmentVisibility.id)
+    )
+    return list(result.scalars().all())
+
+
+async def set_visibility_departments(
+    session: AsyncSession, model_id: int, department_ids: list[int]
+) -> None:
+    await session.execute(
+        sa_delete(ModelDepartmentVisibility)
+        .where(ModelDepartmentVisibility.model_id == model_id)
+    )
+    for dept_id in department_ids:
+        session.add(ModelDepartmentVisibility(model_id=model_id, department_id=dept_id))
+    await session.flush()
+
+
+async def find_user_visibility_by_model(session: AsyncSession, model_id: int) -> list[ModelUserVisibility]:
+    result = await session.execute(
+        select(ModelUserVisibility)
+        .where(ModelUserVisibility.model_id == model_id)
+        .order_by(ModelUserVisibility.id)
+    )
+    return list(result.scalars().all())
+
+
+async def set_visibility_users(
+    session: AsyncSession, model_id: int, user_ids: list[int]
+) -> None:
+    await session.execute(
+        sa_delete(ModelUserVisibility)
+        .where(ModelUserVisibility.model_id == model_id)
+    )
+    for user_id in user_ids:
+        session.add(ModelUserVisibility(model_id=model_id, user_id=user_id))
+    await session.flush()
+
+
+async def add_visibility_users(
+    session: AsyncSession, model_id: int, user_ids: list[int]
+) -> None:
+    existing = await session.execute(
+        select(ModelUserVisibility.user_id)
+        .where(ModelUserVisibility.model_id == model_id)
+        .where(ModelUserVisibility.user_id.in_(user_ids))
+    )
+    existing_ids = {row[0] for row in existing.all()}
+    for user_id in user_ids:
+        if user_id not in existing_ids:
+            session.add(ModelUserVisibility(model_id=model_id, user_id=user_id))
+    await session.flush()
+
+
+async def remove_visibility_users(
+    session: AsyncSession, model_id: int, user_ids: list[int]
+) -> None:
+    await session.execute(
+        sa_delete(ModelUserVisibility)
+        .where(ModelUserVisibility.model_id == model_id)
+        .where(ModelUserVisibility.user_id.in_(user_ids))
+    )
+    await session.flush()

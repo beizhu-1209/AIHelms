@@ -36,7 +36,7 @@ async def list_credentials(
     return {"code": 200, "message": "ok", "data": result}
 
 
-@router.post("")
+@router.post("", summary="创建凭证")
 async def create_credential(
     req: CreateCredentialRequest,
     session: AsyncSession = Depends(get_db),
@@ -76,7 +76,7 @@ async def get_credential(
     return {"code": 200, "message": "ok", "data": credential}
 
 
-@router.put("/{credential_id}")
+@router.put("/{credential_id}", summary="更新凭证")
 async def update_credential(
     credential_id: int,
     req: UpdateCredentialRequest,
@@ -96,7 +96,7 @@ async def update_credential(
     return {"code": 200, "message": "凭证更新成功", "data": credential}
 
 
-@router.delete("/{credential_id}")
+@router.delete("/{credential_id}", summary="删除凭证")
 async def delete_credential(
     credential_id: int,
     session: AsyncSession = Depends(get_db),

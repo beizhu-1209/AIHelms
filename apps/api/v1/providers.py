@@ -39,7 +39,7 @@ async def list_providers(
     return {"code": 200, "message": "ok", "data": result}
 
 
-@router.post("")
+@router.post("", summary="创建供应商")
 async def create_provider(
     req: CreateProviderRequest,
     session: AsyncSession = Depends(get_db),
@@ -70,7 +70,7 @@ async def get_provider(
     return {"code": 200, "message": "ok", "data": provider}
 
 
-@router.put("/{provider_id}")
+@router.put("/{provider_id}", summary="更新供应商")
 async def update_provider(
     provider_id: int,
     req: UpdateProviderRequest,
@@ -93,7 +93,7 @@ async def update_provider(
     return {"code": 200, "message": "供应商更新成功", "data": provider}
 
 
-@router.delete("/{provider_id}")
+@router.delete("/{provider_id}", summary="删除供应商")
 async def delete_provider(
     provider_id: int,
     session: AsyncSession = Depends(get_db),

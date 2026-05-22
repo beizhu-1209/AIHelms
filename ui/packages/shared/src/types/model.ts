@@ -6,6 +6,8 @@ export interface ModelInfo {
   capabilities: string[]
   description: string
   is_active: boolean
+  is_published: boolean
+  visibility_type: string
   deployment_count: number
   created_at: string | null
   updated_at: string | null
@@ -121,4 +123,21 @@ export interface UpdateRouterSettingsParams {
   num_retries?: number
   timeout?: number
   config?: Record<string, unknown>
+}
+
+export interface ModelVisibility {
+  is_published: boolean
+  visibility_type: string
+  requires_approval: boolean
+  department_ids: number[]
+  departments: { id: number; name: string }[]
+  user_ids: number[]
+  user_count: number
+}
+
+export interface UpdateModelPublishParams {
+  is_published?: boolean
+  visibility_type?: string
+  department_ids?: number[]
+  requires_approval?: boolean
 }

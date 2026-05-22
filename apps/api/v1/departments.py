@@ -36,7 +36,7 @@ async def get_department(
     return {"code": 200, "message": "ok", "data": dept}
 
 
-@router.post("")
+@router.post("", summary="创建部门")
 async def create_department(
     req: CreateDepartmentRequest,
     session: AsyncSession = Depends(get_db),
@@ -51,7 +51,7 @@ async def create_department(
     return {"code": 200, "message": "部门创建成功", "data": dept}
 
 
-@router.put("/{dept_id}")
+@router.put("/{dept_id}", summary="更新部门")
 async def update_department(
     dept_id: int,
     req: UpdateDepartmentRequest,
@@ -67,7 +67,7 @@ async def update_department(
     return {"code": 200, "message": "部门更新成功", "data": dept}
 
 
-@router.delete("/{dept_id}")
+@router.delete("/{dept_id}", summary="删除部门")
 async def delete_department(
     dept_id: int,
     session: AsyncSession = Depends(get_db),
@@ -95,7 +95,7 @@ async def get_department_members(
     return {"code": 200, "message": "ok", "data": members}
 
 
-@router.post("/{dept_id}/members")
+@router.post("/{dept_id}/members", summary="添加部门成员")
 async def add_department_member(
     dept_id: int,
     req: DepartmentMemberRequest,
@@ -111,7 +111,7 @@ async def add_department_member(
     return {"code": 200, "message": "成员添加成功", "data": None}
 
 
-@router.delete("/{dept_id}/members/{user_id}")
+@router.delete("/{dept_id}/members/{user_id}", summary="移除部门成员")
 async def remove_department_member(
     dept_id: int,
     user_id: int,
@@ -125,7 +125,7 @@ async def remove_department_member(
     return {"code": 200, "message": "成员移除成功", "data": None}
 
 
-@router.put("/{dept_id}/managers")
+@router.put("/{dept_id}/managers", summary="更新部门管理员")
 async def update_department_managers(
     dept_id: int,
     req: UpdateDepartmentManagersRequest,

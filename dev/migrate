@@ -5,4 +5,9 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$ROOT/apps"
+
+# 激活 conda 环境
+eval "$(conda shell.bash hook)"
+conda activate aihelms
+
 python -m core.migrate

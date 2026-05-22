@@ -17,7 +17,7 @@ const router = createRouter({
         {
           path: '',
           name: 'Dashboard',
-          component: () => import('../views/Dashboard.vue'),
+          redirect: '/efficiency',
         },
         {
           path: 'departments',
@@ -72,6 +72,108 @@ const router = createRouter({
           name: 'ModelManage',
           component: () => import('../views/models/ModelManage.vue'),
           meta: { permission: 'user:read' },
+        },
+        {
+          path: 'mcp',
+          name: 'McpManage',
+          component: () => import('../views/mcp/McpManage.vue'),
+          meta: { permission: 'mcp:read' },
+        },
+        {
+          path: 'skills',
+          name: 'SkillList',
+          component: () => import('../views/skills/SkillList.vue'),
+          meta: { permission: 'skill:read' },
+        },
+        {
+          path: 'skills/:id',
+          name: 'SkillDetail',
+          component: () => import('../views/skills/SkillDetail.vue'),
+          meta: { permission: 'skill:read' },
+        },
+        {
+          path: 'agents',
+          name: 'AgentList',
+          component: () => import('../views/agents/AgentList.vue'),
+          meta: { permission: 'agent:read' },
+        },
+        {
+          path: 'agents/:id',
+          name: 'AgentDetail',
+          component: () => import('../views/agents/AgentDetail.vue'),
+          meta: { permission: 'agent:read' },
+        },
+        {
+          path: 'resource-approval',
+          name: 'ResourceApprovalManage',
+          component: () => import('../views/resource-approval/ResourceApprovalManage.vue'),
+          meta: { permission: 'resource_application:read' },
+        },
+        {
+          path: 'audit',
+          name: 'AuditLogManage',
+          component: () => import('../views/audit/AuditLogManage.vue'),
+          meta: { permission: 'audit_log:read' },
+        },
+        {
+          path: 'api-keys',
+          name: 'ApiKeyManage',
+          component: () => import('../views/api-keys/ApiKeyManage.vue'),
+          meta: { permission: 'api_key:read' },
+        },
+        {
+          path: 'logs',
+          name: 'LogsManage',
+          component: () => import('../views/logs/LogsManage.vue'),
+          meta: { permission: 'usage_log:read' },
+        },
+        {
+          path: 'business-scenarios',
+          name: 'BusinessScenarioManage',
+          component: () => import('../views/business-scenarios/BusinessScenarioManage.vue'),
+          meta: { permission: 'user:read' },
+        },
+        {
+          path: 'efficiency',
+          component: () => import('../views/efficiency/EfficiencyLayout.vue'),
+          meta: { permission: 'efficiency:read' },
+          children: [
+            {
+              path: '',
+              name: 'EfficiencyDashboard',
+              component: () => import('../views/efficiency/DashboardView.vue'),
+            },
+            {
+              path: 'analysis',
+              name: 'EfficiencyAnalysis',
+              component: () => import('../views/efficiency/AnalysisView.vue'),
+            },
+            {
+              path: 'agents',
+              name: 'EfficiencyAgents',
+              component: () => import('../views/efficiency/AgentRoiView.vue'),
+            },
+            {
+              path: 'models',
+              name: 'EfficiencyModels',
+              component: () => import('../views/efficiency/ModelPreferenceView.vue'),
+            },
+            {
+              path: 'budget',
+              name: 'EfficiencyBudget',
+              component: () => import('../views/efficiency/BudgetView.vue'),
+            },
+            {
+              path: 'reports',
+              name: 'EfficiencyReports',
+              component: () => import('../views/efficiency/ReportsView.vue'),
+            },
+            {
+              path: 'capability',
+              name: 'EfficiencyCapability',
+              component: () => import('../views/efficiency/CapabilityView.vue'),
+            },
+          ],
         },
       ],
     },

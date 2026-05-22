@@ -56,52 +56,50 @@
         <p v-else class="text-sm text-slate-500">已指定归属（{{ ownerType === 'department' ? '部门' : '项目' }}）</p>
       </div>
 
-      <!-- Model Selection -->
+      <!-- Resource Selection + Budget -->
       <div class="mb-4">
-        <label class="block text-sm font-medium text-slate-700 mb-1">可用模型</label>
-        <div class="border border-slate-200/60 rounded-lg bg-white/80 p-3 max-h-48 overflow-y-auto">
-          <input v-model="modelSearch" type="text" placeholder="搜索模型..." class="w-full px-2 py-1.5 mb-2 rounded border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50" />
-          <label class="flex items-center gap-2 mb-2 text-sm text-slate-600 cursor-pointer">
-            <input type="checkbox" :checked="allModelsSelected" class="rounded text-purple-600" @change="toggleAllModels" /> 全选
-          </label>
-          <div v-for="m in filteredModels" :key="m.id" class="flex items-center gap-2 py-0.5">
-            <input type="checkbox" :value="m.model_id" v-model="form.models" class="rounded text-purple-600" />
-            <span class="text-sm text-slate-700">{{ m.name }}</span>
-            <span class="text-xs text-slate-400">{{ m.model_id }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Budget Section -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-slate-700 mb-1">预算设置</label>
-        <div class="border border-slate-200/60 rounded-lg bg-white/80 p-3 space-y-3">
-          <div class="flex items-center gap-3">
-            <select v-model="form.budget_duration" class="px-3 py-1.5 rounded-lg border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50">
-              <option value="30d">月 (30天)</option>
-              <option value="7d">周 (7天)</option>
-              <option value="1d">日 (1天)</option>
-            </select>
-            <div class="flex">
-              <button type="button" :class="[!perModelBudget ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-600', 'px-3 py-1 rounded-l-lg text-sm transition']" @click="perModelBudget = false">统一预算</button>
-              <button type="button" :class="[perModelBudget ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-600', 'px-3 py-1 rounded-r-lg text-sm transition']" @click="perModelBudget = true">按模型预算</button>
-            </div>
-          </div>
-          <div v-if="!perModelBudget" class="flex items-center gap-2">
-            <span class="text-sm text-slate-600">¥</span>
-            <input v-model.number="form.budget_limit" type="number" min="0" placeholder="预算金额" class="w-40 px-3 py-1.5 rounded-lg border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50" />
-          </div>
-          <div v-else class="space-y-2">
-            <div v-for="mid in form.models" :key="mid" class="flex items-center gap-2">
-              <span class="text-sm text-slate-700 w-40 truncate">{{ getModelName(mid) }}</span>
-              <span class="text-sm text-slate-600">¥</span>
-              <input v-model.number="modelBudgets[mid]" type="number" min="0" placeholder="0" class="w-28 px-2 py-1 rounded border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50" />
-            </div>
-          </div>
-          <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-            <input type="checkbox" v-model="form.budget_hard_limit" class="rounded text-purple-600" /> 超出预算立刻禁止使用
-          </label>
-        </div>
+        <KeyResourceBudget
+          :models="models"
+          :mcp-servers="mcpServers"
+          :skills="skills"
+          :agents="agentItems"
+          :selected-models="form.models"
+          :selected-mcps="form.mcps"
+          :selected-skills="form.skills"
+          :selected-agents="form.agents"
+          :budget-duration="form.budget_duration"
+          :budget-scope="form.budget_scope"
+          :budget-limit="form.budget_limit"
+          :budget-models-total="form.budget_models_total"
+          :budget-mcps-total="form.budget_mcps_total"
+          :budget-models-per="form.budget_models_per"
+          :budget-mcps-per="form.budget_mcps_per"
+          :model-budgets="modelBudgets"
+          :mcp-budgets="mcpBudgets"
+          :budget-hard-limit="form.budget_hard_limit"
+          :model-search="modelSearch"
+          :mcp-search="mcpSearch"
+          :skill-search="skillSearch"
+          :agent-search="agentSearch"
+          @update:selected-models="form.models = $event"
+          @update:selected-mcps="form.mcps = $event"
+          @update:selected-skills="form.skills = $event"
+          @update:selected-agents="form.agents = $event"
+          @update:budget-duration="form.budget_duration = $event"
+          @update:budget-scope="form.budget_scope = $event"
+          @update:budget-limit="form.budget_limit = $event"
+          @update:budget-models-total="form.budget_models_total = $event"
+          @update:budget-mcps-total="form.budget_mcps_total = $event"
+          @update:budget-models-per="form.budget_models_per = $event"
+          @update:budget-mcps-per="form.budget_mcps_per = $event"
+          @update:budget-hard-limit="form.budget_hard_limit = $event"
+          @update:model-search="modelSearch = $event"
+          @update:mcp-search="mcpSearch = $event"
+          @update:skill-search="skillSearch = $event"
+          @update:agent-search="agentSearch = $event"
+          @update-model-budget="handleModelBudgetUpdate"
+          @update-mcp-budget="handleMcpBudgetUpdate"
+        />
       </div>
 
       <!-- Rate Limiting -->
@@ -199,6 +197,9 @@ import {
   batchCreateAiKeys,
   updateAiKey,
   getActiveModels,
+  getMcpServers,
+  getSkills,
+  getAgents,
   getUsers,
   getAllKeyScenarios,
   setModelLimits,
@@ -207,21 +208,29 @@ import {
 import type {
   AiKey,
   ActiveModel,
+  McpServer,
+  Skill,
+  Agent,
   KeyScenario,
   BatchCreateResult,
   RateLimitItem,
   SetModelLimitItem,
+  BudgetScope,
+  BudgetSubScope,
 } from '@aihelms/shared'
+import KeyResourceBudget from './KeyResourceBudget.vue'
 
 interface Props {
   visible: boolean
   editKey?: AiKey | null
+  templateKey?: AiKey | null
   defaultOwnerType?: 'user' | 'department' | 'project'
   defaultOwnerId?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editKey: null,
+  templateKey: null,
   defaultOwnerType: 'user',
   defaultOwnerId: undefined,
 })
@@ -241,20 +250,34 @@ const form = reactive({
   name: '',
   description: '',
   models: [] as string[],
+  mcps: [] as number[],
+  skills: [] as number[],
+  agents: [] as number[],
   budget_duration: '30d',
+  budget_scope: 'unified' as BudgetScope,
   budget_limit: null as number | null,
+  budget_models_total: null as number | null,
+  budget_mcps_total: null as number | null,
+  budget_models_per: 'unified' as BudgetSubScope,
+  budget_mcps_per: 'unified' as BudgetSubScope,
   budget_hard_limit: false,
 })
 
 const scenarios = ref<KeyScenario[]>([])
 const models = ref<ActiveModel[]>([])
+const mcpServers = ref<McpServer[]>([])
+const skills = ref<Skill[]>([])
+const agentItems = ref<Agent[]>([])
 const allUsers = ref<UserItem[]>([])
 const selectedUsers = ref<UserItem[]>([])
 const modelSearch = ref('')
+const mcpSearch = ref('')
+const skillSearch = ref('')
+const agentSearch = ref('')
 const userSearch = ref('')
 const showUserPicker = ref(false)
-const perModelBudget = ref(false)
 const modelBudgets = reactive<Record<string, number | null>>({})
+const mcpBudgets = reactive<Record<string, number | null>>({})
 const rateLimitEnabled = ref(false)
 const rateLimits = reactive<Record<string, RateLimitEntry>>({})
 const submitting = ref(false)
@@ -264,14 +287,6 @@ const batchResults = ref<BatchCreateResult[] | null>(null)
 const batchSuccessCount = computed(() => batchResults.value?.filter(r => r.success).length ?? 0)
 const batchFailCount = computed(() => batchResults.value?.filter(r => !r.success).length ?? 0)
 const batchFailures = computed(() => batchResults.value?.filter(r => !r.success) ?? [])
-
-const filteredModels = computed(() => {
-  const q = modelSearch.value.toLowerCase()
-  if (!q) return models.value
-  return models.value.filter(m => m.name.toLowerCase().includes(q) || m.model_id.toLowerCase().includes(q))
-})
-
-const allModelsSelected = computed(() => form.models.length === models.value.length && models.value.length > 0)
 
 const availableUsers = computed(() => {
   const selectedIds = new Set(selectedUsers.value.map(u => u.id))
@@ -289,10 +304,6 @@ function getModelName(modelId: string): string {
 
 function getModelDbId(modelId: string): number | undefined {
   return models.value.find(m => m.model_id === modelId)?.id
-}
-
-function toggleAllModels() {
-  form.models = allModelsSelected.value ? [] : models.value.map(m => m.model_id)
 }
 
 function addUser(user: UserItem) {
@@ -321,6 +332,14 @@ function copyKey() {
   navigator.clipboard.writeText(createdKeyValue.value)
 }
 
+function handleModelBudgetUpdate(modelId: string, value: number | null) {
+  modelBudgets[modelId] = value
+}
+
+function handleMcpBudgetUpdate(mcpId: number, value: number | null) {
+  mcpBudgets[String(mcpId)] = value
+}
+
 // Ensure rateLimits entries exist for selected models
 watch(() => form.models, (ids) => {
   for (const id of ids) {
@@ -345,11 +364,19 @@ function buildRateLimits(): RateLimitItem[] | null {
 }
 
 function buildModelBudgets(): Record<string, number> | null {
-  if (!perModelBudget.value) return null
   const result: Record<string, number> = {}
   for (const mid of form.models) {
     const val = modelBudgets[mid]
     if (val && val > 0) result[mid] = val
+  }
+  return Object.keys(result).length > 0 ? result : null
+}
+
+function buildMcpBudgets(): Record<string, number> | null {
+  const result: Record<string, number> = {}
+  for (const mid of form.mcps) {
+    const val = mcpBudgets[String(mid)]
+    if (val && val > 0) result[String(mid)] = val
   }
   return Object.keys(result).length > 0 ? result : null
 }
@@ -360,8 +387,17 @@ async function handleSubmit() {
   batchResults.value = null
 
   try {
-    const budgetLimit = perModelBudget.value ? null : form.budget_limit
-    const mBudgets = buildModelBudgets()
+    const isUnified = form.budget_scope === 'unified'
+    const isPerType = form.budget_scope === 'per_type'
+    const budgetLimit = isUnified ? form.budget_limit : null
+    const budgetModelsTotal = isPerType && form.budget_models_per === 'unified' ? form.budget_models_total : null
+    const budgetMcpsTotal = isPerType && form.budget_mcps_per === 'unified' ? form.budget_mcps_total : null
+    const includeModelBudgets =
+      form.budget_scope === 'per_resource' || (isPerType && form.budget_models_per === 'each')
+    const includeMcpBudgets =
+      form.budget_scope === 'per_resource' || (isPerType && form.budget_mcps_per === 'each')
+    const mBudgets = includeModelBudgets ? buildModelBudgets() : null
+    const mcpBgts = includeMcpBudgets ? buildMcpBudgets() : null
     const rLimits = buildRateLimits()
 
     if (isEdit.value) {
@@ -369,10 +405,19 @@ async function handleSubmit() {
         name: form.name,
         description: form.description,
         models: form.models,
+        mcps: form.mcps,
+        skills: form.skills,
+        agents: form.agents,
         budget_limit: budgetLimit,
         budget_hard_limit: form.budget_hard_limit,
         budget_duration: form.budget_duration,
+        budget_scope: form.budget_scope,
+        budget_models_total: budgetModelsTotal,
+        budget_mcps_total: budgetMcpsTotal,
+        budget_models_per: form.budget_models_per,
+        budget_mcps_per: form.budget_mcps_per,
         model_budgets: mBudgets,
+        mcp_budgets: mcpBgts,
         scenario_id: form.scenario_id,
         rate_limits: rLimits,
       })
@@ -396,10 +441,19 @@ async function handleSubmit() {
         name_template: form.name,
         description: form.description,
         models: form.models,
+        mcps: form.mcps,
+        skills: form.skills,
+        agents: form.agents,
         budget_limit: budgetLimit,
         budget_hard_limit: form.budget_hard_limit,
         budget_duration: form.budget_duration,
+        budget_scope: form.budget_scope,
+        budget_models_total: budgetModelsTotal,
+        budget_mcps_total: budgetMcpsTotal,
+        budget_models_per: form.budget_models_per,
+        budget_mcps_per: form.budget_mcps_per,
         model_budgets: mBudgets,
+        mcp_budgets: mcpBgts,
         scenario_id: form.scenario_id,
         rate_limits: rLimits,
       })
@@ -414,10 +468,19 @@ async function handleSubmit() {
         owner_id: ownerId,
         description: form.description,
         models: form.models,
+        mcps: form.mcps,
+        skills: form.skills,
+        agents: form.agents,
         budget_limit: budgetLimit,
         budget_hard_limit: form.budget_hard_limit,
         budget_duration: form.budget_duration,
+        budget_scope: form.budget_scope,
+        budget_models_total: budgetModelsTotal,
+        budget_mcps_total: budgetMcpsTotal,
+        budget_models_per: form.budget_models_per,
+        budget_mcps_per: form.budget_mcps_per,
         model_budgets: mBudgets,
+        mcp_budgets: mcpBgts,
         scenario_id: form.scenario_id,
         rate_limits: rLimits,
       })
@@ -441,15 +504,46 @@ watch(() => props.visible, (visible) => {
     form.scenario_id = null
     form.name = ''
     form.description = ''
-    form.models = []
-    form.budget_duration = '30d'
-    form.budget_limit = null
-    form.budget_hard_limit = false
-    perModelBudget.value = false
-    rateLimitEnabled.value = false
     selectedUsers.value = []
     createdKeyValue.value = ''
     batchResults.value = null
+    rateLimitEnabled.value = false
+
+    // 默认从主 Key 复制资源/预算配置（场景 Key 创建时）
+    const tpl = props.templateKey
+    if (tpl) {
+      form.models = [...(tpl.models ?? [])]
+      form.mcps = [...(tpl.mcps ?? [])]
+      form.skills = [...(tpl.skills ?? [])]
+      form.agents = [...(tpl.agents ?? [])]
+      form.budget_duration = tpl.budget_duration ?? '30d'
+      form.budget_scope = tpl.budget_scope ?? 'unified'
+      form.budget_limit = tpl.budget_limit ? parseFloat(tpl.budget_limit) : null
+      form.budget_models_total = tpl.budget_models_total ? parseFloat(tpl.budget_models_total) : null
+      form.budget_mcps_total = tpl.budget_mcps_total ? parseFloat(tpl.budget_mcps_total) : null
+      form.budget_models_per = tpl.budget_models_per ?? 'unified'
+      form.budget_mcps_per = tpl.budget_mcps_per ?? 'unified'
+      form.budget_hard_limit = tpl.budget_hard_limit
+      for (const k of Object.keys(modelBudgets)) delete modelBudgets[k]
+      for (const k of Object.keys(mcpBudgets)) delete mcpBudgets[k]
+      if (tpl.model_budgets) Object.assign(modelBudgets, tpl.model_budgets)
+      if (tpl.mcp_budgets) Object.assign(mcpBudgets, tpl.mcp_budgets)
+    } else {
+      form.models = []
+      form.mcps = []
+      form.skills = []
+      form.agents = []
+      form.budget_duration = '30d'
+      form.budget_scope = 'unified'
+      form.budget_limit = null
+      form.budget_models_total = null
+      form.budget_mcps_total = null
+      form.budget_models_per = 'unified'
+      form.budget_mcps_per = 'unified'
+      form.budget_hard_limit = false
+      for (const k of Object.keys(modelBudgets)) delete modelBudgets[k]
+      for (const k of Object.keys(mcpBudgets)) delete mcpBudgets[k]
+    }
   }
 })
 
@@ -461,13 +555,19 @@ watch(() => props.editKey, async (key) => {
     form.name = key.name
     form.description = key.description ?? ''
     form.models = key.models ?? []
+    form.mcps = key.mcps ?? []
+    form.skills = key.skills ?? []
+    form.agents = key.agents ?? []
     form.budget_duration = key.budget_duration ?? '30d'
+    form.budget_scope = key.budget_scope ?? 'unified'
     form.budget_limit = key.budget_limit ? parseFloat(key.budget_limit) : null
+    form.budget_models_total = key.budget_models_total ? parseFloat(key.budget_models_total) : null
+    form.budget_mcps_total = key.budget_mcps_total ? parseFloat(key.budget_mcps_total) : null
+    form.budget_models_per = key.budget_models_per ?? 'unified'
+    form.budget_mcps_per = key.budget_mcps_per ?? 'unified'
     form.budget_hard_limit = key.budget_hard_limit
-    if (key.model_budgets && Object.keys(key.model_budgets).length > 0) {
-      perModelBudget.value = true
-      Object.assign(modelBudgets, key.model_budgets)
-    }
+    if (key.model_budgets) Object.assign(modelBudgets, key.model_budgets)
+    if (key.mcp_budgets) Object.assign(mcpBudgets, key.mcp_budgets)
     // Load existing rate limits
     const limits = await getModelLimits(key.id)
     if (limits.length > 0) {
@@ -481,13 +581,19 @@ watch(() => props.editKey, async (key) => {
 }, { immediate: true })
 
 onMounted(async () => {
-  const [modelsRes, scenariosRes, usersRes] = await Promise.all([
+  const [modelsRes, scenariosRes, usersRes, mcpsRes, skillsRes, agentsRes] = await Promise.all([
     getActiveModels(),
     getAllKeyScenarios(),
     getUsers(1, 200),
+    getMcpServers(1, 200),
+    getSkills(1, 200),
+    getAgents(1, 200),
   ])
   models.value = modelsRes
   scenarios.value = scenariosRes
   allUsers.value = usersRes.items.map(u => ({ id: u.id, username: u.username, display_name: u.display_name }))
+  mcpServers.value = mcpsRes.items
+  skills.value = skillsRes.items
+  agentItems.value = agentsRes.items
 })
 </script>

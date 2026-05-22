@@ -13,6 +13,8 @@ import type {
   UpdateAccessGroupParams,
   RouterSettings,
   UpdateRouterSettingsParams,
+  ModelVisibility,
+  UpdateModelPublishParams,
 } from '../types/model'
 
 export function getModels(page: number = 1, pageSize: number = 50, category?: string): Promise<ModelListResult> {
@@ -79,4 +81,14 @@ export function getRouterSettings(): Promise<RouterSettings> {
 
 export function updateRouterSettings(params: UpdateRouterSettingsParams): Promise<RouterSettings> {
   return request<RouterSettings>('/api/v1/models/router-settings/current', { method: 'PUT', body: params })
+}
+
+// --- Model Publish / Visibility ---
+
+export function getModelVisibility(modelId: number): Promise<ModelVisibility> {
+  return request<ModelVisibility>(`/api/v1/models/${modelId}/visibility`)
+}
+
+export function updateModelPublish(modelId: number, params: UpdateModelPublishParams): Promise<ModelVisibility> {
+  return request<ModelVisibility>(`/api/v1/models/${modelId}/publish`, { method: 'PUT', body: params })
 }

@@ -34,6 +34,7 @@ async def create_user(
     phone: str = "",
     display_name: str = "",
     position: str = "",
+    avatar: str = "",
     is_active: bool = True,
 ) -> dict:
     existing = await user_repo.find_user_by_username_or_email(session, username, email)
@@ -48,6 +49,7 @@ async def create_user(
         phone=phone,
         display_name=display_name,
         position=position,
+        avatar=avatar,
         is_active=is_active,
     )
     user = await user_repo.create_user(session, user)
@@ -73,6 +75,7 @@ async def update_user(
     phone: str | None = None,
     display_name: str | None = None,
     position: str | None = None,
+    avatar: str | None = None,
     is_active: bool | None = None,
 ) -> dict:
     user = await user_repo.find_user_by_id(session, user_id)
@@ -91,6 +94,8 @@ async def update_user(
         user.display_name = display_name
     if position is not None:
         user.position = position
+    if avatar is not None:
+        user.avatar = avatar
     if is_active is not None:
         user.is_active = is_active
 
