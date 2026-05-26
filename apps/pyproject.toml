@@ -17,6 +17,8 @@ dependencies = [
     "bcrypt==4.0.1",
     "httpx>=0.27.0",
     "sqlalchemy[asyncio]>=2.0.0",
+    "openai>=1.30.0",
+    "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]

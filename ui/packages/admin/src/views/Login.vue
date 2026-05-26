@@ -88,7 +88,8 @@ async function handleLogin(): Promise<void> {
 
       <!-- 底部说明 -->
       <p class="mt-6 text-center text-xs text-slate-400">
-        统一管理模型、Skill 和 MCP Server，构建企业级 AI 身份体系
+        前往
+        <a href="/" class="text-purple-600 hover:underline">用户端</a>
       </p>
     </div>
 

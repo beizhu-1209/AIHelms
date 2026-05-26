@@ -71,3 +71,12 @@ async def remove_member(session: AsyncSession, user_id: int, project_id: int) ->
             UserProject.user_id == user_id, UserProject.project_id == project_id
         )
     )
+
+
+async def find_paginated(
+    session: AsyncSession, page: int, page_size: int, keyword: str | None = None
+) -> tuple[list[Project], int]:
+    kw = keyword or ""
+    total = await count_projects(session, kw)
+    items = await find_projects(session, page, page_size, kw)
+    return items, total

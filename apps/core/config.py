@@ -22,11 +22,23 @@ class Settings(BaseSettings):
     litellm_host: str = "localhost"
     litellm_port: int = 4000
     litellm_master_key: str = ""
+    # 对外暴露给用户客户端的 LiteLLM 地址（自动由 NGINX_SERVER_NAME + LITELLM_PORT 拼接）
+    litellm_public_url: str = ""
+    nginx_server_name: str = "localhost"
+    web_port: int = 80
+    # 平台对外访问地址（自动由 NGINX_SERVER_NAME + WEB_PORT 拼接），用于生成 skill 下载链接等
+    platform_public_url: str = ""
+
+    # 日志
+    log_level: str = "WARNING"
 
     # 应用
     secret_key: str = "dev-secret-key"
     access_token_expire_minutes: int = 60 * 24
     super_admin_password: str = "admin123"
+
+    # 成本计算
+    usd_to_cny_rate: float = 7.0  # LiteLLM spend(美元) → 人民币汇率
 
     # Gunicorn
     gunicorn_workers: int = 0
@@ -41,6 +53,19 @@ class Settings(BaseSettings):
     celery_loglevel: str = "info"
     celery_prefetch_multiplier: int = 1
 
+    # 文件存储（开发：项目根 ../data；生产容器内：/data）
+    data_dir: str = "../data"
+    skills_storage_dir: str = ""
+    uploads_storage_dir: str = ""
+    exports_storage_dir: str = ""
+
+    # 管理员日志保留天数
+    audit_log_retention_days: int = 180
+
+    # LLM 调用日志同步与清理
+    llm_log_sync_interval_minutes: int = 5
+    llm_log_retention_days: int = 0  # 0 = 不清理
+
     @model_validator(mode="after")
     def build_urls(self) -> "Settings":
         if not self.database_url:
@@ -54,6 +79,20 @@ class Settings(BaseSettings):
             )
         if not self.litellm_url:
             self.litellm_url = f"http://{self.litellm_host}:{self.litellm_port}"
+        if not self.litellm_public_url:
+            # 用 NGINX_SERVER_NAME + LITELLM_PORT 拼接对外 LiteLLM 地址
+            host = self.nginx_server_name.split()[0] if self.nginx_server_name else "localhost"
+            self.litellm_public_url = f"http://{host}:{self.litellm_port}"
+        if not self.platform_public_url:
+            host = self.nginx_server_name.split()[0] if self.nginx_server_name else "localhost"
+            port_suffix = "" if self.web_port == 80 else f":{self.web_port}"
+            self.platform_public_url = f"http://{host}{port_suffix}"
+        if not self.skills_storage_dir:
+            self.skills_storage_dir = f"{self.data_dir}/skills"
+        if not self.uploads_storage_dir:
+            self.uploads_storage_dir = f"{self.data_dir}/uploads"
+        if not self.exports_storage_dir:
+            self.exports_storage_dir = f"{self.data_dir}/exports"
         return self
 
     class Config:

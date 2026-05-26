@@ -95,3 +95,19 @@ async def find_managers(session: AsyncSession, dept_id: int) -> list[User]:
         .where(UserDepartment.department_id == dept_id, UserDepartment.is_manager == True)
     )
     return list(result.scalars().all())
+
+
+async def find_paginated(
+    session: AsyncSession, page: int, page_size: int, keyword: str | None = None
+) -> tuple[list[Department], int]:
+    stmt_count = select(func.count(Department.id)).where(Department.is_active == True)
+    stmt_list = select(Department).where(Department.is_active == True).order_by(Department.sort_order, Department.id)
+    if keyword:
+        pattern = f"%{keyword}%"
+        stmt_count = stmt_count.where(Department.name.ilike(pattern))
+        stmt_list = stmt_list.where(Department.name.ilike(pattern))
+    total = (await session.execute(stmt_count)).scalar_one()
+    offset = (page - 1) * page_size
+    stmt_list = stmt_list.limit(page_size).offset(offset)
+    result = await session.execute(stmt_list)
+    return list(result.scalars().all()), total

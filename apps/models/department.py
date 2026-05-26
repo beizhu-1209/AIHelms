@@ -11,6 +11,7 @@ class UpdateDepartmentRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=128)
     description: str | None = Field(None, max_length=500)
     sort_order: int | None = None
+    is_active: bool | None = None
 
 
 class UpdateDepartmentManagersRequest(BaseModel):

@@ -18,3 +18,8 @@ class ForbiddenError(Exception):
 class UnauthorizedError(Exception):
     def __init__(self, message: str = "未认证或 token 已过期"):
         super().__init__(message)
+
+
+class ValidationError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)

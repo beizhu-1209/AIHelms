@@ -18,7 +18,7 @@ async def list_roles(
     return {"code": 200, "message": "ok", "data": roles}
 
 
-@router.post("")
+@router.post("", summary="创建角色")
 async def create_role(
     req: CreateRoleRequest,
     session: AsyncSession = Depends(get_db),
@@ -28,10 +28,10 @@ async def create_role(
         role = await role_service.create_role(session, req.name, req.display_name, req.description)
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": role}
+    return {"code": 200, "message": "角色创建成功", "data": role}
 
 
-@router.put("/{role_id}")
+@router.put("/{role_id}", summary="更新角色")
 async def update_role(
     role_id: int,
     req: UpdateRoleRequest,
@@ -44,10 +44,10 @@ async def update_role(
         raise HTTPException(status_code=404, detail="角色不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": role}
+    return {"code": 200, "message": "角色更新成功", "data": role}
 
 
-@router.delete("/{role_id}")
+@router.delete("/{role_id}", summary="删除角色")
 async def delete_role(
     role_id: int,
     session: AsyncSession = Depends(get_db),
@@ -59,10 +59,10 @@ async def delete_role(
         raise HTTPException(status_code=404, detail="角色不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": None}
+    return {"code": 200, "message": "角色删除成功", "data": None}
 
 
-@router.put("/{role_id}/permissions")
+@router.put("/{role_id}/permissions", summary="更新角色权限")
 async def update_role_permissions(
     role_id: int,
     req: UpdateRolePermissionsRequest,
@@ -75,7 +75,7 @@ async def update_role_permissions(
         raise HTTPException(status_code=404, detail="角色不存在")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"code": 200, "message": "ok", "data": role}
+    return {"code": 200, "message": "权限更新成功", "data": role}
 
 
 @router.get("/permissions")

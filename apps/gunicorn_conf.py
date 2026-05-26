@@ -8,6 +8,10 @@ timeout = int(os.environ.get("GUNICORN_TIMEOUT", 120))
 keepalive = int(os.environ.get("GUNICORN_KEEPALIVE", 5))
 max_requests = int(os.environ.get("GUNICORN_MAX_REQUESTS", 1000))
 max_requests_jitter = int(os.environ.get("GUNICORN_MAX_REQUESTS_JITTER", 50))
-accesslog = "-"
-errorlog = "-"
 loglevel = os.environ.get("GUNICORN_LOGLEVEL", "info")
+
+# Log to both stdout and file
+log_dir = os.environ.get("LOG_DIR", "/logs")
+os.makedirs(log_dir, exist_ok=True)
+accesslog = os.path.join(log_dir, "gunicorn_access.log")
+errorlog = os.path.join(log_dir, "gunicorn_error.log")

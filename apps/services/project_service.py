@@ -39,10 +39,11 @@ async def create_project(session: AsyncSession, name: str, description: str = ""
         logger.warning("litellm sync failed for project %s", project.id)
 
     await session.commit()
+    await session.refresh(project)
     return _serialize_project(project)
 
 
-async def update_project(session: AsyncSession, project_id: int, name: str | None = None, description: str | None = None) -> dict:
+async def update_project(session: AsyncSession, project_id: int, name: str | None = None, description: str | None = None, is_active: bool | None = None) -> dict:
     project = await project_repo.find_by_id(session, project_id)
     if not project:
         raise NotFoundError("project", project_id)
@@ -51,8 +52,19 @@ async def update_project(session: AsyncSession, project_id: int, name: str | Non
         project.name = name
     if description is not None:
         project.description = description
+    if is_active is not None and is_active != project.is_active:
+        project.is_active = is_active
+        if project.litellm_team_id:
+            try:
+                if is_active:
+                    await litellm_client.unblock_team(project.litellm_team_id)
+                else:
+                    await litellm_client.block_team(project.litellm_team_id)
+            except litellm_client.LiteLLMError:
+                logger.warning("litellm block/unblock team failed for project %s", project_id)
 
     await session.commit()
+    await session.refresh(project)
     return _serialize_project(project)
 
 
@@ -70,9 +82,9 @@ async def delete_project(session: AsyncSession, project_id: int) -> None:
 
     if project.litellm_team_id:
         try:
-            await litellm_client.delete_team(project.litellm_team_id)
+            await litellm_client.block_team(project.litellm_team_id)
         except litellm_client.LiteLLMError:
-            logger.warning("litellm delete team failed for project %s", project_id)
+            logger.warning("litellm block team failed for project %s", project_id)
 
 
 async def get_project_members(session: AsyncSession, project_id: int) -> list[dict]:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import {
   getProjects,
   createProject,
@@ -32,6 +32,15 @@ const isEditing = ref(false)
 
 const addMemberKeyword = ref('')
 const addMemberResults = ref<{ id: number; username: string; display_name: string }[]>([])
+const selectedUserIds = ref<Set<number>>(new Set())
+const isSearching = ref(false)
+const searchPage = ref(1)
+const searchHasMore = ref(false)
+const isLoadingMore = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+const PAGE_SIZE = 20
+
+const existingMemberIds = computed(() => new Set(members.value.map((m: ProjectMember) => m.id)))
 
 async function fetchProjects(): Promise<void> {
   const result = await getProjects(1, 100)
@@ -106,22 +115,76 @@ async function handleConfirmDelete(): Promise<void> {
 }
 
 async function handleSearchUsers(): Promise<void> {
-  if (!addMemberKeyword.value) return
-  const result = await getUsers(1, 20, addMemberKeyword.value)
+  isSearching.value = true
+  searchPage.value = 1
+  const result = await getUsers(1, PAGE_SIZE, addMemberKeyword.value || undefined)
   addMemberResults.value = result.items.map((u: { id: number; username: string; display_name: string }) => ({
     id: u.id,
     username: u.username,
     display_name: u.display_name,
   }))
+  searchHasMore.value = result.total > PAGE_SIZE
+  isSearching.value = false
 }
 
-async function handleAddMember(userId: number): Promise<void> {
-  if (!selectedProject.value) return
+async function handleLoadMore(): Promise<void> {
+  if (isLoadingMore.value || !searchHasMore.value) return
+  isLoadingMore.value = true
+  searchPage.value += 1
+  const result = await getUsers(searchPage.value, PAGE_SIZE, addMemberKeyword.value || undefined)
+  const newItems = result.items.map((u: { id: number; username: string; display_name: string }) => ({
+    id: u.id,
+    username: u.username,
+    display_name: u.display_name,
+  }))
+  addMemberResults.value = [...addMemberResults.value, ...newItems]
+  searchHasMore.value = addMemberResults.value.length < result.total
+  isLoadingMore.value = false
+}
+
+function handleListScroll(event: Event): void {
+  const el = event.target as HTMLElement
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+    handleLoadMore()
+  }
+}
+
+function handleSearchInput(): void {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    handleSearchUsers()
+  }, 300)
+}
+
+function toggleUserSelection(userId: number): void {
+  const newSet = new Set(selectedUserIds.value)
+  if (newSet.has(userId)) {
+    newSet.delete(userId)
+  } else {
+    newSet.add(userId)
+  }
+  selectedUserIds.value = newSet
+}
+
+function toggleSelectAll(): void {
+  const selectableUsers = addMemberResults.value.filter(u => !existingMemberIds.value.has(u.id))
+  if (selectedUserIds.value.size === selectableUsers.length && selectableUsers.length > 0) {
+    selectedUserIds.value = new Set()
+  } else {
+    selectedUserIds.value = new Set(selectableUsers.map(u => u.id))
+  }
+}
+
+async function handleBatchAddMembers(): Promise<void> {
+  if (!selectedProject.value || selectedUserIds.value.size === 0) return
   try {
-    await addProjectMember(selectedProject.value.id, userId)
+    for (const userId of selectedUserIds.value) {
+      await addProjectMember(selectedProject.value.id, userId)
+    }
     showAddMember.value = false
     addMemberKeyword.value = ''
     addMemberResults.value = []
+    selectedUserIds.value = new Set()
     await fetchMembers(selectedProject.value.id)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '添加失败'
@@ -192,7 +255,7 @@ onMounted(fetchProjects)
             <button
               v-if="hasPermission('project:update')"
               class="rounded-md bg-purple-600 px-2.5 py-1 text-xs font-medium text-white transition-all hover:bg-purple-500"
-              @click="showAddMember = true"
+              @click="showAddMember = true; handleSearchUsers()"
             >
               添加成员
             </button>
@@ -276,32 +339,100 @@ onMounted(fetchProjects)
       </div>
     </div>
 
-    <!-- 添加成员弹窗 -->
+    <!-- 添加成员弹窗 - 穿梭框 -->
     <div v-if="showAddMember" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-      <div class="w-full max-w-md rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur-xl">
+      <div class="w-full max-w-2xl rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur-xl">
         <h3 class="mb-4 text-lg font-semibold text-slate-900">添加成员</h3>
-        <div class="mb-4 flex gap-2">
-          <input
-            v-model="addMemberKeyword"
-            placeholder="搜索用户名或姓名"
-            class="flex h-10 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-            @keyup.enter="handleSearchUsers"
-          />
-          <button class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-purple-500" @click="handleSearchUsers">搜索</button>
-        </div>
-        <div class="mb-4 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
-          <div
-            v-for="user in addMemberResults"
-            :key="user.id"
-            class="flex items-center justify-between px-4 py-2 transition-colors hover:bg-slate-50"
-          >
-            <span class="text-sm text-slate-700">{{ user.display_name || user.username }}</span>
-            <button class="text-xs text-purple-600 transition-colors hover:text-purple-700" @click="handleAddMember(user.id)">添加</button>
+        <div class="flex gap-4">
+          <!-- 左侧：搜索候选 -->
+          <div class="flex-1">
+            <div class="mb-2">
+              <input
+                v-model="addMemberKeyword"
+                placeholder="输入用户名或姓名搜索"
+                class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                @input="handleSearchInput"
+              />
+            </div>
+            <div class="h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white" @scroll="handleListScroll">
+              <div v-if="addMemberResults.length > 0" class="flex items-center border-b border-slate-100 px-3 py-2">
+                <label class="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500/20"
+                    :checked="selectedUserIds.size > 0 && selectedUserIds.size === addMemberResults.filter(u => !existingMemberIds.has(u.id)).length"
+                    @change="toggleSelectAll"
+                  />
+                  全选
+                </label>
+              </div>
+              <div
+                v-for="user in addMemberResults"
+                :key="user.id"
+                class="flex items-center gap-3 px-3 py-2 transition-colors"
+                :class="existingMemberIds.has(user.id) ? 'cursor-not-allowed bg-slate-50 opacity-50' : selectedUserIds.has(user.id) ? 'cursor-pointer bg-purple-50' : 'cursor-pointer hover:bg-slate-50'"
+                @click="!existingMemberIds.has(user.id) && toggleUserSelection(user.id)"
+              >
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500/20"
+                  :checked="selectedUserIds.has(user.id) || existingMemberIds.has(user.id)"
+                  :disabled="existingMemberIds.has(user.id)"
+                  @click.stop
+                  @change="!existingMemberIds.has(user.id) && toggleUserSelection(user.id)"
+                />
+                <div class="flex-1 truncate">
+                  <span class="text-sm text-slate-900">{{ user.display_name || user.username }}</span>
+                  <span v-if="user.display_name" class="ml-2 text-xs text-slate-400">{{ user.username }}</span>
+                </div>
+                <span v-if="existingMemberIds.has(user.id)" class="shrink-0 text-xs text-slate-400">已添加</span>
+              </div>
+              <div v-if="isLoadingMore" class="py-2 text-center text-xs text-slate-400">加载中...</div>
+              <div v-else-if="searchHasMore && addMemberResults.length > 0" class="py-2 text-center text-xs text-slate-300">滚动加载更多</div>
+              <div v-if="isSearching && addMemberResults.length === 0" class="py-8 text-center text-sm text-slate-400">加载中...</div>
+              <div v-else-if="!isSearching && addMemberResults.length === 0" class="py-8 text-center text-sm text-slate-400">暂无用户</div>
+            </div>
           </div>
-          <div v-if="addMemberResults.length === 0" class="py-4 text-center text-sm text-slate-400">搜索用户以添加</div>
+
+          <!-- 右侧：已选列表 -->
+          <div class="w-48 shrink-0">
+            <div class="mb-2 flex h-10 items-center">
+              <span class="text-sm font-medium text-slate-700">已选 {{ selectedUserIds.size }} 人</span>
+            </div>
+            <div class="h-64 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50">
+              <div
+                v-for="user in addMemberResults.filter(u => selectedUserIds.has(u.id))"
+                :key="user.id"
+                class="flex items-center justify-between px-3 py-2"
+              >
+                <span class="truncate text-sm text-slate-700">{{ user.display_name || user.username }}</span>
+                <button
+                  class="shrink-0 text-xs text-red-400 transition-colors hover:text-red-600"
+                  @click="toggleUserSelection(user.id)"
+                >
+                  移除
+                </button>
+              </div>
+              <div v-if="selectedUserIds.size === 0" class="py-8 text-center text-sm text-slate-400">请从左侧选择</div>
+            </div>
+          </div>
         </div>
-        <div class="flex justify-end">
-          <button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200" @click="showAddMember = false; addMemberResults = []">关闭</button>
+
+        <p v-if="errorMessage" class="mt-3 text-sm text-red-500">{{ errorMessage }}</p>
+        <div class="mt-4 flex justify-end gap-3">
+          <button
+            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
+            @click="showAddMember = false; addMemberResults = []; selectedUserIds = new Set()"
+          >
+            取消
+          </button>
+          <button
+            class="rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 active:scale-[0.98] disabled:opacity-50"
+            :disabled="selectedUserIds.size === 0"
+            @click="handleBatchAddMembers"
+          >
+            确认添加 ({{ selectedUserIds.size }})
+          </button>
         </div>
       </div>
     </div>

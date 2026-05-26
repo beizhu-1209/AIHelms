@@ -21,6 +21,7 @@ uv.lock
 .coverage
 htmlcov/
 .mypy_cache/
+.ruff_cache/
 
 # Node.js
 node_modules/
@@ -60,11 +61,22 @@ docker/db/migrations/*.sql
 *.log
 logs/
 
+# 用户数据（运行时上传/导出的内容不提交，保留目录结构通过 .gitkeep）
+data/skills/*
+data/uploads/*
+data/exports/*
+data/celerybeat/*
+
+
 # Roadmap (local reference, not committed)
 dev/roadmap
 
 # local dev resouce
 dev/resource
+dev/test0525
+
+# Test reports (local only)
+dev/test/
 
 # playwright test
 

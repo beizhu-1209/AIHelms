@@ -5,6 +5,7 @@ export interface User {
   phone: string
   display_name: string
   position: string
+  avatar: string
   is_active: boolean
   is_admin: boolean
   litellm_user_id: string | null
@@ -22,6 +23,7 @@ export interface CreateUserParams {
   phone?: string
   display_name?: string
   position?: string
+  avatar?: string
   is_active?: boolean
   department_ids?: number[]
   project_ids?: number[]
@@ -32,6 +34,7 @@ export interface UpdateUserParams {
   phone?: string
   display_name?: string
   position?: string
+  avatar?: string
   is_active?: boolean
 }
 

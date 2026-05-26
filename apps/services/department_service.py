@@ -35,23 +35,6 @@ async def create_department(session: AsyncSession, name: str, parent_id: int | N
 
     dept = Department(name=name, parent_id=parent_id, description=description)
     dept = await department_repo.create(session, dept)
-
-    children_count = await department_repo.count_children(session, dept.id)
-    if children_count == 0:
-        try:
-            result = await litellm_client.create_team(
-                team_alias=f"dept_{dept.id}_{name}",
-                metadata={"type": "department", "dept_id": dept.id},
-            )
-            dept.litellm_team_id = result.get("team_id")
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm sync failed for dept %s", dept.id)
-
-    if parent_id:
-        parent = await department_repo.find_by_id(session, parent_id)
-        if parent and parent.litellm_team_id:
-            parent.litellm_team_id = None
-
     await session.commit()
     await session.refresh(dept)
     data = _serialize_dept(dept)
@@ -59,7 +42,7 @@ async def create_department(session: AsyncSession, name: str, parent_id: int | N
     return data
 
 
-async def update_department(session: AsyncSession, dept_id: int, name: str | None = None, description: str | None = None, sort_order: int | None = None) -> dict:
+async def update_department(session: AsyncSession, dept_id: int, name: str | None = None, description: str | None = None, sort_order: int | None = None, is_active: bool | None = None) -> dict:
     dept = await department_repo.find_by_id(session, dept_id)
     if not dept:
         raise NotFoundError("department", dept_id)
@@ -70,6 +53,16 @@ async def update_department(session: AsyncSession, dept_id: int, name: str | Non
         dept.description = description
     if sort_order is not None:
         dept.sort_order = sort_order
+    if is_active is not None and is_active != dept.is_active:
+        dept.is_active = is_active
+        if dept.litellm_team_id:
+            try:
+                if is_active:
+                    await litellm_client.unblock_team(dept.litellm_team_id)
+                else:
+                    await litellm_client.block_team(dept.litellm_team_id)
+            except litellm_client.LiteLLMError:
+                logger.warning("litellm block/unblock team failed for dept %s", dept_id)
 
     await session.commit()
     return await get_department_by_id(session, dept_id)
@@ -90,12 +83,6 @@ async def delete_department(session: AsyncSession, dept_id: int) -> None:
 
     dept.is_active = False
     await session.commit()
-
-    if dept.litellm_team_id:
-        try:
-            await litellm_client.delete_team(dept.litellm_team_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm delete team failed for dept %s", dept_id)
 
 
 async def get_department_members(session: AsyncSession, dept_id: int) -> list[dict]:
@@ -134,13 +121,6 @@ async def add_department_member(session: AsyncSession, dept_id: int, user_id: in
         raise ConflictError("用户已在该部门中")
 
     await department_repo.add_member(session, user_id, dept_id)
-
-    if dept.litellm_team_id and user.litellm_user_id:
-        try:
-            await litellm_client.add_team_member(dept.litellm_team_id, user.litellm_user_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm add member failed: dept=%s user=%s", dept_id, user_id)
-
     await session.commit()
 
 
@@ -154,13 +134,6 @@ async def remove_department_member(session: AsyncSession, dept_id: int, user_id:
         raise NotFoundError("user", user_id)
 
     await department_repo.remove_member(session, user_id, dept_id)
-
-    if dept.litellm_team_id and user.litellm_user_id:
-        try:
-            await litellm_client.remove_team_member(dept.litellm_team_id, user.litellm_user_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm remove member failed: dept=%s user=%s", dept_id, user_id)
-
     await session.commit()
 
 

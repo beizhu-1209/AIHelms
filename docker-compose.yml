@@ -6,9 +6,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-aihelms}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aihelms}
       POSTGRES_DB: ${POSTGRES_DB:-aihelms}
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
     networks:
       - internal
     healthcheck:
@@ -32,13 +35,15 @@ services:
       retries: 5
 
   litellm:
-    image: docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.3
+    image: docker.litellm.ai/berriai/litellm:v1.85.1
     restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}?schema=public
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      STORE_MODEL_IN_DB: "True"
+      TZ: Asia/Shanghai
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:
@@ -71,7 +76,13 @@ services:
       CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-0}
       CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
       CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
-    command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
+      AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
+      LOG_DIR: /logs
+      DATA_DIR: /data
+    volumes:
+      - ./logs:/logs
+      - ./data:/data
+    command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & celery -A celery_app beat --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
     networks:
       - internal
       - external

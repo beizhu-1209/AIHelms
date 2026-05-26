@@ -14,9 +14,13 @@ export interface CurrentUser {
   email: string
   is_active: boolean
   is_admin: boolean
+  position?: string
+  display_name?: string
+  avatar?: string
   created_at: string
   permissions: string[]
   roles: { id: number; name: string; display_name: string }[]
+  departments?: { id: number; name: string }[]
 }
 
 export interface ChangePasswordParams {

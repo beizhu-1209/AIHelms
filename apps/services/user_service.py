@@ -7,6 +7,7 @@ from exceptions import NotFoundError, ConflictError
 from models.db import User
 from repositories import user_repo
 from services import litellm_client
+from services import ai_key_service
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ async def create_user(
     phone: str = "",
     display_name: str = "",
     position: str = "",
+    avatar: str = "",
     is_active: bool = True,
 ) -> dict:
     existing = await user_repo.find_user_by_username_or_email(session, username, email)
@@ -47,6 +49,7 @@ async def create_user(
         phone=phone,
         display_name=display_name,
         position=position,
+        avatar=avatar,
         is_active=is_active,
     )
     user = await user_repo.create_user(session, user)
@@ -57,6 +60,9 @@ async def create_user(
         user.litellm_user_id = litellm_user_id
     except litellm_client.LiteLLMError:
         logger.warning("litellm sync failed for user %s, skipping", user.id)
+
+    # Auto-create personal main key (disabled by default)
+    await ai_key_service.create_personal_main_key(session, user.id, username)
 
     await session.commit()
     return _serialize_user(user)
@@ -69,6 +75,7 @@ async def update_user(
     phone: str | None = None,
     display_name: str | None = None,
     position: str | None = None,
+    avatar: str | None = None,
     is_active: bool | None = None,
 ) -> dict:
     user = await user_repo.find_user_by_id(session, user_id)
@@ -87,6 +94,8 @@ async def update_user(
         user.display_name = display_name
     if position is not None:
         user.position = position
+    if avatar is not None:
+        user.avatar = avatar
     if is_active is not None:
         user.is_active = is_active
 
@@ -117,6 +126,22 @@ async def update_user_roles(session: AsyncSession, user_id: int, role_ids: list[
     user = await user_repo.find_user_by_id(session, user_id)
     if not user:
         raise NotFoundError("user", user_id)
+
+    # super_admin 角色不可通过后台分配
+    from models.db import Role
+    from sqlalchemy import select
+    if role_ids:
+        result = await session.execute(
+            select(Role).where(Role.id.in_(role_ids))
+        )
+        roles = list(result.scalars().all())
+        assigned_role_names = {r.name for r in roles}
+        if "super_admin" in assigned_role_names:
+            raise ConflictError("super_admin 角色不可手动分配")
+        user.is_admin = "admin" in assigned_role_names
+    else:
+        user.is_admin = False
+
     await user_repo.replace_user_roles(session, user_id, role_ids)
     await session.commit()
 

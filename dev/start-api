@@ -10,6 +10,13 @@ cd "$ROOT/apps"
 eval "$(conda shell.bash hook)"
 conda activate aihelms
 
+# 清除 Python 字节码缓存，确保加载最新代码
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
+# 开发环境日志目录
+export LOG_DIR="$ROOT/logs"
+mkdir -p "$LOG_DIR"
+
 PIDS=()
 trap 'kill "${PIDS[@]}" 2>/dev/null; wait' EXIT
 
@@ -17,6 +24,9 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000 &
 PIDS+=($!)
 
 celery -A celery_app worker --loglevel=info &
+PIDS+=($!)
+
+celery -A celery_app beat --loglevel=info &
 PIDS+=($!)
 
 wait
