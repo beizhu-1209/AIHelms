@@ -99,14 +99,15 @@ async function handleCreateCategory(): Promise<void> {
 }
 
 async function handleCreatePlatform(): Promise<void> {
-  if (!platformFormName.value.trim()) {
-    toast.error('请输入平台标识')
+  if (!platformFormLabel.value.trim()) {
+    toast.error('请输入平台名称')
     return
   }
   try {
+    const label = platformFormLabel.value.trim()
     await createAgentPlatform({
-      name: platformFormName.value.trim(),
-      label: platformFormLabel.value.trim() || platformFormName.value.trim(),
+      name: label,
+      label: label,
     })
     toast.success('平台创建成功')
     showPlatformForm.value = false
@@ -318,16 +319,8 @@ onMounted(loadData)
     >
       <div class="w-full max-w-sm rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur-xl">
         <h3 class="mb-4 text-lg font-semibold text-slate-900">新建平台</h3>
-        <div class="mb-3">
-          <label class="mb-1 block text-sm font-medium text-slate-700">标识 (英文)</label>
-          <input
-            v-model="platformFormName"
-            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="如：dify / coze / self"
-          />
-        </div>
         <div class="mb-4">
-          <label class="mb-1 block text-sm font-medium text-slate-700">显示名称</label>
+          <label class="mb-1 block text-sm font-medium text-slate-700">平台名称</label>
           <input
             v-model="platformFormLabel"
             class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"

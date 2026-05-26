@@ -41,6 +41,22 @@ async def list_applications(
     return {"code": 200, "message": "ok", "data": data}
 
 
+@router.get("/my")
+async def list_my_applications(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    resource_type: str | None = None,
+    status: str | None = None,
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """List current user's own resource applications."""
+    data = await resource_application_service.list_applications(
+        session, page, page_size, current_user["id"], resource_type, status
+    )
+    return {"code": 200, "message": "ok", "data": data}
+
+
 @router.get("/{app_id}")
 async def get_application(
     app_id: int,

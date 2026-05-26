@@ -16,7 +16,7 @@ export function testModelAccessStream(params: TestAccessParams): Promise<Respons
   return fetch('/api/v1/access-test/test', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ ...params, stream: true }),
+    body: JSON.stringify(params),
   })
 }
 

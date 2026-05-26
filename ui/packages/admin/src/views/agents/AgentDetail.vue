@@ -17,7 +17,7 @@ import {
   type AiKey,
 } from '@aihelms/shared'
 import { toast, usePermission } from '@aihelms/shared'
-import { ArrowLeft, Trash2, ExternalLink, Copy } from 'lucide-vue-next'
+import { ArrowLeft, Trash2, ExternalLink, Copy, FlaskConical } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import IconPicker from '../../components/IconPicker.vue'
 
@@ -43,7 +43,7 @@ const form = ref({
   icon: '',
   description: '',
   platform: '',
-  category: 'general',
+  category: '',
   department_id: null as number | null,
   project_id: null as number | null,
   cost_attribution: 'owner',
@@ -79,7 +79,7 @@ async function loadData(): Promise<void> {
       getAgentCategories(),
       getAgentPlatforms(),
       getDepartmentTree(),
-      getAiKeys(1, 200),
+      getAiKeys(1, 100),
     ])
     categories.value = cats
     platforms.value = plats
@@ -105,7 +105,7 @@ async function loadData(): Promise<void> {
         requires_approval: a.requires_approval,
       }
     } else {
-      form.value.category = cats[0]?.name || 'general'
+      form.value.category = cats[0]?.name || ''
       form.value.platform = plats[0]?.name || ''
     }
   } catch (e) {
@@ -146,13 +146,13 @@ async function handleSave(): Promise<void> {
       requires_approval: form.value.requires_approval,
     }
     if (isNew.value) {
-      const created = await createAgent(payload)
+      await createAgent(payload)
       toast.success('智能体创建成功')
-      router.replace(`/agents/${created.id}`)
+      router.push('/agents')
     } else if (agentId.value) {
-      const updated = await updateAgent(agentId.value, payload)
+      await updateAgent(agentId.value, payload)
       toast.success('智能体更新成功')
-      agent.value = updated
+      router.push('/agents')
     }
   } catch (e) {
     toast.error((e as { message?: string }).message || '保存失败')
@@ -231,8 +231,10 @@ onMounted(loadData)
               v-model="form.platform"
               class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
             >
+              <option value="" disabled>请选择平台</option>
               <option v-for="p in platforms" :key="p.id" :value="p.name">{{ p.label || p.name }}</option>
             </select>
+            <p v-if="platforms.length === 0" class="mt-1 text-xs text-slate-400">暂无平台，请先在列表页创建</p>
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700">分类</label>
@@ -240,8 +242,10 @@ onMounted(loadData)
               v-model="form.category"
               class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
             >
+              <option value="" disabled>请选择分类</option>
               <option v-for="c in categories" :key="c.id" :value="c.name">{{ c.name }}</option>
             </select>
+            <p v-if="categories.length === 0" class="mt-1 text-xs text-slate-400">暂无分类，请先在列表页创建</p>
           </div>
           <div class="col-span-2">
             <label class="mb-1 block text-sm font-medium text-slate-700">描述</label>
@@ -252,46 +256,54 @@ onMounted(loadData)
             />
           </div>
 
-          <!-- 归属与成本 -->
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">归属部门 *</label>
-            <select
-              v-model="form.department_id"
-              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
-            >
-              <option :value="null">请选择</option>
-              <option v-for="d in flatDepts" :key="d.id" :value="d.id">
-                {{ '　'.repeat(d.depth) + d.name }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">成本归属</label>
-            <select
-              v-model="form.cost_attribution"
-              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
-            >
-              <option value="owner">归属部门/项目（owner）</option>
-              <option value="user">归属使用人（user）</option>
-            </select>
-          </div>
-          <div v-if="form.cost_attribution === 'owner'" class="col-span-2">
-            <label class="mb-1 block text-sm font-medium text-slate-700">绑定场景 Key</label>
-            <select
-              v-model="form.ai_key_id"
-              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
-            >
-              <option :value="null">不绑定</option>
-              <option v-for="k in filteredKeys" :key="k.id" :value="k.id">
-                {{ k.name }} ({{ k.models?.length || 0 }} 模型, {{ k.mcps?.length || 0 }} MCP)
-              </option>
-            </select>
-            <p class="mt-1 text-xs text-slate-400">选择该智能体使用的场景 Key，成本将计入 Key 所属的部门/项目</p>
-          </div>
-          <div v-else class="col-span-2">
-            <p class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              user 模式：系统将为每位用户创建独立的场景 Key，成本归属到个人（二期功能）
-            </p>
+          <!-- 归属与成本（实验功能） -->
+          <div class="col-span-2 mt-2">
+            <div class="flex items-center gap-1.5 mb-3">
+              <FlaskConical class="h-4 w-4 text-amber-500" />
+              <span class="text-xs font-medium text-amber-600">实验功能 — 成本归属</span>
+            </div>
+            <div class="grid grid-cols-2 gap-4 rounded-lg border border-amber-200/60 bg-amber-50/30 p-4">
+              <div>
+                <label class="mb-1 block text-sm font-medium text-slate-700">归属部门</label>
+                <select
+                  v-model="form.department_id"
+                  class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                >
+                  <option :value="null">不选择</option>
+                  <option v-for="d in flatDepts" :key="d.id" :value="d.id">
+                    {{ '\u3000'.repeat(d.depth) + d.name }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium text-slate-700">成本归属</label>
+                <select
+                  v-model="form.cost_attribution"
+                  class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                >
+                  <option value="owner">归属部门/项目（owner）</option>
+                  <option value="user" disabled>归属使用人（user）— 暂未开放</option>
+                </select>
+              </div>
+              <div v-if="form.cost_attribution === 'owner'" class="col-span-2">
+                <label class="mb-1 block text-sm font-medium text-slate-700">绑定场景 Key</label>
+                <select
+                  v-model="form.ai_key_id"
+                  class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                >
+                  <option :value="null">不绑定</option>
+                  <option v-for="k in filteredKeys" :key="k.id" :value="k.id">
+                    {{ k.name }} ({{ k.models?.length || 0 }} 模型, {{ k.mcps?.length || 0 }} MCP)
+                  </option>
+                </select>
+                <p class="mt-1 text-xs text-slate-400">选择该智能体使用的场景 Key，成本将计入 Key 所属的部门/项目</p>
+              </div>
+              <div v-else class="col-span-2">
+                <p class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  user 模式：系统将为每位用户创建独立的场景 Key，成本归属到个人（二期功能）
+                </p>
+              </div>
+            </div>
           </div>
           <div class="col-span-2">
             <div class="mb-1 flex items-center justify-between">

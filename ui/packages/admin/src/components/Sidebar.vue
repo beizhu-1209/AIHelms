@@ -30,6 +30,7 @@ import {
   LayoutDashboard,
   ClipboardCheck,
   UserCircle2,
+  DollarSign,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -91,13 +92,11 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     title: 'AI效能',
     icon: Wallet,
     items: [
-      { label: 'AI总览', icon: LayoutDashboard, path: '/efficiency', permission: 'efficiency:read' },
-      { label: '多维度分析', icon: BarChart3, path: '/efficiency/analysis', permission: 'efficiency:read' },
-      { label: '智能体经营', icon: Bot, path: '/efficiency/agents', permission: 'efficiency:read' },
-      { label: '模型偏好', icon: Cpu, path: '/efficiency/models', permission: 'efficiency:read' },
-      { label: '预算管控', icon: Wallet, path: '/efficiency/budget', permission: 'efficiency:read' },
-      { label: '分析报告', icon: FileText, path: '/efficiency/reports', permission: 'efficiency:read' },
-      { label: 'AI能力评估', icon: Brain, path: '/efficiency/capability', disabled: true },
+      { label: '总览', icon: LayoutDashboard, path: '/efficiency', permission: 'efficiency:read' },
+      { label: '落地', icon: Users, path: '/efficiency/adoption', permission: 'efficiency:read' },
+      { label: '成本', icon: DollarSign, path: '/efficiency/cost', permission: 'efficiency:read' },
+      { label: '预算', icon: Wallet, path: '/efficiency/budget', permission: 'efficiency:read' },
+      { label: '报告', icon: FileText, path: '/efficiency/reports', permission: 'efficiency:read' },
     ],
   },
   {
@@ -221,7 +220,7 @@ function isVisible(item: MenuItem): boolean {
 
     <div class="shrink-0 border-t border-slate-200/60 p-2">
       <a
-        href="/web/"
+        href="/"
         class="mb-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
         title="切换到用户端"
       >

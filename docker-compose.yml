@@ -6,9 +6,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-aihelms}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aihelms}
       POSTGRES_DB: ${POSTGRES_DB:-aihelms}
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
     networks:
       - internal
     healthcheck:
@@ -40,6 +43,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
+      TZ: Asia/Shanghai
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:

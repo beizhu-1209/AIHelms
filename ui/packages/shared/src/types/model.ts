@@ -33,7 +33,7 @@ export interface Deployment {
 
 export interface CreateModelParams {
   name: string
-  model_id: string
+  model_id?: string
   category?: string
   capabilities?: string[]
   description?: string
@@ -41,6 +41,7 @@ export interface CreateModelParams {
 
 export interface UpdateModelParams {
   name?: string
+  model_id?: string
   category?: string
   capabilities?: string[]
   description?: string
@@ -55,6 +56,7 @@ export interface CreateDeploymentParams {
   cost_per_call?: number | null
   monthly_call_quota?: number | null
   model_info?: Record<string, unknown> | null
+  model_id_str?: string
 }
 
 export interface UpdateDeploymentParams {
@@ -79,6 +81,12 @@ export interface ActiveModel {
   id: number
   name: string
   model_id: string
+  category?: string
+  capabilities?: string[]
+  description?: string
+  is_published?: boolean
+  requires_approval?: boolean
+  has_anthropic_deployment?: boolean
 }
 
 export interface AccessGroup {

@@ -49,6 +49,17 @@ async def find_personal_main(session: AsyncSession, user_id: int) -> AiKey | Non
     return result.scalar_one_or_none()
 
 
+async def find_all_main_keys(session: AsyncSession) -> list[AiKey]:
+    """查找所有主 Key（personal_main / dept_main / project_main）。"""
+    result = await session.execute(
+        select(AiKey).where(
+            AiKey.key_type.in_(["personal_main", "dept_main", "project_main"]),
+            AiKey.is_active == True,
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def find_main_key(session: AsyncSession, owner_type: str, owner_id: int, key_type: str) -> AiKey | None:
     result = await session.execute(
         select(AiKey).where(

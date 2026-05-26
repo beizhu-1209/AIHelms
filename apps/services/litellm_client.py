@@ -75,13 +75,13 @@ async def update_team(team_id: str, team_alias: str) -> dict:
 
 
 async def block_team(team_id: str) -> dict:
-    data = {"team_id": team_id, "blocked": True}
-    return await _request("POST", "/team/update", json_data=data)
+    data = {"team_id": team_id}
+    return await _request("POST", "/team/block", json_data=data)
 
 
 async def unblock_team(team_id: str) -> dict:
-    data = {"team_id": team_id, "blocked": False}
-    return await _request("POST", "/team/update", json_data=data)
+    data = {"team_id": team_id}
+    return await _request("POST", "/team/unblock", json_data=data)
 
 
 async def delete_team(team_id: str) -> None:
@@ -194,13 +194,14 @@ async def update_model(
     litellm_params: dict,
     model_info: dict | None = None,
 ) -> dict:
-    data: dict = {
-        "id": litellm_model_id,
-        "model_name": model_name,
-        "litellm_params": litellm_params,
-        "model_info": model_info or {},
-    }
-    return await _request("POST", "/model/update", json_data=data)
+    data: dict = {}
+    if model_name:
+        data["model_name"] = model_name
+    if litellm_params:
+        data["litellm_params"] = litellm_params
+    if model_info is not None:
+        data["model_info"] = model_info
+    return await _request("PATCH", f"/model/{litellm_model_id}/update", json_data=data)
 
 
 # --- Credential Management ---

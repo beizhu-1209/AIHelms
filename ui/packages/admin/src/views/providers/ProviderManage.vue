@@ -15,6 +15,7 @@ import {
   type Credential,
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
+import { Eye, EyeOff } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import AccessTestDialog from '../../components/AccessTestDialog.vue'
 import ProviderIcon from '../../components/ProviderIcon.vue'
@@ -53,9 +54,10 @@ const credFormName = ref('')
 const credFormFormat = ref('')
 const credFormApiBase = ref('')
 const credFormApiKey = ref('')
+const showApiKey = ref(false)
+const maskedApiKey = ref('')
 // 高级设置
 const credFormBillingType = ref('token')
-const credFormTokenPricingMode = ref('unified')
 const credFormInputCost = ref('')
 const credFormOutputCost = ref('')
 const credFormCacheReadCost = ref('')
@@ -66,22 +68,7 @@ const credFormTpm = ref('')
 const credFormMaxParallel = ref('')
 const showCredAdvanced = ref(false)
 
-// 按模型定价
-interface ModelPricingEntry {
-  model: string
-  input: string
-  output: string
-  cacheRead: string
-}
-const credFormModelPricing = ref<ModelPricingEntry[]>([])
-
-function addModelPricingRow(): void {
-  credFormModelPricing.value.push({ model: '', input: '', output: '', cacheRead: '' })
-}
-
-function removeModelPricingRow(idx: number): void {
-  credFormModelPricing.value.splice(idx, 1)
-}
+// 按模型定价（已移除，模型关联统一在模型管理操作）
 
 const providerTypes = [
   { value: 'openai', label: 'OpenAI' },
@@ -237,6 +224,9 @@ async function handleSubmitProvider(): Promise<void> {
 async function handleToggleProvider(provider: Provider): Promise<void> {
   await updateProvider(provider.id, { is_active: !provider.is_active })
   await fetchProviders()
+  if (selectedProvider.value?.id === provider.id) {
+    selectedProvider.value = providers.value.find(p => p.id === provider.id) || null
+  }
 }
 
 async function handleConfirmDeleteProvider(): Promise<void> {
@@ -265,8 +255,9 @@ function handleCreateCred(): void {
   credFormFormat.value = availableFormats.value.length === 1 ? availableFormats.value[0].value : ''
   credFormApiBase.value = ''
   credFormApiKey.value = ''
+  showApiKey.value = false
+  maskedApiKey.value = ''
   credFormBillingType.value = 'token'
-  credFormTokenPricingMode.value = 'unified'
   credFormInputCost.value = ''
   credFormOutputCost.value = ''
   credFormCacheReadCost.value = ''
@@ -275,7 +266,6 @@ function handleCreateCred(): void {
   credFormRpm.value = ''
   credFormTpm.value = ''
   credFormMaxParallel.value = ''
-  credFormModelPricing.value = []
   showCredAdvanced.value = false
   credError.value = ''
   showCredForm.value = true
@@ -287,10 +277,11 @@ function handleEditCred(cred: Credential): void {
   credFormName.value = cred.credential_name
   credFormFormat.value = (cred.credential_info?.format as string) || (cred.credential_info?.custom_llm_provider as string) || ''
   credFormApiBase.value = (cred.credential_info?.api_base as string) || ''
-  credFormApiKey.value = ''
+  credFormApiKey.value = cred.credential_values?.api_key || ''
+  showApiKey.value = false
+  maskedApiKey.value = cred.credential_values?.api_key || ''
   const info = cred.credential_info || {}
   credFormBillingType.value = (info.billing_type as string) || 'token'
-  credFormTokenPricingMode.value = (info.token_pricing_mode as string) || 'unified'
   credFormInputCost.value = info.input_cost_per_million_tokens ? String(info.input_cost_per_million_tokens) : ''
   credFormOutputCost.value = info.output_cost_per_million_tokens ? String(info.output_cost_per_million_tokens) : ''
   credFormCacheReadCost.value = info.cache_read_cost_per_million_tokens ? String(info.cache_read_cost_per_million_tokens) : ''
@@ -299,19 +290,7 @@ function handleEditCred(cred: Credential): void {
   credFormRpm.value = info.rpm ? String(info.rpm) : ''
   credFormTpm.value = info.tpm ? String(info.tpm) : ''
   credFormMaxParallel.value = info.max_parallel_requests ? String(info.max_parallel_requests) : ''
-  // 加载按模型定价
-  const mp = info.model_pricing as Record<string, Record<string, number>> | undefined
-  if (mp && typeof mp === 'object') {
-    credFormModelPricing.value = Object.entries(mp).map(([model, prices]) => ({
-      model,
-      input: prices.input_cost_per_million_tokens ? String(prices.input_cost_per_million_tokens) : '',
-      output: prices.output_cost_per_million_tokens ? String(prices.output_cost_per_million_tokens) : '',
-      cacheRead: prices.cache_read_cost_per_million_tokens ? String(prices.cache_read_cost_per_million_tokens) : '',
-    }))
-  } else {
-    credFormModelPricing.value = []
-  }
-  showCredAdvanced.value = !!(credFormRpm.value || credFormTpm.value || credFormInputCost.value || credFormCostPerCall.value || credFormModelPricing.value.length)
+  showCredAdvanced.value = !!(credFormRpm.value || credFormTpm.value || credFormInputCost.value || credFormCostPerCall.value)
   credError.value = ''
   showCredForm.value = true
 }
@@ -335,13 +314,11 @@ async function handleSubmitCred(): Promise<void> {
     credError.value = '请填写 API Base'
     return
   }
-  if (selectedFormatNeedsKey.value && !credFormApiKey.value && !isEditingCred.value) {
-    credError.value = '请填写 API Key'
-    return
-  }
 
   const credValues: Record<string, string> = {}
-  if (credFormApiKey.value) credValues.api_key = credFormApiKey.value
+  if (credFormApiKey.value && credFormApiKey.value !== maskedApiKey.value) {
+    credValues.api_key = credFormApiKey.value
+  }
   if (credFormApiBase.value) credValues.api_base = credFormApiBase.value
 
   const credInfo: Record<string, unknown> = {
@@ -351,23 +328,9 @@ async function handleSubmitCred(): Promise<void> {
     billing_type: credFormBillingType.value,
   }
   if (credFormBillingType.value === 'token') {
-    credInfo.token_pricing_mode = credFormTokenPricingMode.value
-    if (credFormTokenPricingMode.value === 'unified') {
-      if (credFormInputCost.value) credInfo.input_cost_per_million_tokens = Number(credFormInputCost.value)
-      if (credFormOutputCost.value) credInfo.output_cost_per_million_tokens = Number(credFormOutputCost.value)
-      if (credFormCacheReadCost.value) credInfo.cache_read_cost_per_million_tokens = Number(credFormCacheReadCost.value)
-    } else if (credFormTokenPricingMode.value === 'per_model' && credFormModelPricing.value.length > 0) {
-      const mp: Record<string, Record<string, number>> = {}
-      for (const row of credFormModelPricing.value) {
-        if (!row.model) continue
-        const entry: Record<string, number> = {}
-        if (row.input) entry.input_cost_per_million_tokens = Number(row.input)
-        if (row.output) entry.output_cost_per_million_tokens = Number(row.output)
-        if (row.cacheRead) entry.cache_read_cost_per_million_tokens = Number(row.cacheRead)
-        mp[row.model] = entry
-      }
-      if (Object.keys(mp).length > 0) credInfo.model_pricing = mp
-    }
+    if (credFormInputCost.value) credInfo.input_cost_per_million_tokens = Number(credFormInputCost.value)
+    if (credFormOutputCost.value) credInfo.output_cost_per_million_tokens = Number(credFormOutputCost.value)
+    if (credFormCacheReadCost.value) credInfo.cache_read_cost_per_million_tokens = Number(credFormCacheReadCost.value)
   } else if (credFormBillingType.value === 'per_call') {
     if (credFormCostPerCall.value) credInfo.cost_per_call = Number(credFormCostPerCall.value)
   } else if (credFormBillingType.value === 'monthly_quota') {
@@ -506,7 +469,7 @@ onMounted(() => {
               :class="selectedProvider.is_active ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
               @click="handleToggleProvider(selectedProvider)"
             >
-              {{ selectedProvider.is_active ? '启用' : '禁用' }}
+              {{ selectedProvider.is_active ? '禁用' : '启用' }}
             </button>
             <button
               v-if="hasPermission('user:delete')"
@@ -566,7 +529,7 @@ onMounted(() => {
                     :class="cred.is_active ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
                     @click="handleToggleCred(cred)"
                   >
-                    {{ cred.is_active ? '启用' : '禁用' }}
+                    {{ cred.is_active ? '禁用' : '启用' }}
                   </button>
                   <button
                     class="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-100"
@@ -689,12 +652,22 @@ onMounted(() => {
           </div>
           <div v-if="selectedFormatNeedsKey" class="mb-3">
             <label class="mb-1.5 block text-sm font-medium text-slate-700">API Key <span v-if="!isEditingCred" class="text-red-400">*</span></label>
-            <input
-              v-model="credFormApiKey"
-              type="password"
-              :placeholder="isEditingCred ? '留空不修改' : '填写 API Key'"
-              class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-            />
+            <div class="relative">
+              <input
+                v-model="credFormApiKey"
+                :type="showApiKey ? 'text' : 'password'"
+                placeholder="填写 API Key"
+                class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              />
+              <button
+                type="button"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                @click="showApiKey = !showApiKey"
+              >
+                <EyeOff v-if="showApiKey" class="h-4 w-4" />
+                <Eye v-else class="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <!-- 高级设置 -->
@@ -720,26 +693,8 @@ onMounted(() => {
                 </select>
               </div>
 
-              <!-- Token 计费模式 -->
+              <!-- Token 计费定价 -->
               <div v-if="credFormBillingType === 'token'">
-                <label class="mb-1.5 block text-sm font-medium text-slate-700">Token 定价模式</label>
-                <div class="flex gap-4">
-                  <label class="flex items-center gap-2 text-sm text-slate-700">
-                    <input v-model="credFormTokenPricingMode" type="radio" value="unified" class="h-4 w-4 border-slate-300 text-purple-600 focus:ring-purple-500/20" />
-                    统一定价
-                  </label>
-                  <label class="flex items-center gap-2 text-sm text-slate-700">
-                    <input v-model="credFormTokenPricingMode" type="radio" value="per_model" class="h-4 w-4 border-slate-300 text-purple-600 focus:ring-purple-500/20" />
-                    按模型定价
-                  </label>
-                </div>
-                <p class="mt-1 text-xs text-slate-400">
-                  {{ credFormTokenPricingMode === 'unified' ? '所有模型使用同一价格' : '为每个模型单独设置价格' }}
-                </p>
-              </div>
-
-              <!-- 统一定价字段 -->
-              <div v-if="credFormBillingType === 'token' && credFormTokenPricingMode === 'unified'">
                 <div class="grid grid-cols-3 gap-3">
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输入 (¥/百万tokens)</label>
@@ -753,23 +708,6 @@ onMounted(() => {
                     <label class="mb-1 block text-xs text-slate-500">缓存读取 (¥/百万tokens)</label>
                     <input v-model="credFormCacheReadCost" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
-                </div>
-              </div>
-
-              <!-- 按模型定价字段 -->
-              <div v-if="credFormBillingType === 'token' && credFormTokenPricingMode === 'per_model'">
-                <div class="space-y-2">
-                  <div v-for="(row, idx) in credFormModelPricing" :key="idx" class="flex items-center gap-2">
-                    <input v-model="row.model" type="text" placeholder="模型名" class="h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none" />
-                    <input v-model="row.input" type="number" step="0.01" placeholder="输入" class="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none" />
-                    <input v-model="row.output" type="number" step="0.01" placeholder="输出" class="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none" />
-                    <input v-model="row.cacheRead" type="number" step="0.01" placeholder="缓存" class="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none" />
-                    <button type="button" class="h-8 w-8 shrink-0 rounded-md bg-red-50 text-xs text-red-500 hover:bg-red-100" @click="removeModelPricingRow(idx)">×</button>
-                  </div>
-                </div>
-                <div class="mt-2 flex items-center gap-3">
-                  <button type="button" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200" @click="addModelPricingRow">+ 添加模型</button>
-                  <span class="text-[10px] text-slate-400">单位: ¥/百万tokens</span>
                 </div>
               </div>
 

@@ -2,6 +2,7 @@ export interface TestAccessParams {
   model: string
   messages: { role: string; content: string }[]
   stream?: boolean
+  max_tokens?: number
 }
 
 export interface TestAccessResult {

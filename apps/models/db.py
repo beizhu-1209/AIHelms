@@ -24,6 +24,7 @@ class User(Base):
     position: Mapped[str] = mapped_column(String(100), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     litellm_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
@@ -199,6 +200,21 @@ class Provider(Base):
     credentials: Mapped[list["Credential"]] = relationship(back_populates="provider", lazy="selectin")
 
 
+class ProviderPrefixMap(Base):
+    __tablename__ = "provider_prefix_map"
+    __table_args__ = (
+        UniqueConstraint("provider_type", "format", "category"),
+        {"schema": "aihelms"},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    format: Mapped[str] = mapped_column(String(20), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(50), nullable=False)
+    needs_v1: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class Credential(Base):
     __tablename__ = "credentials"
     __table_args__ = {"schema": "aihelms"}
@@ -223,7 +239,7 @@ class Model(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    model_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    model_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     category: Mapped[str] = mapped_column(String(50), default="chat")
     capabilities: Mapped[list] = mapped_column(JSONB, default=list)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -674,7 +690,7 @@ class AdminAuditLog(Base):
     user_agent: Mapped[str] = mapped_column(String(500), default="")
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     request_summary: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ApiKey(Base):

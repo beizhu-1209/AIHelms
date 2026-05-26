@@ -134,13 +134,13 @@ function effectiveBilling(tool: McpTool): { type: string; internal: number; exte
         @click="handleRefresh"
       >
         <RefreshCw class="h-3 w-3" :class="refreshing ? 'animate-spin' : ''" />
-        {{ refreshing ? '同步中...' : '从上游批量同步' }}
+        {{ refreshing ? '同步中...' : '同步工具' }}
       </button>
     </div>
 
     <div v-if="loading" class="py-8 text-center text-sm text-slate-500">加载中...</div>
     <div v-else-if="tools.length === 0" class="py-8 text-center text-sm text-slate-500">
-      暂无工具，点击「从上游批量同步」获取
+      暂无工具，点击「同步工具」获取
     </div>
     <div v-else class="space-y-2">
       <div

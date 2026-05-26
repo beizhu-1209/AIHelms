@@ -16,6 +16,8 @@ const emit = defineEmits<{
 
 const modelInput = ref('')
 const messageInput = ref('你好，请简单介绍一下你自己。')
+const maxTokens = ref(100)
+const streamEnabled = ref(true)
 const outputContent = ref('')
 const isStreaming = ref(false)
 const errorMsg = ref('')
@@ -44,12 +46,32 @@ async function handleSend(): Promise<void> {
     const response = await testModelAccessStream({
       model: modelInput.value.trim(),
       messages: [{ role: 'user', content: messageInput.value.trim() }],
-      stream: true,
+      stream: streamEnabled.value,
+      max_tokens: maxTokens.value,
     })
 
     if (!response.ok) {
       const text = await response.text()
       errorMsg.value = `请求失败: ${response.status} - ${text}`
+      isStreaming.value = false
+      return
+    }
+
+    // 非流式响应（embedding/rerank 返回 JSON）
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('text/event-stream')) {
+      const json = await response.json()
+      if (json.data?.success === false) {
+        errorMsg.value = json.data.error || '测试失败'
+      } else if (json.data?.dimensions !== undefined) {
+        outputContent.value = `测试成功\n维度: ${json.data.dimensions}\n模型: ${json.data.model}\nTokens: ${json.data.usage?.prompt_tokens || 0}`
+      } else if (json.data?.results) {
+        const lines = json.data.results.map((r: { index: number; relevance_score: number }) =>
+          `[${r.index}] 相关度: ${r.relevance_score.toFixed(4)}`)
+        outputContent.value = `测试成功\n模型: ${json.data.model}\n排序结果:\n${lines.join('\n')}`
+      } else {
+        outputContent.value = json.data?.content || JSON.stringify(json.data)
+      }
       isStreaming.value = false
       return
     }
@@ -149,6 +171,28 @@ function handleClose(): void {
           />
         </div>
 
+        <!-- Parameters -->
+        <div class="mb-4 flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-slate-500">Max Tokens</label>
+            <input
+              v-model.number="maxTokens"
+              type="number"
+              min="1"
+              max="4096"
+              class="w-20 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-blue-400"
+            />
+          </div>
+          <label class="flex items-center gap-1.5 text-xs text-slate-500">
+            <input
+              v-model="streamEnabled"
+              type="checkbox"
+              class="h-3.5 w-3.5 rounded border-slate-300 text-blue-500 focus:ring-blue-400/20"
+            />
+            流式响应
+          </label>
+        </div>
+
         <!-- Send button -->
         <div class="mb-4">
           <button
@@ -161,7 +205,7 @@ function handleClose(): void {
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              接收中...
+              测试中...
             </span>
             <span v-else>发送测试</span>
           </button>
@@ -169,7 +213,7 @@ function handleClose(): void {
 
         <!-- Output area -->
         <div v-if="outputContent || errorMsg" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <label class="mb-2 block text-xs font-medium text-slate-500">模型回复</label>
+          <label class="mb-2 block text-xs font-medium text-slate-500">测试结果</label>
           <div v-if="errorMsg" class="text-sm text-red-600">{{ errorMsg }}</div>
           <div v-else class="whitespace-pre-wrap text-sm text-slate-800">{{ outputContent }}<span v-if="isStreaming" class="inline-block h-4 w-1.5 animate-pulse bg-slate-400" /></div>
         </div>

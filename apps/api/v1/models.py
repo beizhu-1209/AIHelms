@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_db, require_permission
+from core.deps import get_db, get_current_user, require_permission
 from exceptions import NotFoundError, ConflictError
 from services import model_service
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/models", tags=["models"])
 
 class CreateModelRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
-    model_id: str = Field(..., min_length=1, max_length=128)
+    model_id: str = Field("", max_length=128)
     category: str = Field("chat", max_length=50)
     capabilities: list[str] = Field(default_factory=list)
     description: str = Field("", max_length=500)
@@ -19,6 +19,7 @@ class CreateModelRequest(BaseModel):
 
 class UpdateModelRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=128)
+    model_id: str | None = Field(None, max_length=128)
     category: str | None = None
     capabilities: list[str] | None = None
     description: str | None = None
@@ -33,6 +34,7 @@ class CreateDeploymentRequest(BaseModel):
     cost_per_call: float | None = None
     monthly_call_quota: int | None = None
     model_info: dict | None = None
+    model_id_str: str = Field("", description="平台模型 ID，首次部署时设置到模型上")
 
 
 class UpdateDeploymentRequest(BaseModel):
@@ -44,6 +46,7 @@ class UpdateDeploymentRequest(BaseModel):
     monthly_call_quota: int | None = None
     model_info: dict | None = None
     is_active: bool | None = None
+    model_id_str: str | None = None
 
 
 class CreateAccessGroupRequest(BaseModel):
@@ -94,7 +97,7 @@ async def list_models(
 @router.get("/active")
 async def get_active_models(
     session: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_permission("user:read")),
+    _: dict = Depends(get_current_user),
 ):
     models = await model_service.get_all_active_models(session)
     return {"code": 200, "message": "ok", "data": models}
@@ -144,6 +147,7 @@ async def update_model(
         model = await model_service.update_model(
             session, model_id,
             name=req.name,
+            model_id_str=req.model_id,
             category=req.category,
             capabilities=req.capabilities,
             description=req.description,
@@ -151,6 +155,8 @@ async def update_model(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="模型不存在")
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return {"code": 200, "message": "模型更新成功", "data": model}
 
 
@@ -225,9 +231,12 @@ async def create_deployment(
             cost_per_call=req.cost_per_call,
             monthly_call_quota=req.monthly_call_quota,
             model_info=req.model_info,
+            model_id_str=req.model_id_str or None,
         )
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return {"code": 200, "message": "渠道创建成功", "data": deployment}
 
 
@@ -250,6 +259,7 @@ async def update_deployment(
             monthly_call_quota=req.monthly_call_quota,
             model_info=req.model_info,
             is_active=req.is_active,
+            model_id_str=req.model_id_str or None,
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="部署不存在")
@@ -362,3 +372,12 @@ async def update_router_settings(
         config=req.config,
     )
     return {"code": 200, "message": "路由设置更新成功", "data": settings}
+
+
+@router.post("/resync-anthropic", summary="重新同步 Anthropic 格式部署")
+async def resync_anthropic(
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:update")),
+):
+    result = await model_service.resync_anthropic_deployments(session)
+    return {"code": 200, "message": "同步完成", "data": result}

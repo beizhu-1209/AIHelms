@@ -1,10 +1,12 @@
 import logging
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from exceptions import NotFoundError, ConflictError
-from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility
-from repositories import model_repo, credential_repo
+from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility, ProviderPrefixMap
+from repositories import model_repo, credential_repo, ai_key_repo
 from services import litellm_client
 
 logger = logging.getLogger(__name__)
@@ -19,8 +21,8 @@ async def list_models(
     page_size: int = 50,
     category: str | None = None,
 ) -> dict:
-    total = await model_repo.count_all(session, category)
-    items = await model_repo.find_all(session, page, page_size, category)
+    total = await model_repo.count_all(session, category, is_active=True)
+    items = await model_repo.find_all(session, page, page_size, category, is_active=True)
     return {
         "items": [_serialize_model(m) for m in items],
         "total": total,
@@ -41,6 +43,8 @@ async def get_model_by_id(session: AsyncSession, model_id: int) -> dict:
 
 async def get_all_active_models(session: AsyncSession) -> list[dict]:
     models = await model_repo.find_all_active(session, published_only=True)
+    model_ids = [m.model_id for m in models]
+    anthropic_set = await model_repo.find_model_ids_with_anthropic_deployments(session, model_ids)
     return [
         {
             "id": m.id,
@@ -51,6 +55,8 @@ async def get_all_active_models(session: AsyncSession) -> list[dict]:
             "description": m.description,
             "is_active": m.is_active,
             "is_published": m.is_published,
+            "requires_approval": m.requires_approval,
+            "has_anthropic_deployment": m.model_id in anthropic_set,
         }
         for m in models
     ]
@@ -68,18 +74,20 @@ async def get_model_ids_by_credential_ids(
 async def create_model(
     session: AsyncSession,
     name: str,
-    model_id: str,
+    model_id: str = "",
     category: str = "chat",
     capabilities: list[str] | None = None,
     description: str = "",
 ) -> dict:
-    existing = await model_repo.find_by_model_id(session, model_id)
-    if existing:
-        raise ConflictError(f"模型 ID '{model_id}' 已存在")
+    effective_model_id = model_id.strip() or None
+    if effective_model_id:
+        existing = await model_repo.find_by_model_id(session, effective_model_id)
+        if existing:
+            raise ConflictError(f"模型 ID '{effective_model_id}' 已存在")
 
     model = Model(
         name=name,
-        model_id=model_id,
+        model_id=effective_model_id,
         category=category,
         capabilities=capabilities or [],
         description=description,
@@ -94,6 +102,7 @@ async def update_model(
     session: AsyncSession,
     model_id: int,
     name: str | None = None,
+    model_id_str: str | None = None,
     category: str | None = None,
     capabilities: list[str] | None = None,
     description: str | None = None,
@@ -103,6 +112,12 @@ async def update_model(
     if not model:
         raise NotFoundError("model", model_id)
 
+    if model_id_str is not None and model_id_str != model.model_id:
+        if model_id_str:
+            existing = await model_repo.find_by_model_id(session, model_id_str)
+            if existing and existing.id != model.id:
+                raise ConflictError(f"模型 ID '{model_id_str}' 已被其他模型使用")
+        model.model_id = model_id_str
     if name is not None:
         model.name = name
     if category is not None:
@@ -127,13 +142,57 @@ async def delete_model(session: AsyncSession, model_id: int) -> None:
     deployments = await model_repo.find_deployments_by_model(session, model_id)
     for d in deployments:
         if d.litellm_model_id:
+            litellm_model_name = _get_litellm_model_name(model, d.credential)
             try:
-                await litellm_client.delete_model(d.litellm_model_id)
+                await litellm_client.update_model(
+                    litellm_model_id=d.litellm_model_id,
+                    model_name=litellm_model_name,
+                    litellm_params=_convert_cost_for_litellm(d.litellm_params),
+                    model_info={**(d.model_info or {}), "active": False},
+                )
             except litellm_client.LiteLLMError:
-                logger.warning("litellm delete model failed for deployment %s", d.id)
+                logger.warning("litellm disable model failed for deployment %s", d.id)
+        d.is_active = False
 
     model.is_active = False
     await session.commit()
+
+
+# --- Deployment helpers ---
+
+
+def _merge_external_cost_to_model_info(model_info: dict, litellm_params: dict) -> dict:
+    """把 litellm_params 中的外部定价复制到 model_info，供平台成本计算使用。"""
+    result = dict(model_info)
+    cost_fields = {
+        "input_cost_per_token": "input_cost",
+        "output_cost_per_token": "output_cost",
+        "cache_read_input_token_cost": "cache_read_cost",
+        "cache_creation_input_token_cost": "cache_creation_cost",
+    }
+    for param_key, info_key in cost_fields.items():
+        if param_key in litellm_params:
+            result[info_key] = litellm_params[param_key]
+        elif info_key in result and param_key not in litellm_params:
+            del result[info_key]
+    return result
+
+
+def _convert_cost_for_litellm(litellm_params: dict) -> dict:
+    """将 litellm_params 中的定价从 ¥/百万token 转换为 USD/token（LiteLLM 原生单位）。"""
+    result = dict(litellm_params)
+    rate = settings.usd_to_cny_rate
+    million = 1_000_000
+    cost_keys = [
+        "input_cost_per_token",
+        "output_cost_per_token",
+        "cache_read_input_token_cost",
+        "cache_creation_input_token_cost",
+    ]
+    for key in cost_keys:
+        if key in result and result[key]:
+            result[key] = float(result[key]) / rate / million
+    return result
 
 
 # --- Deployments ---
@@ -149,10 +208,22 @@ async def create_deployment(
     cost_per_call: float | None = None,
     monthly_call_quota: int | None = None,
     model_info: dict | None = None,
+    model_id_str: str | None = None,
 ) -> dict:
     model = await model_repo.find_by_id(session, model_id)
     if not model:
         raise NotFoundError("model", model_id)
+
+    # 设置或更新模型的 model_id
+    if model_id_str:
+        if model.model_id != model_id_str:
+            existing = await model_repo.find_by_model_id(session, model_id_str)
+            if existing and existing.id != model.id:
+                raise ConflictError(f"模型 ID '{model_id_str}' 已被其他模型使用")
+            model.model_id = model_id_str
+
+    if not model.model_id:
+        raise ConflictError("请先设置模型 ID（在部署表单中填写）")
 
     credential = None
     if credential_id:
@@ -164,7 +235,7 @@ async def create_deployment(
         model_id=model_id,
         credential_id=credential_id,
         litellm_params=litellm_params,
-        model_info=model_info or {},
+        model_info=_merge_external_cost_to_model_info(model_info or {}, litellm_params),
         deploy_name=deploy_name,
         billing_type=billing_type,
         cost_per_call=cost_per_call,
@@ -173,7 +244,7 @@ async def create_deployment(
     deployment = await model_repo.create_deployment(session, deployment)
 
     # Sync to LiteLLM
-    await _sync_deployment_to_litellm(deployment, model, credential)
+    await _sync_deployment_to_litellm(deployment, model, credential, session)
 
     await session.commit()
     await session.refresh(deployment)
@@ -191,10 +262,20 @@ async def update_deployment(
     monthly_call_quota: int | None = None,
     model_info: dict | None = None,
     is_active: bool | None = None,
+    model_id_str: str | None = None,
 ) -> dict:
     deployment = await model_repo.find_deployment_by_id(session, deployment_id)
     if not deployment:
         raise NotFoundError("deployment", deployment_id)
+
+    # 更新模型的 model_id
+    if model_id_str:
+        model = await model_repo.find_by_id(session, deployment.model_id)
+        if model and model.model_id != model_id_str:
+            existing = await model_repo.find_by_model_id(session, model_id_str)
+            if existing and existing.id != model.id:
+                raise ConflictError(f"模型 ID '{model_id_str}' 已被其他模型使用")
+            model.model_id = model_id_str
 
     if litellm_params is not None:
         deployment.litellm_params = litellm_params
@@ -209,7 +290,13 @@ async def update_deployment(
     if monthly_call_quota is not None:
         deployment.monthly_call_quota = monthly_call_quota
     if model_info is not None:
-        deployment.model_info = model_info
+        deployment.model_info = _merge_external_cost_to_model_info(
+            model_info, deployment.litellm_params
+        )
+    elif litellm_params is not None:
+        deployment.model_info = _merge_external_cost_to_model_info(
+            deployment.model_info or {}, litellm_params
+        )
     if is_active is not None:
         deployment.is_active = is_active
 
@@ -224,14 +311,24 @@ async def update_deployment(
             sync_params = dict(deployment.litellm_params)
             if credential and "litellm_credential_name" not in sync_params and "api_key" not in sync_params:
                 sync_params["litellm_credential_name"] = credential.credential_name
+            if credential and "api_base" not in sync_params:
+                cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
+                if cred_api_base:
+                    sync_params["api_base"] = cred_api_base
+            sync_params = _convert_cost_for_litellm(sync_params)
+            sync_model_info = dict(deployment.model_info or {})
+            sync_model_info["active"] = deployment.is_active
+            litellm_model_name = _get_litellm_model_name(model, credential)
             await litellm_client.update_model(
                 litellm_model_id=deployment.litellm_model_id,
-                model_name=model.model_id,
+                model_name=litellm_model_name,
                 litellm_params=sync_params,
-                model_info=deployment.model_info,
+                model_info=sync_model_info,
             )
         except litellm_client.LiteLLMError:
             logger.warning("litellm update model failed for deployment %s", deployment_id)
+    elif model and not deployment.litellm_model_id and deployment.is_active:
+        await _sync_deployment_to_litellm(deployment, model, credential, session)
 
     await session.commit()
     await session.refresh(deployment)
@@ -244,10 +341,21 @@ async def delete_deployment(session: AsyncSession, deployment_id: int) -> None:
         raise NotFoundError("deployment", deployment_id)
 
     if deployment.litellm_model_id:
+        model = await model_repo.find_by_id(session, deployment.model_id)
+        credential = None
+        if deployment.credential_id:
+            credential = await credential_repo.find_by_id(session, deployment.credential_id)
+        litellm_model_name = _get_litellm_model_name(model, credential) if model else ""
         try:
-            await litellm_client.delete_model(deployment.litellm_model_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm delete model failed for deployment %s", deployment_id)
+            await litellm_client.update_model(
+                litellm_model_id=deployment.litellm_model_id,
+                model_name=litellm_model_name,
+                litellm_params=_convert_cost_for_litellm(deployment.litellm_params),
+                model_info={**(deployment.model_info or {}), "active": False},
+            )
+        except litellm_client.LiteLLMError as e:
+            logger.error("litellm disable model failed for deployment %s: %s", deployment_id, e)
+            raise ConflictError("LiteLLM 侧禁用失败，请稍后重试")
 
     await session.delete(deployment)
     await session.commit()
@@ -443,6 +551,11 @@ async def update_model_publish(
                 user_ids.add(user.id)
         await model_repo.set_visibility_users(session, model_id, list(user_ids))
 
+    # 发布且不需要审批时，自动同步到所有主 Key
+    if model.is_published and not model.requires_approval:
+        from services import ai_key_service
+        await ai_key_service.sync_public_resource_to_all_keys(session, "models", model.model_id)
+
     await session.commit()
     await session.refresh(model)
     return await get_model_visibility(session, model_id)
@@ -451,28 +564,84 @@ async def update_model_publish(
 # --- Private helpers ---
 
 
+def _get_credential_format(credential) -> str:
+    """Return the credential format ('openai' or 'anthropic')."""
+    if not credential:
+        return "openai"
+    return (credential.credential_info or {}).get("format") or "openai"
+
+
+ANTHROPIC_MODEL_SUFFIX = "(Anthropic)"
+
+
+def _get_litellm_model_name(model: Model, credential=None) -> str:
+    """Determine the LiteLLM model_name based on credential format.
+
+    Anthropic-format credentials get an '(Anthropic)' suffix to form an independent model group.
+    """
+    cred_format = _get_credential_format(credential)
+    if cred_format == "anthropic":
+        return f"{model.model_id}{ANTHROPIC_MODEL_SUFFIX}"
+    return model.model_id
+
+
 async def _sync_deployment_to_litellm(
     deployment: ModelDeployment,
     model: Model,
     credential=None,
+    session=None,
 ) -> None:
     litellm_params = dict(deployment.litellm_params)
 
-    # Inject credential reference if not already specified
+    # Inject credential reference and api_base if not already specified
     if credential and "litellm_credential_name" not in litellm_params and "api_key" not in litellm_params:
+        # Ensure credential exists in LiteLLM before referencing it
+        if not credential.litellm_synced:
+            try:
+                await litellm_client.create_credential(
+                    credential_name=credential.credential_name,
+                    credential_values=credential.credential_values,
+                    credential_info=credential.credential_info or {},
+                )
+                credential.litellm_synced = True
+            except litellm_client.LiteLLMError as e:
+                logger.error("credential sync failed before deployment: %s", e)
+                raise ConflictError("凭证同步失败，请检查凭证配置（API Key、API Base）是否正确")
         litellm_params["litellm_credential_name"] = credential.credential_name
 
+        # Inject api_base from credential if not already in litellm_params
+        if "api_base" not in litellm_params:
+            cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
+            if cred_api_base:
+                litellm_params["api_base"] = cred_api_base
+
+    # Auto-resolve prefix and normalize api_base via provider_prefix_map
+    if session and credential:
+        prefix_info = await _resolve_prefix(session, credential, model.category)
+        if prefix_info:
+            raw_model = litellm_params.get("model", "")
+            model_name_raw = raw_model.split("/")[-1] if "/" in raw_model else raw_model
+            if not model_name_raw:
+                model_name_raw = model.model_id
+            litellm_params["model"] = f"{prefix_info.prefix}/{model_name_raw}"
+            if prefix_info.needs_v1 and "api_base" in litellm_params:
+                litellm_params["api_base"] = _ensure_v1_suffix(litellm_params["api_base"])
+
     try:
+        sync_litellm_params = _convert_cost_for_litellm(litellm_params)
+        litellm_model_name = _get_litellm_model_name(model, credential)
         result = await litellm_client.add_model(
-            model_name=model.model_id,
-            litellm_params=litellm_params,
+            model_name=litellm_model_name,
+            litellm_params=sync_litellm_params,
             model_info=deployment.model_info or {},
         )
         litellm_id = result.get("model_info", {}).get("id")
         if litellm_id:
             deployment.litellm_model_id = litellm_id
-    except litellm_client.LiteLLMError:
-        logger.warning("litellm add model failed for deployment %s", deployment.id)
+        # 写回处理后的 litellm_params（含前缀、api_base、credential_name）
+        deployment.litellm_params = litellm_params
+    except litellm_client.LiteLLMError as e:
+        logger.error("litellm add model failed for deployment %s: %s", deployment.id, e)
 
 
 def _serialize_model(model: Model) -> dict:
@@ -536,4 +705,106 @@ def _serialize_router_settings(settings: RouterSettings) -> dict:
         "timeout": settings.timeout,
         "config": settings.config,
         "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
+async def _resolve_prefix(
+    session: AsyncSession,
+    credential,
+    category: str,
+) -> ProviderPrefixMap | None:
+    """Look up the correct LiteLLM prefix from provider_prefix_map table."""
+    if not credential or not credential.provider:
+        return None
+    provider_type = credential.provider.provider_type
+    cred_format = (credential.credential_info or {}).get("format") or "openai"
+    result = await session.execute(
+        select(ProviderPrefixMap).where(
+            ProviderPrefixMap.provider_type == provider_type,
+            ProviderPrefixMap.format == cred_format,
+            ProviderPrefixMap.category == category,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _ensure_v1_suffix(api_base: str) -> str:
+    """Ensure api_base ends with /v1 for providers that need it.
+
+    Skip if the URL already contains /v1 anywhere in the path
+    (e.g. .../v1/messages for anthropic endpoints).
+    """
+    api_base = api_base.rstrip("/")
+    if "/v1" in api_base:
+        return api_base
+    return f"{api_base}/v1"
+
+
+# --- Resync ---
+
+
+async def resync_anthropic_deployments(session: AsyncSession) -> dict:
+    """重新同步所有 anthropic 格式部署到 LiteLLM，使用 (Anthropic) model_name。
+
+    同时更新所有相关 Key 的 LiteLLM models 列表。
+    """
+    from services import ai_key_service
+
+    all_deployments = await model_repo.find_all_active_deployments(session)
+    synced = 0
+    errors = 0
+
+    for deployment in all_deployments:
+        credential = deployment.credential
+        if not credential:
+            continue
+        cred_format = _get_credential_format(credential)
+        if cred_format != "anthropic":
+            continue
+
+        model = deployment.model
+        if not model or not deployment.litellm_model_id:
+            continue
+
+        litellm_model_name = _get_litellm_model_name(model, credential)
+        try:
+            sync_params = dict(deployment.litellm_params)
+            sync_params = _convert_cost_for_litellm(sync_params)
+            sync_model_info = dict(deployment.model_info or {})
+            sync_model_info["active"] = deployment.is_active
+            await litellm_client.update_model(
+                litellm_model_id=deployment.litellm_model_id,
+                model_name=litellm_model_name,
+                litellm_params=sync_params,
+                model_info=sync_model_info,
+            )
+            synced += 1
+        except litellm_client.LiteLLMError:
+            logger.warning("resync failed for deployment %s", deployment.id)
+            errors += 1
+
+    # Update all main keys to include (Anthropic) variants
+    all_main_keys = await ai_key_repo.find_all_main_keys(session)
+    keys_updated = 0
+    for key in all_main_keys:
+        if not key.litellm_key_id or not key.models:
+            continue
+        litellm_models, litellm_budgets = await ai_key_service._expand_models_with_anthropic(
+            session, key.models, key.model_budgets or None
+        )
+        try:
+            await litellm_client.update_key(
+                key_id=key.litellm_key_id,
+                models=litellm_models,
+                model_max_budget=litellm_budgets,
+            )
+            keys_updated += 1
+        except litellm_client.LiteLLMError:
+            logger.warning("resync key failed for ai_key %s", key.id)
+
+    await session.commit()
+    return {
+        "deployments_synced": synced,
+        "deployment_errors": errors,
+        "keys_updated": keys_updated,
     }

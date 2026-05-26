@@ -10,8 +10,13 @@ import {
   type SkillCategory,
 } from '@aihelms/shared'
 import { toast, usePermission } from '@aihelms/shared'
-import { Plus, Download, X } from 'lucide-vue-next'
+import { Plus, Download, X, Package } from 'lucide-vue-next'
+import * as icons from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+
+function getIconComponent(name: string) {
+  return (icons as Record<string, unknown>)[name] || null
+}
 
 const { hasPermission } = usePermission()
 const router = useRouter()
@@ -157,8 +162,13 @@ onMounted(loadData)
         @click="openDetail(skill)"
       >
         <div class="mb-3 flex items-start justify-between">
-          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 text-2xl">
-            {{ skill.icon }}
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50">
+            <component
+              :is="getIconComponent(skill.icon)"
+              v-if="skill.icon && getIconComponent(skill.icon)"
+              class="h-5 w-5 text-purple-600"
+            />
+            <Package v-else class="h-5 w-5 text-slate-400" />
           </div>
           <div class="flex flex-col items-end gap-1">
             <span v-if="skill.is_published" class="rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">

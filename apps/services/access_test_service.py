@@ -9,9 +9,9 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _get_client() -> AsyncOpenAI:
+def _get_client(api_key: str | None = None) -> AsyncOpenAI:
     return AsyncOpenAI(
-        api_key=settings.litellm_master_key,
+        api_key=api_key or settings.litellm_master_key,
         base_url=f"{settings.litellm_url}/v1",
     )
 
@@ -19,19 +19,26 @@ def _get_client() -> AsyncOpenAI:
 async def test_model_stream(
     model: str,
     messages: list[dict],
+    max_tokens: int = 100,
+    api_key: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat completion from LiteLLM, yield SSE-formatted chunks."""
-    client = _get_client()
+    client = _get_client(api_key)
     try:
         stream = await client.chat.completions.create(
             model=model,
             messages=messages,
             stream=True,
+            max_tokens=max_tokens,
         )
         async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                yield f"data: {content}\n\n"
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta:
+                text = delta.content or ""
+                if not text and hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                    text = delta.reasoning_content
+                if text:
+                    yield f"data: {text}\n\n"
         yield "data: [DONE]\n\n"
     except Exception as e:
         logger.error("access test stream error: %s", str(e))
@@ -41,16 +48,22 @@ async def test_model_stream(
 async def test_model_sync(
     model: str,
     messages: list[dict],
+    max_tokens: int = 100,
+    api_key: str | None = None,
 ) -> dict:
     """Non-streaming chat completion from LiteLLM."""
-    client = _get_client()
+    client = _get_client(api_key)
     try:
         response = await client.chat.completions.create(
             model=model,
             messages=messages,
             stream=False,
+            max_tokens=max_tokens,
         )
-        content = response.choices[0].message.content if response.choices else ""
+        msg = response.choices[0].message if response.choices else None
+        content = (msg.content if msg else "") or ""
+        if not content and msg and hasattr(msg, "reasoning_content") and msg.reasoning_content:
+            content = f"[思考] {msg.reasoning_content}"
         return {
             "success": True,
             "content": content,
@@ -70,9 +83,9 @@ async def test_model_sync(
         }
 
 
-async def test_embedding(model: str, text: str) -> dict:
+async def test_embedding(model: str, text: str, api_key: str | None = None) -> dict:
     """Test embedding model via LiteLLM."""
-    client = _get_client()
+    client = _get_client(api_key)
     try:
         response = await client.embeddings.create(
             model=model,
@@ -96,14 +109,14 @@ async def test_embedding(model: str, text: str) -> dict:
         }
 
 
-async def test_rerank(model: str, query: str, documents: list[str]) -> dict:
+async def test_rerank(model: str, query: str, documents: list[str], api_key: str | None = None) -> dict:
     """Test rerank model via LiteLLM /rerank endpoint."""
     try:
         async with httpx.AsyncClient(timeout=30) as http_client:
             response = await http_client.post(
                 f"{settings.litellm_url}/rerank",
                 headers={
-                    "Authorization": f"Bearer {settings.litellm_master_key}",
+                    "Authorization": f"Bearer {api_key or settings.litellm_master_key}",
                     "Content-Type": "application/json",
                 },
                 json={

@@ -6,6 +6,7 @@ from exceptions import NotFoundError, ConflictError
 from models.db import Department
 from repositories import department_repo
 from repositories import user_repo
+from services import litellm_client
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ async def create_department(session: AsyncSession, name: str, parent_id: int | N
     return data
 
 
-async def update_department(session: AsyncSession, dept_id: int, name: str | None = None, description: str | None = None, sort_order: int | None = None) -> dict:
+async def update_department(session: AsyncSession, dept_id: int, name: str | None = None, description: str | None = None, sort_order: int | None = None, is_active: bool | None = None) -> dict:
     dept = await department_repo.find_by_id(session, dept_id)
     if not dept:
         raise NotFoundError("department", dept_id)
@@ -52,6 +53,16 @@ async def update_department(session: AsyncSession, dept_id: int, name: str | Non
         dept.description = description
     if sort_order is not None:
         dept.sort_order = sort_order
+    if is_active is not None and is_active != dept.is_active:
+        dept.is_active = is_active
+        if dept.litellm_team_id:
+            try:
+                if is_active:
+                    await litellm_client.unblock_team(dept.litellm_team_id)
+                else:
+                    await litellm_client.block_team(dept.litellm_team_id)
+            except litellm_client.LiteLLMError:
+                logger.warning("litellm block/unblock team failed for dept %s", dept_id)
 
     await session.commit()
     return await get_department_by_id(session, dept_id)

@@ -390,9 +390,17 @@ async def load_ai_keys(session: AsyncSession, key_ids: list[int]) -> dict[int, d
         select(AiKey).where(AiKey.id.in_(ids))
     )
     return {
-        k.id: {"id": k.id, "name": k.name, "key_prefix": ""}
+        k.id: {"id": k.id, "name": k.name, "key_token": _mask_key(k.litellm_key_id)}
         for k in result.scalars().all()
     }
+
+
+def _mask_key(key: str | None) -> str:
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return key[:2] + "****"
+    return key[:4] + "****" + key[-4:]
 
 
 async def load_skills(session: AsyncSession, skill_ids: list[int]) -> dict[int, dict]:

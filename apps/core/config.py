@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24
     super_admin_password: str = "admin123"
 
+    # 成本计算
+    usd_to_cny_rate: float = 7.0  # LiteLLM spend(美元) → 人民币汇率
+
     # Gunicorn
     gunicorn_workers: int = 0
     gunicorn_timeout: int = 120

@@ -17,7 +17,7 @@ const router = createRouter({
         {
           path: '',
           name: 'Dashboard',
-          redirect: '/efficiency',
+          component: () => import('../views/dashboard/DashboardView.vue'),
         },
         {
           path: 'departments',
@@ -59,6 +59,12 @@ const router = createRouter({
           path: 'ai-keys',
           name: 'AiKeyManage',
           component: () => import('../views/ai-keys/AiKeyManage.vue'),
+          meta: { permission: 'user:read' },
+        },
+        {
+          path: 'ai-keys/:id',
+          name: 'AiKeyDetail',
+          component: () => import('../views/ai-keys/AiKeyDetail.vue'),
           meta: { permission: 'user:read' },
         },
         {
@@ -140,23 +146,18 @@ const router = createRouter({
           children: [
             {
               path: '',
-              name: 'EfficiencyDashboard',
-              component: () => import('../views/efficiency/DashboardView.vue'),
+              name: 'EfficiencyOverview',
+              component: () => import('../views/efficiency/OverviewView.vue'),
             },
             {
-              path: 'analysis',
-              name: 'EfficiencyAnalysis',
-              component: () => import('../views/efficiency/AnalysisView.vue'),
+              path: 'adoption',
+              name: 'EfficiencyAdoption',
+              component: () => import('../views/efficiency/AdoptionView.vue'),
             },
             {
-              path: 'agents',
-              name: 'EfficiencyAgents',
-              component: () => import('../views/efficiency/AgentRoiView.vue'),
-            },
-            {
-              path: 'models',
-              name: 'EfficiencyModels',
-              component: () => import('../views/efficiency/ModelPreferenceView.vue'),
+              path: 'cost',
+              name: 'EfficiencyCost',
+              component: () => import('../views/efficiency/CostView.vue'),
             },
             {
               path: 'budget',
@@ -167,11 +168,6 @@ const router = createRouter({
               path: 'reports',
               name: 'EfficiencyReports',
               component: () => import('../views/efficiency/ReportsView.vue'),
-            },
-            {
-              path: 'capability',
-              name: 'EfficiencyCapability',
-              component: () => import('../views/efficiency/CapabilityView.vue'),
             },
           ],
         },

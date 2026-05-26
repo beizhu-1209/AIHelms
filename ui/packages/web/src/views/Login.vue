@@ -13,7 +13,7 @@ const isLoading = ref(false)
 
 async function handleLogin(): Promise<void> {
   if (!email.value || !password.value) {
-    errorMessage.value = '请输入邮箱和密码'
+    errorMessage.value = '请输入账号和密码'
     return
   }
   isLoading.value = true
@@ -50,7 +50,7 @@ async function handleLogin(): Promise<void> {
       <!-- 表单 -->
       <form class="space-y-5" @submit.prevent="handleLogin">
         <div class="space-y-2">
-          <label class="text-sm font-medium text-slate-700">邮箱</label>
+          <label class="text-sm font-medium text-slate-700">账号</label>
           <input v-model="email" type="text"
             class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
             placeholder="请输入邮箱或用户名" autocomplete="username" />

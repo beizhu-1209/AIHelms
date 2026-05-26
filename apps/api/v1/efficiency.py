@@ -1,6 +1,6 @@
 """AI 效能分析 API。"""
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -9,103 +9,137 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.deps import get_current_user, get_db
 from services import efficiency_service
 
-router = APIRouter(prefix="/efficiency", tags=["AI效能"])
+router = APIRouter(prefix="/efficiency")
 
 
-def _default_date_range() -> tuple[date, date]:
+def _parse_period(period: str | None) -> tuple[date, date]:
+    """Convert frontend period param to start_date/end_date."""
     today = date.today()
-    start = today.replace(day=1)
-    return start, today
+    if period == "7d":
+        return today - timedelta(days=6), today
+    if period == "30d":
+        return today - timedelta(days=29), today
+    # Default: current month
+    return today.replace(day=1), today
 
 
 @router.get("/overview")
 async def get_overview(
+    period: str | None = Query(None),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
     data = await efficiency_service.get_overview(session, start, end)
     return {"code": 200, "message": "ok", "data": data}
 
 
-@router.get("/trend")
-async def get_trend(
-    start_date: date | None = Query(None),
-    end_date: date | None = Query(None),
-    group_by: str = Query("day"),
-    cost_type: str | None = Query(None),
-    session: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
-    data = await efficiency_service.get_trend(session, start, end, group_by, cost_type)
-    return {"code": 200, "message": "ok", "data": data}
-
-
-@router.get("/composition")
-async def get_composition(
-    start_date: date | None = Query(None),
-    end_date: date | None = Query(None),
-    session: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
-    data = await efficiency_service.get_composition(session, start, end)
-    return {"code": 200, "message": "ok", "data": data}
-
-
-@router.get("/key-type-comparison")
-async def get_key_type_comparison(
-    start_date: date | None = Query(None),
-    end_date: date | None = Query(None),
-    session: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
-    data = await efficiency_service.get_key_type_comparison(session, start, end)
-    return {"code": 200, "message": "ok", "data": data}
-
-
-@router.get("/ranking")
-async def get_ranking(
-    start_date: date | None = Query(None),
-    end_date: date | None = Query(None),
+@router.get("/adoption")
+async def get_adoption(
+    period: str | None = Query(None),
     dimension: str = Query("department"),
-    limit: int = Query(10, ge=1, le=50),
+    metric: str = Query("dau"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
-    data = await efficiency_service.get_ranking(session, start, end, dimension, limit)
+    start, end = _parse_period(period)
+    data = await efficiency_service.get_adoption(session, start, end, dimension, metric)
     return {"code": 200, "message": "ok", "data": data}
 
 
-@router.get("/analysis/{dimension}")
-async def get_analysis(
-    dimension: str,
-    start_date: date | None = Query(None),
-    end_date: date | None = Query(None),
-    cost_type: str | None = Query(None),
+@router.get("/adoption/agents")
+async def get_adoption_agents(
+    period: str | None = Query(None),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
-    data = await efficiency_service.get_analysis(session, start, end, dimension, cost_type)
+    start, end = _parse_period(period)
+    data = await efficiency_service.get_adoption_agents(session, start, end)
     return {"code": 200, "message": "ok", "data": data}
 
 
-@router.get("/budget/overview")
-async def get_budget_overview(
-    start_date: date | None = Query(None),
-    end_date: date | None = Query(None),
+@router.get("/adoption/resources")
+async def get_adoption_resources(
+    period: str | None = Query(None),
+    type: str = Query("mcp"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = start_date or _default_date_range()[0], end_date or _default_date_range()[1]
-    data = await efficiency_service.get_budget_overview(session, start, end)
+    start, end = _parse_period(period)
+    data = await efficiency_service.get_adoption_resources(session, start, end, type)
     return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/adoption/unused-users")
+async def get_unused_users(
+    period: str | None = Query(None),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    start, end = _parse_period(period)
+    data = await efficiency_service.get_unused_users(session, start, end)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/cost")
+async def get_cost(
+    period: str | None = Query(None),
+    resource_type: str = Query(""),
+    department: str = Query(""),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    start, end = _parse_period(period)
+    cost_type = resource_type if resource_type else "all"
+    dept_id = int(department) if department.isdigit() else None
+    data = await efficiency_service.get_cost(session, start, end, cost_type, dept_id)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/cost/detail")
+async def get_cost_detail(
+    period: str | None = Query(None),
+    tab: str = Query("department"),
+    resource_type: str = Query(""),
+    department: str = Query(""),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    start, end = _parse_period(period)
+    cost_type = resource_type if resource_type else "all"
+    dept_id = int(department) if department.isdigit() else None
+    data = await efficiency_service.get_cost_detail(
+        session, start, end, tab, cost_type, dept_id
+    )
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/budget")
+async def get_budget(
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    data = await efficiency_service.get_budget(session)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/budget/alerts")
+async def get_budget_alerts(
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    data = await efficiency_service.get_budget_alerts(session)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+# ---------------------------------------------------------------------------
+# Reports
+# ---------------------------------------------------------------------------
 
 
 @router.get("/reports")
@@ -136,7 +170,7 @@ async def get_report(
 
 
 class CreateReportRequest(BaseModel):
-    report_type: str = Field(..., pattern="^(daily|weekly|monthly|quarterly|custom)$")
+    report_type: str = Field(..., pattern="^(weekly|monthly|custom)$")
     period_start: date
     period_end: date
     model_used: str | None = None

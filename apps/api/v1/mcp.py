@@ -79,6 +79,21 @@ class CreateCategoryRequest(BaseModel):
     sort_order: int = 0
 
 
+@router.get("/servers/published")
+async def list_published_servers(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    category: str | None = None,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    """公开接口：已认证用户可查看已发布的 MCP Server 列表。"""
+    data = await mcp_service.list_servers(
+        session, page, page_size, category, is_active=None, is_published=True, status=None
+    )
+    return {"code": 200, "message": "ok", "data": data}
+
+
 @router.get("/servers")
 async def list_servers(
     page: int = Query(1, ge=1),
@@ -240,6 +255,9 @@ async def get_connect_config(
             "tools": tools_info,
         }
     }
+
+
+@router.post("/servers/{server_id}/refresh-tools", summary="刷新 MCP 工具列表")
 async def refresh_tools(
     server_id: int,
     session: AsyncSession = Depends(get_db),

@@ -140,6 +140,11 @@ async def update_server(
         if hasattr(server, key) and value is not None:
             setattr(server, key, value)
 
+    # 发布且不需要审批时，自动同步到所有主 Key
+    if server.is_published and not server.requires_approval:
+        from services import ai_key_service
+        await ai_key_service.sync_public_resource_to_all_keys(session, "mcps", server.id)
+
     await session.commit()
     await session.refresh(server)
 

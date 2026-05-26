@@ -60,7 +60,7 @@ async def update_department(
 ):
     try:
         dept = await department_service.update_department(
-            session, dept_id, name=req.name, description=req.description, sort_order=req.sort_order
+            session, dept_id, name=req.name, description=req.description, sort_order=req.sort_order, is_active=req.is_active
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="部门不存在")

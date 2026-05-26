@@ -21,10 +21,11 @@ async def find_by_id(session: AsyncSession, credential_id: int) -> Credential | 
     return result.scalar_one_or_none()
 
 
-async def find_by_name(session: AsyncSession, credential_name: str) -> Credential | None:
-    result = await session.execute(
-        select(Credential).where(Credential.credential_name == credential_name)
-    )
+async def find_by_name(session: AsyncSession, credential_name: str, provider_id: int | None = None) -> Credential | None:
+    stmt = select(Credential).where(Credential.credential_name == credential_name)
+    if provider_id is not None:
+        stmt = stmt.where(Credential.provider_id == provider_id)
+    result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
 

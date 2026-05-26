@@ -141,6 +141,20 @@ async def delete_platform(
 # ─── Agent CRUD ──────────────────────────────────────────────────────────────
 
 
+@router.get("/published")
+async def list_published_agents(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    category: str | None = None,
+    platform: str | None = None,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    """List published agents visible to all authenticated users."""
+    data = await agent_service.list_agents(session, page, page_size, category, platform, is_published=True)
+    return {"code": 200, "message": "ok", "data": data}
+
+
 @router.get("")
 async def list_agents(
     page: int = Query(1, ge=1),

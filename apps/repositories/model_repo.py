@@ -2,7 +2,7 @@ from sqlalchemy import select, func, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility
+from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility, Credential
 
 
 async def create(session: AsyncSession, model: Model) -> Model:
@@ -110,6 +110,26 @@ async def find_model_ids_by_credential_ids(
         .distinct()
     )
     return [row[0] for row in result.all()]
+
+
+async def find_model_ids_with_anthropic_deployments(
+    session: AsyncSession, model_id_strs: list[str]
+) -> set[str]:
+    """Return the subset of model_id strings that have active anthropic-format deployments."""
+    if not model_id_strs:
+        return set()
+    result = await session.execute(
+        select(Model.model_id)
+        .join(ModelDeployment, ModelDeployment.model_id == Model.id)
+        .join(Credential, Credential.id == ModelDeployment.credential_id)
+        .where(
+            Model.model_id.in_(model_id_strs),
+            ModelDeployment.is_active == True,
+            Credential.credential_info["format"].astext == "anthropic",
+        )
+        .distinct()
+    )
+    return {row[0] for row in result.all()}
 
 
 # --- Access Groups ---

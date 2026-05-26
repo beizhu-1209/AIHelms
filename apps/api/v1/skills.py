@@ -55,6 +55,19 @@ async def delete_category(
     return {"code": 200, "message": "分类删除成功", "data": None}
 
 
+@router.get("/published")
+async def list_published_skills(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    category: str | None = None,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    """公开接口：已认证用户可查看已发布的 Skill 列表。"""
+    data = await skill_service.list_skills(session, page, page_size, category, is_published=True)
+    return {"code": 200, "message": "ok", "data": data}
+
+
 @router.get("")
 async def list_skills(
     page: int = Query(1, ge=1),

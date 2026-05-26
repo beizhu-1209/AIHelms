@@ -47,12 +47,8 @@
             <tr class="border-b border-slate-200/60 text-left text-slate-500">
               <th class="w-10 px-4 py-3" />
               <th class="px-4 py-3 font-medium">用户</th>
-              <th class="px-4 py-3 font-medium">部门</th>
-              <th class="px-4 py-3 font-medium">Key 值</th>
-              <th class="px-4 py-3 font-medium">模型</th>
-              <th class="px-4 py-3 font-medium">MCP</th>
-              <th class="px-4 py-3 font-medium">Skill</th>
-              <th class="px-4 py-3 font-medium">智能体</th>
+              <th class="px-4 py-3 font-medium">Key</th>
+              <th class="px-4 py-3 font-medium">资源</th>
               <th class="px-4 py-3 font-medium">预算</th>
               <th class="px-4 py-3 font-medium">状态</th>
               <th class="px-4 py-3 font-medium">操作</th>
@@ -67,10 +63,9 @@
                   </button>
                 </td>
                 <td class="px-4 py-3">
-                  <div class="font-medium text-slate-800">{{ item.user.display_name }}</div>
-                  <div class="text-xs text-slate-400">{{ item.user.username }}</div>
+                  <div class="font-medium text-slate-800">{{ item.user.display_name || item.user.username }}</div>
+                  <div class="text-xs text-slate-400">{{ item.user.department_name || '-' }}</div>
                 </td>
-                <td class="px-4 py-3 text-slate-600">{{ item.user.department_name || '-' }}</td>
                 <td class="px-4 py-3">
                   <div v-if="item.main_key?.litellm_key_id" class="flex items-center gap-1">
                     <code class="text-xs text-slate-600">{{ revealedKeys.has(item.main_key.id) ? item.main_key.litellm_key_id : maskKey(item.main_key.litellm_key_id) }}</code>
@@ -80,32 +75,14 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-3">
-                  <template v-if="item.main_key && item.main_key.models.length">
-                    <span v-for="mid in item.main_key.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
-                    <span v-if="item.main_key.models.length > 3" class="text-xs text-slate-400">+{{ item.main_key.models.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
-                </td>
-                <td class="px-4 py-3">
-                  <template v-if="item.main_key && item.main_key.mcps.length">
-                    <span v-for="mid in item.main_key.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
-                    <span v-if="item.main_key.mcps.length > 3" class="text-xs text-slate-400">+{{ item.main_key.mcps.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
-                </td>
-                <td class="px-4 py-3">
-                  <template v-if="item.main_key && item.main_key.skills.length">
-                    <span v-for="sid in item.main_key.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
-                    <span v-if="item.main_key.skills.length > 3" class="text-xs text-slate-400">+{{ item.main_key.skills.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
-                </td>
-                <td class="px-4 py-3">
-                  <template v-if="item.main_key && item.main_key.agents.length">
-                    <span v-for="aid in item.main_key.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
-                    <span v-if="item.main_key.agents.length > 3" class="text-xs text-slate-400">+{{ item.main_key.agents.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
+                  <div v-if="item.main_key" class="flex flex-wrap gap-1.5 text-xs">
+                    <span v-if="item.main_key.models.length" class="rounded-full bg-purple-50 px-2 py-0.5 text-purple-600">模型 {{ item.main_key.models.length }}</span>
+                    <span v-if="item.main_key.mcps.length" class="rounded-full bg-blue-50 px-2 py-0.5 text-blue-600">MCP {{ item.main_key.mcps.length }}</span>
+                    <span v-if="item.main_key.skills.length" class="rounded-full bg-pink-50 px-2 py-0.5 text-pink-600">Skill {{ item.main_key.skills.length }}</span>
+                    <span v-if="item.main_key.agents.length" class="rounded-full bg-orange-50 px-2 py-0.5 text-orange-600">智能体 {{ item.main_key.agents.length }}</span>
+                    <span v-if="!item.main_key.models.length && !item.main_key.mcps.length && !item.main_key.skills.length && !item.main_key.agents.length" class="text-slate-400">无资源</span>
+                  </div>
+                  <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-3">
                   <BudgetCell :key-data="item.main_key" />
@@ -129,7 +106,6 @@
                   <span class="text-xs text-slate-500">┗</span>
                   <span class="ml-1 text-slate-700">{{ sk.name }}</span>
                 </td>
-                <td class="px-4 py-2" />
                 <td class="px-4 py-2">
                   <div v-if="sk.litellm_key_id" class="flex items-center gap-1">
                     <code class="text-xs text-slate-600">{{ revealedKeys.has(sk.id) ? sk.litellm_key_id : maskKey(sk.litellm_key_id) }}</code>
@@ -139,32 +115,13 @@
                   <span v-else class="text-xs text-slate-400">-</span>
                 </td>
                 <td class="px-4 py-2">
-                  <template v-if="sk.models.length">
-                    <span v-for="mid in sk.models.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{{ getModelName(mid) }}</span>
-                    <span v-if="sk.models.length > 3" class="text-xs text-slate-400">+{{ sk.models.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
-                </td>
-                <td class="px-4 py-2">
-                  <template v-if="sk.mcps.length">
-                    <span v-for="mid in sk.mcps.slice(0, 3)" :key="mid" class="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{{ getMcpName(mid) }}</span>
-                    <span v-if="sk.mcps.length > 3" class="text-xs text-slate-400">+{{ sk.mcps.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
-                </td>
-                <td class="px-4 py-2">
-                  <template v-if="sk.skills.length">
-                    <span v-for="sid in sk.skills.slice(0, 3)" :key="sid" class="mr-1 rounded-full bg-pink-50 px-2 py-0.5 text-xs text-pink-600">{{ getSkillName(sid) }}</span>
-                    <span v-if="sk.skills.length > 3" class="text-xs text-slate-400">+{{ sk.skills.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
-                </td>
-                <td class="px-4 py-2">
-                  <template v-if="sk.agents.length">
-                    <span v-for="aid in sk.agents.slice(0, 3)" :key="aid" class="mr-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-600">{{ getAgentName(aid) }}</span>
-                    <span v-if="sk.agents.length > 3" class="text-xs text-slate-400">+{{ sk.agents.length - 3 }}</span>
-                  </template>
-                  <span v-else class="text-slate-400">-</span>
+                  <div class="flex flex-wrap gap-1.5 text-xs">
+                    <span v-if="sk.models.length" class="rounded-full bg-purple-50 px-2 py-0.5 text-purple-600">模型 {{ sk.models.length }}</span>
+                    <span v-if="sk.mcps.length" class="rounded-full bg-blue-50 px-2 py-0.5 text-blue-600">MCP {{ sk.mcps.length }}</span>
+                    <span v-if="sk.skills.length" class="rounded-full bg-pink-50 px-2 py-0.5 text-pink-600">Skill {{ sk.skills.length }}</span>
+                    <span v-if="sk.agents.length" class="rounded-full bg-orange-50 px-2 py-0.5 text-orange-600">智能体 {{ sk.agents.length }}</span>
+                    <span v-if="!sk.models.length && !sk.mcps.length && !sk.skills.length && !sk.agents.length" class="text-slate-400">无资源</span>
+                  </div>
                 </td>
                 <td class="px-4 py-2">
                   <BudgetCell :key-data="sk" />
@@ -176,6 +133,7 @@
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-2">
+                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(sk)">编辑</button>
                     <button class="text-xs text-red-500 hover:text-red-700" @click="deleteTarget = sk">删除</button>
                   </div>
                 </td>
@@ -310,6 +268,7 @@
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-2">
+                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(sk)">编辑</button>
                     <button class="text-xs text-red-500 hover:text-red-700" @click="deleteTarget = sk">删除</button>
                   </div>
                 </td>
@@ -444,6 +403,7 @@
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-2">
+                    <button class="text-xs text-purple-600 hover:text-purple-800" @click="handleEdit(sk)">编辑</button>
                     <button class="text-xs text-red-500 hover:text-red-700" @click="deleteTarget = sk">删除</button>
                   </div>
                 </td>
@@ -499,6 +459,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   getIdentityList,
   toggleAiKey,
@@ -508,6 +469,7 @@ import {
   getSkills,
   getAgents,
   usePermission,
+  toast,
   type AiKey,
   type ActiveModel,
   type McpServer,
@@ -523,6 +485,7 @@ import ScenarioTab from './ScenarioTab.vue'
 import BudgetCell from './BudgetCell.vue'
 
 const { hasPermission } = usePermission()
+const router = useRouter()
 
 type TabType = 'user' | 'department' | 'project'
 
@@ -650,11 +613,7 @@ function handleCreateForOwner(type: 'department' | 'project', id: number, mainKe
 }
 
 function handleEdit(key: AiKey): void {
-  editingKey.value = key
-  templateKey.value = null
-  defaultOwnerType.value = key.owner_type
-  defaultOwnerId.value = key.owner_id
-  showKeyForm.value = true
+  router.push(`/ai-keys/${key.id}`)
 }
 
 async function handleToggle(key: AiKey): Promise<void> {
@@ -695,8 +654,24 @@ function toggleReveal(keyId: number): void {
   }
 }
 
-function copyToClipboard(text: string): void {
-  navigator.clipboard.writeText(text)
+async function copyToClipboard(text: string): Promise<void> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    toast.success('已复制到剪贴板')
+  } catch {
+    toast.error('复制失败，请手动复制')
+  }
 }
 
 onMounted(() => {

@@ -1,135 +1,207 @@
-# AIHelms
-
 <div align="center">
 
+<img src="ui/static/img/logo.png" alt="AIHelms" width="100">
+
+
+<p><strong>企业 AI 资源纳管平台</strong></p>
+
+<p>承载 AI 数字资产 · 释放 AI 生产力 · 链接未来</p>
+
+
+[![Release](https://img.shields.io/badge/Release-v0.1.0-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6.svg)](https://www.typescriptlang.org/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-06B6D4.svg)](https://tailwindcss.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-336791.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![vLLM](https://img.shields.io/badge/vLLM-FF6F00.svg)](https://docs.vllm.ai/)
+[![SGLang](https://img.shields.io/badge/SGLang-8B5CF6.svg)](https://github.com/sgl-project/sglang)
 
-**企业级 AI 资源纳管平台 — 统一管理模型、Skill、MCP，建立企业 AI 身份**
+ [核心价值](#核心价值) · [功能展示](#功能展示)  · [快速开始](#快速开始)  · [部署文档](#部署)
 
 </div>
 
 ---
 
-## 架构
+<!-- Banner 截图：管理后台 Dashboard 全貌 -->
+<!-- ![AIHelms](docs/assets/screenshot-banner.png) -->
 
-```
-┌──────────────────────────────────────────────────┐
-│              Nginx (统一网关 80/443)               │
-├────────────┬─────────────────┬───────────────────┤
-│  /api/*    │   /admin/*      │       /           │
-│  ↓         │   ↓             │       ↓           │
-│  aihelms   │  admin 静态     │   web 静态        │
-│  (Gunicorn)│  文件           │   文件            │
-└─────┬──────┴─────────────────┴───────────────────┘
-      │ internal network
-┌─────┼────────────────────────────────────────────┐
-│  ┌──┴─────┐   ┌──────────┐   ┌───────┐         │
-│  │LiteLLM │   │PostgreSQL│   │ Redis │         │
-│  └────────┘   └──────────┘   └───────┘         │
-│  ┌────────┐                                     │
-│  │ Celery │ (异步任务)                           │
-│  └────────┘                                     │
-└──────────────────────────────────────────────────┘
-```
+## 这是什么
 
-## 核心功能
+AIHelms 是面向企业的 AI 资源纳管平台。帮助企业**管理 AI 资产、控制 AI 成本、衡量 AI 价值**的管理工具。
+- **决策层** - 平台全程记录用量、核算成本、生成报表，让看得见 AI 的投入产出比
+- **管理员** - 通过后台统一接入模型、分配身份、设定预算
+- **员工** - 通过用户端获取 AI 身份，接入任意客户端使用
 
-- **组织管理** — 无限层级部门/分支机构、多负责人、项目组、RBAC 角色权限
-- **模型纳管** — 基于 LiteLLM，支持 100+ 模型供应商统一接入
-- **Skill 管理** — 统一注册、分发、权限控制
-- **MCP Server 管理** — 注册、发现、分配
-- **统一 AI 身份** — 企业员工统一认证与授权，API Key 签发
-- **用量统计与审计** — 全链路追踪，成本可控
+![架构图](docs/struct.png)
 
-## 技术栈
+## 核心价值
 
-| 组件 | 技术 |
+### 成本可见可控
+
+企业使用 AI 最大的焦虑是"钱花了但不知道花在哪"。AIHelms 建立了完整的成本体系：
+
+- **内外双轨定价** — 外部成本（供应商实际收费）和内部结算价（企业对部门的计费）分开核算。企业可以按成本价透传，也可以加价内部结算
+- **多维预算管控** — 按人、按部门、按项目、按模型设预算，支持软限制（预警）和硬限制（超支停用）
+- **实时成本归因** — 每一次调用都能追溯到具体的人、部门、项目、模型，精确到 token 级别
+
+### 统一身份统一入口
+
+- 每位员工一个 AI 身份（API Key），一个入口访问所有 AI 资源
+- AI员工（进行中）
+
+### 量化 AI 价值
+
+- **覆盖率** — 部门覆盖率、人员激活率、模型使用分布
+- **活跃度** — 日均调用量、人均 token 消耗、使用趋势曲线
+- **成本效能** — 部门成本排名、模型性价比、预算消耗进度、内外成本差异
+- **效能报告** — 周/月自动生成，支持按部门、项目、模型多维下钻
+
+### 安全审计
+
+- 敏感信息识别
+- 高风险 prompt 拦截
+- 管理员操作追踪
+
+### 资源集中管理
+
+- **模型纳管** — 多供应商统一接入，同模型多部署负载均衡，OpenAI/Anthropic 双格式兼容
+- **Skill & MCP** — 企业内部 AI 工具统一注册、审批、分发
+- **权限精细化** — 谁能用什么模型、用多少额度、什么时候过期，全部可配置
+
+## 主要功能
+
+### 管理后台
+
+面向 IT 管理员和 AI 负责人，覆盖资源管理全流程。
+
+| <img src="docs/dashboard.png" width="400" height="250"> | <img src="docs/model.png" width="400" height="250"> |
+|:---:|:---:|
+| **Dashboard** — 今日调用、成本、待办一览 | **模型纳管** — 供应商接入、多部署、连通性测试 |
+| <img src="docs/id.png" width="400" height="250"> | <img src="docs/datacenter.png" width="400" height="250"> |
+| **AI 身份** — Key 签发、预算分配、生命周期 | **数据中心** — 成本分析、覆盖率、效能报告 |
+
+<details>
+<summary><b>管理后台功能清单</b></summary>
+
+| 模块 | 能力 |
 |------|------|
-| 后端 | Python 3.11+, FastAPI, Gunicorn, Celery |
-| 前端 | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
-| 模型代理 | LiteLLM |
-| 数据库 | PostgreSQL 16+ |
-| 缓存/消息 | Redis 7+ |
-| 部署 | Docker Compose |
+| 模型纳管 | 供应商管理、凭证管理、模型注册、多部署负载均衡、路由策略、连通性测试 |
+| AI 身份 | 部门/项目/人员管理、Key 签发、预算额度、速率限制、模型白名单 |
+| AI 市场 | Skill 发布上架、MCP Server 注册发现、资源申请审批 |
+| AI 效能 | 成本分析（内/外）、落地覆盖率、预算管控、效能报告 |
+| 安全 | 管理员审计日志、操作追踪 |
+| 智能体中心 | 智能体创建、配置、生命周期管理 |
+
+</details>
+
+### 用户端
+
+面向全体员工，简洁直观，获取 AI 身份后即可使用。
+
+![用户端](docs/web.png)
+
+- 查看 AI 身份，一键复制 Key 和接入点
+- 浏览模型广场，按场景选择模型 ID
+- 浏览 AI 市场，申请 Skill / MCP 使用权限
+- 查看本月用量和预算消耗
 
 ## 快速开始
 
 ### 环境要求
 
-- Docker 20.10+
-- Docker Compose v2+
+- Docker 20.10+ & Docker Compose v2+
+- 4 核 8G 内存（最低）
 
-### 一键部署
+### 部署
 
 ```bash
-git clone https://github.com/your-org/AIHelms.git
+git clone https://github.com/beizhu-1209/AIHelms.git
 cd AIHelms
 cp .env.example .env
-# 编辑 .env 填入实际密钥和密码
+# 编辑 .env 填入密钥
 docker compose up -d
 ```
 
 ### 访问
 
-- Web 端：http://localhost
-- 管理后台：http://localhost/admin
-- API 文档：http://localhost/api/docs
-- 默认管理员：admin / 密码见 .env 中 SUPER_ADMIN_PASSWORD
+| 地址 | 说明 |
+|------|------|
+| `http://your-host` | 用户端 |
+| `http://your-host/admin` | 管理后台 |
+| `http://your-host/api/docs` | API 文档 |
 
-## 项目结构
+默认管理员：`admin` / 密码见 `.env` 中 `SUPER_ADMIN_PASSWORD`
+
+### 三步上手
 
 ```
-AIHelms/
-├── apps/               # Python FastAPI 后端
-│   ├── main.py         # 入口
-│   ├── core/           # 配置、安全、数据库
-│   ├── api/v1/         # API 路由
-│   ├── models/         # Pydantic 模型
-│   ├── services/       # 业务逻辑
-│   └── tests/          # 测试
-├── ui/                 # Vue 前端 (npm workspaces)
-│   └── packages/
-│       ├── shared/     # 共享类型和 API
-│       ├── admin/      # 管理后台
-│       └── web/        # 用户端
-└── docker/             # Docker 配置
-    ├── nginx/          # Nginx 模板
-    ├── litellm/        # LiteLLM 配置
-    └── db/             # 数据库初始化
+1. 管理后台 → 供应商管理 → 添加凭证
+2. 管理后台 → 模型管理 → 新建模型 → 关联凭证 → 发布
+3. 用户端 → 我的 AI 身份 → 复制 Key 和 Endpoint → 配置到客户端
 ```
 
-### 环境变量
 
-详见 `.env.example`，关键变量：
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 后端 | Python 3.11+, FastAPI, Gunicorn, Celery |
+| 前端 | Vue 3.4+, TypeScript, Vite 5+, TailwindCSS |
+| 数据库 | PostgreSQL 16+ |
+| 缓存 | Redis 7+ |
+| 部署 | Docker Compose, Nginx |
+
+<details>
+<summary><b>环境变量说明</b></summary>
 
 | 变量 | 说明 |
 |------|------|
 | `POSTGRES_PASSWORD` | 数据库密码 |
-| `LITELLM_MASTER_KEY` | LiteLLM 管理密钥 |
-| `LITELLM_SALT_KEY` | LiteLLM 加密盐（不可更改） |
 | `SECRET_KEY` | JWT 签名密钥 |
 | `SUPER_ADMIN_PASSWORD` | 超级管理员初始密码 |
+| `WEB_PORT` | Web 对外端口 |
+
+完整列表见 `.env.example`
+
+</details>
+
+<details>
+<summary><b>开发环境</b></summary>
+
+```bash
+./dev/setup              # 首次设置
+./dev/start-docker-compose  # 启动中间件
+./dev/start-api          # 启动后端（热重载）
+./dev/start-web          # 启动前端（HMR）
+```
+
+详见 [开发与发布流程](docs/INTERNAL.md)
+
+</details>
 
 ## Contributing
 
 1. Fork 本仓库
-2. 创建分支 (`git checkout -b feature/your-feature`)
-3. 提交更改 (`git commit -m 'feat: 添加某功能'`)
-4. 推送分支 (`git push origin feature/your-feature`)
-5. 创建 Pull Request
+2. 创建分支：`git checkout -b feature/xxx`
+3. 提交代码：`git commit -m "feat: 功能描述"`
+4. 推送并创建 Pull Request
 
-### 代码规范
+详细开发规范见 [开发与发布流程](docs/INTERNAL.md)
 
-- Python: black + ruff
-- Vue/TS: eslint + prettier
-- Commit: conventional commits，中文描述
+## 交流反馈
+
+- 微信交流群：扫码加入
+
+  <img src="docs/wechat.jpg" alt="微信交流群" width="200">
+
+- 商业合作：[联系邮件](mailto:jiangshiwei@microbaton.com)
+- Issue 反馈：[GitHub Issues](https://github.com/beizhu-1209/AIHelms/issues)
 
 ## License
 
-[GPL-3.0](LICENSE)
+本项目采用 [GPL-3.0](LICENSE) 开源协议。

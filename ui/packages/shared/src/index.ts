@@ -53,6 +53,10 @@ export {
   getAgentLogs, getAgentLogFilters,
 } from './api/usageLogs'
 export type { LlmLogQuery, McpLogQuery, SkillLogQuery, AgentLogQuery } from './api/usageLogs'
+export type {
+  DashboardData, DashboardStatus, PendingItem, HourlyTrend, ResourceSummary, RecentActivity,
+} from './types/dashboard'
+export { getDashboard } from './api/dashboard'
 export { useAuth } from './composables/useAuth'
 export { usePermission } from './composables/usePermission'
 export { toast } from './utils/toast'

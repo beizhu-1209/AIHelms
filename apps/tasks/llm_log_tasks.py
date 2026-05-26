@@ -24,6 +24,7 @@ from models.db import (
     SyncState,
     User,
 )
+from services.model_service import ANTHROPIC_MODEL_SUFFIX
 
 logger = logging.getLogger(__name__)
 
@@ -139,12 +140,23 @@ async def _sync() -> None:
                 # 反查 ai_key
                 ai_key_id: int | None = None
                 if api_key_token and api_key_token != "litellm_proxy_master_key":
-                    if api_key_token not in ai_key_cache:
-                        r = await session.execute(
-                            select(AiKey).where(AiKey.litellm_key_id == api_key_token)
-                        )
-                        ai_key_cache[api_key_token] = r.scalar_one_or_none()
-                    ai_key = ai_key_cache[api_key_token]
+                    key_alias = metadata.get("user_api_key_alias") or ""
+                    cache_key = key_alias or api_key_token
+                    if cache_key not in ai_key_cache:
+                        if key_alias:
+                            r = await session.execute(
+                                select(AiKey).where(
+                                    AiKey.litellm_key_alias == key_alias
+                                )
+                            )
+                        else:
+                            r = await session.execute(
+                                select(AiKey).where(
+                                    AiKey.litellm_key_id == api_key_token
+                                )
+                            )
+                        ai_key_cache[cache_key] = r.scalar_one_or_none()
+                    ai_key = ai_key_cache[cache_key]
                     if ai_key:
                         ai_key_id = ai_key.id
 
@@ -164,22 +176,59 @@ async def _sync() -> None:
                     if user:
                         user_id = user.id
 
-                # 反查 deployment + 算 internal_cost
+                # 反查 deployment + 算成本
                 deployment_id: int | None = None
                 internal_cost = Decimal("0")
-                if model_name and model_name not in deployment_cache:
-                    r = await session.execute(
-                        select(ModelDeployment, Model)
-                        .join(Model, Model.id == ModelDeployment.model_id)
-                        .where(Model.model_id == model_name)
-                        .limit(1)
-                    )
-                    deployment_cache[model_name] = r.first()
-                deployment_pair = deployment_cache.get(model_name)
+                external_cost = Decimal("0")
+                litellm_model_id = metadata.get("model_id") or ""
+                dep_cache_key = litellm_model_id or model_name
+                if dep_cache_key and dep_cache_key not in deployment_cache:
+                    pair = None
+                    # 优先用 litellm_model_id 精确匹配
+                    if litellm_model_id:
+                        r = await session.execute(
+                            select(ModelDeployment, Model)
+                            .join(Model, Model.id == ModelDeployment.model_id)
+                            .where(ModelDeployment.litellm_model_id == litellm_model_id)
+                            .limit(1)
+                        )
+                        pair = r.first()
+                    # fallback: 按模型名匹配
+                    if not pair and model_name:
+                        lookup_name = model_name
+                        # Strip (Anthropic) suffix for platform model matching
+                        if lookup_name.endswith(ANTHROPIC_MODEL_SUFFIX):
+                            lookup_name = lookup_name[: -len(ANTHROPIC_MODEL_SUFFIX)]
+                        r = await session.execute(
+                            select(ModelDeployment, Model)
+                            .join(Model, Model.id == ModelDeployment.model_id)
+                            .where(Model.model_id == lookup_name)
+                            .limit(1)
+                        )
+                        pair = r.first()
+                        # 去前缀再试: "deepseek/deepseek-v4-pro" → "deepseek-v4-pro"
+                        if not pair and "/" in lookup_name:
+                            bare = lookup_name.split("/", 1)[1]
+                            r = await session.execute(
+                                select(ModelDeployment, Model)
+                                .join(Model, Model.id == ModelDeployment.model_id)
+                                .where(Model.model_id == bare)
+                                .limit(1)
+                            )
+                            pair = r.first()
+                    deployment_cache[dep_cache_key] = pair
+                deployment_pair = deployment_cache.get(dep_cache_key)
                 if deployment_pair:
                     deployment, _ = deployment_pair
                     deployment_id = deployment.id
                     internal_cost = _calc_internal_cost(
+                        deployment,
+                        prompt_tokens,
+                        completion_tokens,
+                        cache_read,
+                        cache_creation,
+                    )
+                    external_cost = _calc_external_cost(
                         deployment,
                         prompt_tokens,
                         completion_tokens,
@@ -224,7 +273,7 @@ async def _sync() -> None:
                     total_tokens=total_tokens,
                     cache_read_tokens=cache_read,
                     cache_creation_tokens=cache_creation,
-                    external_cost=Decimal(str(spend)),
+                    external_cost=external_cost,
                     internal_cost=internal_cost,
                     duration_ms=duration_ms,
                     ttft_ms=ttft_ms,
@@ -264,6 +313,37 @@ def _calc_internal_cost(
     output_price = Decimal(str(info.get("internal_output_cost") or 0))
     cache_read_price = Decimal(str(info.get("internal_cache_read_cost") or 0))
     cache_creation_price = Decimal(str(info.get("internal_cache_creation_cost") or 0))
+
+    million = Decimal("1000000")
+    cost = (
+        input_price * prompt_tokens / million
+        + output_price * completion_tokens / million
+        + cache_read_price * cache_read / million
+        + cache_creation_price * cache_creation / million
+    )
+    return cost.quantize(Decimal("0.000001"))
+
+
+def _calc_external_cost(
+    deployment: ModelDeployment,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_read: int,
+    cache_creation: int,
+) -> Decimal:
+    """根据 deployment.model_info 中的外部定价算成本（单位 ¥/百万 token）。"""
+    info = deployment.model_info or {}
+    billing_type = deployment.billing_type or "token"
+
+    if billing_type == "per_call":
+        per_call = info.get("cost_per_call") or deployment.cost_per_call
+        return Decimal(str(per_call)) if per_call else Decimal("0")
+
+    # token 计费
+    input_price = Decimal(str(info.get("input_cost") or 0))
+    output_price = Decimal(str(info.get("output_cost") or 0))
+    cache_read_price = Decimal(str(info.get("cache_read_cost") or 0))
+    cache_creation_price = Decimal(str(info.get("cache_creation_cost") or 0))
 
     million = Decimal("1000000")
     cost = (

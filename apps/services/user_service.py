@@ -126,6 +126,22 @@ async def update_user_roles(session: AsyncSession, user_id: int, role_ids: list[
     user = await user_repo.find_user_by_id(session, user_id)
     if not user:
         raise NotFoundError("user", user_id)
+
+    # super_admin 角色不可通过后台分配
+    from models.db import Role
+    from sqlalchemy import select
+    if role_ids:
+        result = await session.execute(
+            select(Role).where(Role.id.in_(role_ids))
+        )
+        roles = list(result.scalars().all())
+        assigned_role_names = {r.name for r in roles}
+        if "super_admin" in assigned_role_names:
+            raise ConflictError("super_admin 角色不可手动分配")
+        user.is_admin = "admin" in assigned_role_names
+    else:
+        user.is_admin = False
+
     await user_repo.replace_user_roles(session, user_id, role_ids)
     await session.commit()
 

@@ -77,6 +77,12 @@ async def create_agent(
         created_by=created_by,
     )
     agent = await agent_repo.create(session, agent)
+
+    # 发布且不需要审批时，自动同步到所有主 Key
+    if is_published and not requires_approval:
+        from services import ai_key_service
+        await ai_key_service.sync_public_resource_to_all_keys(session, "agents", agent.id)
+
     await session.commit()
     await session.refresh(agent)
     return _serialize(agent)
@@ -89,6 +95,12 @@ async def update_agent(session: AsyncSession, agent_id: int, **kwargs) -> dict:
     for key, value in kwargs.items():
         if hasattr(agent, key) and value is not None:
             setattr(agent, key, value)
+
+    # 发布且不需要审批时，自动同步到所有主 Key
+    if agent.is_published and not agent.requires_approval:
+        from services import ai_key_service
+        await ai_key_service.sync_public_resource_to_all_keys(session, "agents", agent.id)
+
     await session.commit()
     await session.refresh(agent)
     return _serialize(agent)

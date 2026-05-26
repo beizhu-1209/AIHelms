@@ -3,9 +3,9 @@
  * 用于 401 跳转和 logout 跳转。
  *
  * - 当前在 `/admin/*` → `/admin/login`
- * - 其他（包括 `/web/*`、根路径、未知路径）→ `/web/login`
+ * - 其他（包括根路径、未知路径）→ `/login`
  */
 export function getLoginUrl(): string {
-  if (typeof window === 'undefined') return '/web/login'
-  return window.location.pathname.startsWith('/admin/') ? '/admin/login' : '/web/login'
+  if (typeof window === 'undefined') return '/login'
+  return window.location.pathname.startsWith('/admin') ? '/admin/login' : '/login'
 }

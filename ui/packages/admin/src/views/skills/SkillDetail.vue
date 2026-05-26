@@ -99,14 +99,13 @@ async function handleSave(): Promise<void> {
       zip_file: zipFile.value,
     }
     if (isNew.value) {
-      const created = await createSkill(payload)
+      await createSkill(payload)
       toast.success('Skill 创建成功')
-      router.replace(`/skills/${created.id}`)
+      router.push('/skills')
     } else if (skillId.value) {
-      const updated = await updateSkill(skillId.value, payload)
+      await updateSkill(skillId.value, payload)
       toast.success('Skill 更新成功')
-      skill.value = updated
-      zipFile.value = null
+      router.push('/skills')
     }
   } catch (e) {
     toast.error((e as { message?: string }).message || '保存失败')
@@ -170,7 +169,7 @@ onMounted(loadData)
     <template v-else>
       <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 class="mb-5 text-xl font-bold text-slate-900">
-          {{ isNew ? '新建 Skill' : `编辑：${skill?.name}` }}
+          {{ isNew ? '新建 Skill' : `编辑：${form.name || ''}` }}
         </h1>
 
         <div class="grid grid-cols-2 gap-4">

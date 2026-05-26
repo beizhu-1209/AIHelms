@@ -158,6 +158,17 @@ async function handleSubmit(): Promise<void> {
     } else {
       if (!username.value || !email.value || !password.value) {
         errorMessage.value = '请填写所有必填项'
+        isLoading.value = false
+        return
+      }
+      if (!email.value.includes('@') || !email.value.includes('.')) {
+        errorMessage.value = '请输入有效的邮箱地址'
+        isLoading.value = false
+        return
+      }
+      if (password.value.length < 6) {
+        errorMessage.value = '密码至少 6 位'
+        isLoading.value = false
         return
       }
       const user = await createUser({
@@ -213,7 +224,7 @@ onMounted(fetchData)
             <label class="mb-1.5 block text-sm font-medium text-slate-700">邮箱 *</label>
             <input
               v-model="email"
-              type="email"
+              type="text"
               class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
             />
           </div>
@@ -247,27 +258,13 @@ onMounted(fetchData)
           />
         </div>
 
-        <div class="mb-4">
-          <label class="mb-1.5 block text-sm font-medium text-slate-700">头像</label>
-          <div class="flex items-center gap-3">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-              <img v-if="avatar" :src="avatar" alt="" class="h-full w-full object-cover" />
-              <span v-else class="text-xs text-slate-400">无</span>
-            </div>
-            <input
-              v-model="avatar"
-              type="text"
-              placeholder="头像 URL（可选）"
-              class="flex h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-            />
-          </div>
-        </div>
 
         <div v-if="!isEdit" class="mb-4">
           <label class="mb-1.5 block text-sm font-medium text-slate-700">密码 *</label>
           <input
             v-model="password"
             type="password"
+            placeholder="至少 6 位"
             class="flex h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
           />
         </div>

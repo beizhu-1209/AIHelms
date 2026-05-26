@@ -103,6 +103,12 @@ async def create_skill(
         created_by=created_by,
     )
     skill = await skill_repo.create(session, skill)
+
+    # 发布且不需要审批时，自动同步到所有主 Key
+    if is_published and not requires_approval:
+        from services import ai_key_service
+        await ai_key_service.sync_public_resource_to_all_keys(session, "skills", skill.id)
+
     await session.commit()
     await session.refresh(skill)
     return _serialize(skill)
@@ -133,6 +139,11 @@ async def update_skill(
         skill.zip_size = len(zip_content)
         if zip_filename:
             skill.zip_filename = zip_filename
+
+    # 发布且不需要审批时，自动同步到所有主 Key
+    if skill.is_published and not skill.requires_approval:
+        from services import ai_key_service
+        await ai_key_service.sync_public_resource_to_all_keys(session, "skills", skill.id)
 
     await session.commit()
     await session.refresh(skill)
@@ -180,7 +191,7 @@ async def get_install_info(session: AsyncSession, skill_id: int) -> dict:
     base_url = settings.platform_public_url.rstrip("/")
     download_url = f"{base_url}/api/v1/skills/{skill.id}/zip"
 
-    agent_prompt = f"请帮我从 {download_url} 安装 {skill.name} skill。"
+    agent_prompt = f"请帮我下载{download_url} 并安装 {skill.name} 这个skill"
 
     return {
         "name": skill.name,

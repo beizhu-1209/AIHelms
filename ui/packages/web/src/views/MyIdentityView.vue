@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useAuth, getMyKeys } from '@aihelms/shared'
-import { getEfficiencyOverview, getEfficiencyTrend } from '@aihelms/shared/src/api/efficiency'
-import { getResourceApplications } from '@aihelms/shared/src/api/resource-application'
 import { request } from '@aihelms/shared/src/api/request'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import type { EfficiencyKpi, TrendItem } from '@aihelms/shared/src/types/efficiency'
 import type { ResourceApplication } from '@aihelms/shared/src/types/resource-application'
 import type { McpServer } from '@aihelms/shared/src/types/mcp'
 import type { Skill } from '@aihelms/shared/src/types/skill'
-import { Copy, Check, Cpu, Server, Sparkles, Clock, CheckCircle2, XCircle } from 'lucide-vue-next'
+import { Copy, Check, Cpu, Server, Sparkles, Clock, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-vue-next'
 import ProviderIcon from '../components/ProviderIcon.vue'
 
 function getProviderType(modelId: string): string {
@@ -45,14 +43,59 @@ const mcpNames = ref<Record<number, string>>({})
 const skillNames = ref<Record<number, string>>({})
 const isLoading = ref(true)
 const copied = ref(false)
+const showFullKey = ref(false)
+const endpointUrl = ref('')
 
 const maskedKey = computed(() => {
   const val = mainKey.value?.key_value || mainKey.value?.litellm_key_id
   if (!val) return 'sk-xxxxxxxxxxxx'
-  return val.slice(0, 7) + '--------' + val.slice(-4)
+  return val.slice(0, 7) + '****' + val.slice(-4)
 })
 
 const fullKey = computed(() => mainKey.value?.key_value || mainKey.value?.litellm_key_id || '')
+
+const displayKey = computed(() => showFullKey.value ? fullKey.value : maskedKey.value)
+
+const budgetDisplay = computed(() => {
+  if (!mainKey.value) return '无限制'
+  const scope = mainKey.value.budget_scope
+  if (scope === 'unified') {
+    return mainKey.value.budget_limit ? `¥${mainKey.value.budget_limit}` : '无限制'
+  }
+  if (scope === 'per_type') {
+    const parts: string[] = []
+    if (mainKey.value.budget_models_total) parts.push(`模型 ¥${mainKey.value.budget_models_total}`)
+    if (mainKey.value.budget_mcps_total) parts.push(`MCP ¥${mainKey.value.budget_mcps_total}`)
+    return parts.length ? parts.join(' / ') : '无限制'
+  }
+  if (scope === 'per_resource') return '按资源分配'
+  return '无限制'
+})
+
+const totalBudget = computed(() => {
+  if (!mainKey.value) return null
+  const scope = mainKey.value.budget_scope
+  if (scope === 'unified' && mainKey.value.budget_limit) return Number(mainKey.value.budget_limit)
+  if (scope === 'per_type') {
+    const m = Number(mainKey.value.budget_models_total) || 0
+    const c = Number(mainKey.value.budget_mcps_total) || 0
+    return m + c > 0 ? m + c : null
+  }
+  return null
+})
+
+const dailyAvgCost = computed(() => {
+  const cost = kpi.value?.total_cost ?? 0
+  const day = new Date().getDate()
+  return day > 0 ? cost / day : 0
+})
+
+const budgetUsedPercent = computed(() => {
+  const budget = totalBudget.value
+  if (!budget) return null
+  const spent = kpi.value?.total_cost ?? 0
+  return Math.min((spent / budget) * 100, 100)
+})
 
 const chartOption = computed(() => ({
   tooltip: { trigger: 'axis' },
@@ -82,9 +125,24 @@ const chartOption = computed(() => ({
 
 async function handleCopy(): Promise<void> {
   if (!fullKey.value) return
-  await navigator.clipboard.writeText(fullKey.value)
-  copied.value = true
-  setTimeout(() => { copied.value = false }, 2000)
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(fullKey.value)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = fullKey.value
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    /* ignore */
+  }
 }
 
 const typeLabel: Record<string, string> = {
@@ -93,18 +151,20 @@ const typeLabel: Record<string, string> = {
 
 onMounted(async () => {
   try {
-    const [keysData, kpiData, trendData, appsData, mcpRes, skillRes] = await Promise.all([
-      getMyKeys(),
-      getEfficiencyOverview({ scope: 'self' }).catch(() => null),
-      getEfficiencyTrend({ scope: 'self', group_by: 'day' }).catch(() => []),
-      getResourceApplications(1, 10, currentUser.value?.id).catch(() => ({ items: [] })),
-      request<{ items: McpServer[] }>('/api/v1/mcp/servers', { params: { is_published: true, page_size: 200 } }).catch(() => ({ items: [] })),
-      request<{ items: Skill[] }>('/api/v1/skills', { params: { is_published: true, page_size: 200 } }).catch(() => ({ items: [] })),
+    const [keysData, kpiData, trendData, appsData, mcpRes, skillRes, configData] = await Promise.all([
+      getMyKeys().catch(() => ({ personal: [] as AiKey[], department: [] as AiKey[], project: [] as AiKey[] })),
+      request<unknown>('/api/v1/efficiency/overview', { params: { scope: 'self' }, silent: true }).catch(() => null),
+      request<unknown[]>('/api/v1/efficiency/trend', { params: { scope: 'self', group_by: 'day' }, silent: true }).catch(() => []),
+      request<{ items: ResourceApplication[] }>('/api/v1/resource-applications/my', { params: { page: 1, page_size: 10 }, silent: true }).catch(() => ({ items: [] as ResourceApplication[] })),
+      request<{ items: McpServer[] }>('/api/v1/mcp/servers/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
+      request<{ items: Skill[] }>('/api/v1/skills/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
+      request<{ litellm_base_url: string }>('/api/v1/config/public', { silent: true }).catch(() => ({ litellm_base_url: '' })),
     ])
     mainKey.value = keysData.personal.find(k => k.key_type === 'personal_main') ?? null
     kpi.value = kpiData
     trend.value = trendData
     applications.value = appsData.items
+    endpointUrl.value = configData.litellm_base_url || ''
 
     for (const m of mcpRes.items) {
       mcpNames.value[m.id] = m.name
@@ -173,21 +233,28 @@ onMounted(async () => {
               <div class="flex items-center justify-between">
                 <div class="flex-1">
                   <div class="text-[11px] font-bold tracking-[1px] text-[#7B61FF]">API KEY</div>
-                  <code class="mt-1.5 block break-all text-sm font-bold text-gray-900">{{ maskedKey }}</code>
+                  <code class="mt-1.5 block break-all text-sm font-bold text-gray-900">{{ displayKey }}</code>
                 </div>
-                <button @click="handleCopy"
-                  class="shrink-0 rounded-lg border border-purple-200/60 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-50">
-                  <Check v-if="copied" class="inline h-3 w-3 text-green-600" />
-                  <Copy v-else class="inline h-3 w-3" />
-                  {{ copied ? '已复制' : '复制' }}
-                </button>
+                <div class="flex shrink-0 gap-1.5">
+                  <button @click="showFullKey = !showFullKey"
+                    class="flex items-center justify-center rounded-lg border border-slate-200/60 bg-white p-1.5 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700">
+                    <EyeOff v-if="showFullKey" class="h-4 w-4" />
+                    <Eye v-else class="h-4 w-4" />
+                  </button>
+                  <button @click="handleCopy"
+                    class="flex items-center gap-1 rounded-lg border border-purple-200/60 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-50">
+                    <Check v-if="copied" class="h-3 w-3 text-green-600" />
+                    <Copy v-else class="h-3 w-3" />
+                    {{ copied ? '已复制' : '复制' }}
+                  </button>
+                </div>
               </div>
 
               <!-- 底部 meta -->
               <div class="mt-3 flex gap-6 border-t border-slate-100 pt-3">
                 <div>
                   <div class="text-[10px] tracking-[1px] text-gray-400">预算</div>
-                  <div class="mt-0.5 text-xs font-bold text-gray-900">{{ mainKey.budget_limit ? `¥${mainKey.budget_limit}` : '无限制' }}</div>
+                  <div class="mt-0.5 text-xs font-bold text-gray-900">{{ budgetDisplay }}</div>
                 </div>
                 <div>
                   <div class="text-[10px] tracking-[1px] text-gray-400">模型</div>
@@ -257,19 +324,36 @@ onMounted(async () => {
 
       <!-- 用量概览 -->
       <section v-if="kpi" class="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
-        <h2 class="mb-4 text-sm font-medium text-slate-900">本月用量</h2>
-        <div class="grid grid-cols-3 gap-4">
-          <div>
-            <div class="text-xs text-slate-400">总成本</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ kpi.total_cost.toFixed(2) }}</div>
+        <h2 class="mb-4 text-sm font-medium text-slate-900">本月概览</h2>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">本月预算</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">{{ budgetDisplay }}</div>
           </div>
-          <div>
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">已花费</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ (kpi.total_cost ?? 0).toFixed(2) }}</div>
+            <div v-if="budgetUsedPercent !== null" class="mt-0.5 text-xs text-slate-400">{{ budgetUsedPercent.toFixed(1) }}%</div>
+          </div>
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
             <div class="text-xs text-slate-400">调用次数</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">{{ kpi.total_requests.toLocaleString() }}</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">{{ (kpi.total_requests ?? 0).toLocaleString() }}</div>
           </div>
-          <div>
-            <div class="text-xs text-slate-400">日均成本</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ kpi.avg_cost_per_user.toFixed(2) }}</div>
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">日均花费</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ dailyAvgCost.toFixed(2) }}</div>
+          </div>
+        </div>
+        <!-- 预算进度条 -->
+        <div v-if="budgetUsedPercent !== null" class="mt-4">
+          <div class="flex items-center justify-between text-xs text-slate-400">
+            <span>预算使用</span>
+            <span>{{ budgetUsedPercent.toFixed(1) }}%</span>
+          </div>
+          <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-full rounded-full transition-all"
+              :class="budgetUsedPercent > 100 ? 'bg-red-500' : budgetUsedPercent > 80 ? 'bg-amber-500' : 'bg-purple-500'"
+              :style="{ width: `${Math.min(budgetUsedPercent, 100)}%` }" />
           </div>
         </div>
         <!-- 趋势图表 -->

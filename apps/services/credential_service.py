@@ -40,9 +40,9 @@ async def create_credential(
     provider_id: int,
     credential_info: dict | None = None,
 ) -> dict:
-    existing = await credential_repo.find_by_name(session, credential_name)
+    existing = await credential_repo.find_by_name(session, credential_name, provider_id=provider_id)
     if existing:
-        raise ConflictError(f"凭证名 '{credential_name}' 已存在")
+        raise ConflictError(f"该供应商下凭证名 '{credential_name}' 已存在")
 
     credential = Credential(
         credential_name=credential_name,
@@ -126,14 +126,13 @@ async def delete_credential(session: AsyncSession, credential_id: int) -> None:
 
 
 def _serialize(credential: Credential) -> dict:
-    masked_values = _mask_values(credential.credential_values)
     return {
         "id": credential.id,
         "credential_name": credential.credential_name,
         "provider_id": credential.provider_id,
         "provider_name": credential.provider.name if credential.provider else None,
         "provider_type": credential.provider.provider_type if credential.provider else None,
-        "credential_values": masked_values,
+        "credential_values": credential.credential_values,
         "credential_info": credential.credential_info,
         "litellm_synced": credential.litellm_synced,
         "is_active": credential.is_active,
@@ -142,19 +141,3 @@ def _serialize(credential: Credential) -> dict:
         "updated_at": credential.updated_at.isoformat() if credential.updated_at else None,
     }
 
-
-def _mask_values(values: dict) -> dict:
-    """Mask sensitive values for display."""
-    masked = {}
-    for key, val in values.items():
-        if not val or not isinstance(val, str):
-            masked[key] = val
-            continue
-        if any(k in key.lower() for k in ("key", "secret", "password", "token", "credentials")):
-            if len(val) > 8:
-                masked[key] = val[:4] + "****" + val[-4:]
-            else:
-                masked[key] = "****"
-        else:
-            masked[key] = val
-    return masked

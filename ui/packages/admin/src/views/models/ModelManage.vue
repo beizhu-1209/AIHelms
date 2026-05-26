@@ -63,6 +63,7 @@ const showPublishDialog = ref(false)
 const publishLoading = ref(false)
 const publishIsPublished = ref(false)
 const publishVisibilityType = ref('all')
+const publishRequiresApproval = ref(false)
 const publishDepartmentIds = ref<number[]>([])
 const departmentTree = ref<DeptTreeNode[]>([])
 const flatDepartments = ref<{ id: number; name: string; path: string }[]>([])
@@ -110,6 +111,7 @@ const formCredentialId = ref<number | null>(null)
 const formDeployModelName = ref('')
 
 // Deployment form — simplified
+const deployModelIdStr = ref('')  // 平台模型 ID（用户请求时使用）
 const deployModelName = ref('')  // 管理员填的模型名称（如 claude-sonnet-4-20250514）
 const deployProviderId = ref<number | null>(null)
 const deployCredentialId = ref<number | null>(null)
@@ -161,6 +163,7 @@ const categoryTags: Record<string, { value: string; label: string }[]> = {
   ],
   embedding: [
     { value: '多语言', label: '多语言' },
+    { value: '多模态', label: '多模态' },
     { value: '代码', label: '代码' },
     { value: '长文本', label: '长文本' },
   ],
@@ -197,6 +200,12 @@ function getCredentialProviderType(credId: number | null): string {
   if (!credId) return ''
   const cred = credentials.value.find(c => c.id === credId)
   return cred?.provider_type || (cred?.credential_info?.custom_llm_provider as string) || ''
+}
+
+function getCredentialFormat(credId: number | null): string {
+  if (!credId) return 'openai'
+  const cred = credentials.value.find(c => c.id === credId)
+  return (cred?.credential_info?.format as string) || 'openai'
 }
 
 function getProviderPrefixMap(credId: number | null): Record<string, string | null> | null {
@@ -347,42 +356,28 @@ function handleEditModel(): void {
 
 async function handleSubmitModel(): Promise<void> {
   errorMessage.value = ''
-  if (!formName.value || !formModelId.value) {
-    errorMessage.value = '请填写模型名称和 ID'
-    return
-  }
-  if (formCredentialId.value && !formDeployModelName.value) {
-    errorMessage.value = '选择凭证后请填写厂商模型名称'
+  if (!formName.value) {
+    errorMessage.value = '请填写模型名称'
     return
   }
   try {
     if (isEditingModel.value && selectedModel.value) {
       await updateModel(selectedModel.value.id, {
         name: formName.value,
+        model_id: formModelId.value || undefined,
         category: formCategory.value,
         capabilities: formTags.value,
         description: formDescription.value,
       })
       await fetchModelDetail(selectedModel.value.id)
     } else {
-      const model = await createModel({
+      await createModel({
         name: formName.value,
-        model_id: formModelId.value,
+        model_id: '',
         category: formCategory.value,
         capabilities: formTags.value,
         description: formDescription.value,
       })
-      // Auto-create deployment if credential selected
-      if (formCredentialId.value && formDeployModelName.value) {
-        const litellmModel = buildLitellmModelId(formCredentialId.value, formDeployModelName.value, formCategory.value)
-        const litellmParams: Record<string, unknown> = { model: litellmModel }
-        const cred = credentials.value.find(c => c.id === formCredentialId.value)
-        if (cred) litellmParams.litellm_credential_name = cred.credential_name
-        await createDeployment(model.id, {
-          litellm_params: litellmParams,
-          credential_id: formCredentialId.value,
-        })
-      }
     }
     showModelForm.value = false
     await fetchModels()
@@ -408,6 +403,7 @@ async function handleConfirmDeleteModel(): Promise<void> {
 }
 
 function resetDeployForm(): void {
+  deployModelIdStr.value = selectedModel.value?.model_id || ''
   deployModelName.value = ''
   deployProviderId.value = null
   deployCredentialId.value = null
@@ -435,8 +431,11 @@ function resetDeployForm(): void {
 }
 
 function handleTestDeployment(d: Deployment): void {
-  const params = (d.litellm_params || {}) as Record<string, unknown>
-  testDefaultModel.value = (params.model as string) || selectedModel.value?.model_id || ''
+  const baseModelId = selectedModel.value?.model_id || ''
+  // 判断凭证格式，anthropic 格式用 (Anthropic) 后缀
+  const cred = credentials.value.find(c => c.id === d.credential_id)
+  const credFormat = cred?.credential_info?.format as string || 'openai'
+  testDefaultModel.value = credFormat === 'anthropic' ? `${baseModelId}(Anthropic)` : baseModelId
   testAvailableModels.value = []
   showTestDialog.value = true
 }
@@ -452,6 +451,7 @@ function handleAddDeployment(): void {
 function handleEditDeployment(d: Deployment): void {
   isEditingDeploy.value = true
   editingDeployId.value = d.id
+  deployModelIdStr.value = selectedModel.value?.model_id || ''
   const params = (d.litellm_params || {}) as Record<string, unknown>
   // 从 litellm model 标识中提取模型名称（去掉 provider/ 前缀）
   const fullModel = (params.model as string) || ''
@@ -489,13 +489,7 @@ function handleEditDeployment(d: Deployment): void {
 }
 
 function buildLitellmParams(): Record<string, unknown> {
-  const litellmModel = buildLitellmModelId(deployCredentialId.value, deployModelName.value, selectedModel.value?.category)
-  const litellmParams: Record<string, unknown> = { model: litellmModel }
-  // 从凭证获取 credential_name 注入
-  if (deployCredentialId.value) {
-    const cred = credentials.value.find(c => c.id === deployCredentialId.value)
-    if (cred) litellmParams.litellm_credential_name = cred.credential_name
-  }
+  const litellmParams: Record<string, unknown> = { model: deployModelName.value }
   if (deployWeight.value) litellmParams.weight = Number(deployWeight.value)
   if (deployOrder.value) litellmParams.order = Number(deployOrder.value)
   if (deployDeployTags.value) litellmParams.tags = deployDeployTags.value.split(',').map(s => s.trim()).filter(Boolean)
@@ -517,8 +511,12 @@ async function handleSubmitDeployment(): Promise<void> {
     errorMessage.value = '请选择关联凭证'
     return
   }
+  if (!deployModelIdStr.value) {
+    errorMessage.value = '请填写模型 ID'
+    return
+  }
   if (!deployModelName.value) {
-    errorMessage.value = '请填写模型名称'
+    errorMessage.value = '请填写厂商模型名称'
     return
   }
   errorMessage.value = ''
@@ -538,6 +536,7 @@ async function handleSubmitDeployment(): Promise<void> {
     deploy_name: deployName.value || undefined,
     billing_type: deployBillingType.value,
     model_info: Object.keys(modelInfo).length > 0 ? modelInfo : undefined,
+    model_id_str: deployModelIdStr.value || undefined,
   }
   if (deployBillingType.value === 'per_call' && deployCostPerCall.value) {
     payload.cost_per_call = Number(deployCostPerCall.value)
@@ -579,7 +578,17 @@ async function handleConfirmDeleteDeploy(): Promise<void> {
 
 function getDeployModelName(d: Deployment): string {
   const params = d.litellm_params as Record<string, unknown>
-  return (params?.model as string) || '-'
+  const full = (params?.model as string) || '-'
+  const slashIdx = full.indexOf('/')
+  return slashIdx >= 0 ? full.slice(slashIdx + 1) : full
+}
+
+function getDeployLitellmModelName(d: Deployment): string {
+  const baseId = selectedModel.value?.model_id || ''
+  if (!baseId) return ''
+  const cred = credentials.value.find(c => c.id === d.credential_id)
+  const credFormat = (cred?.credential_info?.format as string) || 'openai'
+  return credFormat === 'anthropic' ? `${baseId}(Anthropic)` : baseId
 }
 
 function getDeployCredentialName(d: Deployment): string {
@@ -745,6 +754,7 @@ async function handleOpenPublish(): Promise<void> {
     const vis = await getModelVisibility(selectedModel.value.id)
     publishIsPublished.value = vis.is_published
     publishVisibilityType.value = vis.visibility_type
+    publishRequiresApproval.value = vis.requires_approval
     publishDepartmentIds.value = [...vis.department_ids]
     if (flatDepartments.value.length === 0) {
       await fetchDepartmentTree()
@@ -772,6 +782,7 @@ async function handleSavePublish(): Promise<void> {
       is_published: publishIsPublished.value,
       visibility_type: publishVisibilityType.value,
       department_ids: publishVisibilityType.value === 'selected' ? publishDepartmentIds.value : undefined,
+      requires_approval: publishRequiresApproval.value,
     })
     showPublishDialog.value = false
     await fetchModelDetail(selectedModel.value.id)
@@ -967,7 +978,7 @@ onMounted(() => {
               <div class="flex items-start justify-between">
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-slate-900">{{ d.deploy_name || getDeployModelName(d) }}</span>
+                    <span class="text-sm font-medium text-slate-900">{{ getDeployLitellmModelName(d) || selectedModel?.model_id || '-' }}</span>
                     <span
                       class="rounded-full px-2 py-0.5 text-[10px] font-medium"
                       :class="d.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-400'"
@@ -975,16 +986,11 @@ onMounted(() => {
                       {{ d.is_active ? '启用' : '禁用' }}
                     </span>
                   </div>
-                  <div class="mt-1.5 text-xs text-slate-500">
-                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{{ getDeployModelName(d) }}</span>
-                  </div>
+                  <p class="mt-1 text-xs text-slate-400">{{ d.credential_name || getDeployCredentialName(d) || d.deploy_name || '' }}</p>
                 </div>
               </div>
               <!-- 指标 -->
-              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span v-if="d.credential_name || getDeployCredentialName(d)">
-                  凭证: <span class="text-slate-700">{{ d.credential_name || getDeployCredentialName(d) }}</span>
-                </span>
+              <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                 <span v-if="(d.litellm_params as Record<string, unknown>)?.weight">
                   权重: <span class="text-slate-700">{{ (d.litellm_params as Record<string, unknown>).weight }}</span>
                 </span>
@@ -1168,10 +1174,6 @@ onMounted(() => {
             <input v-model="formName" placeholder="如：Claude Sonnet 4" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
           </div>
           <div class="mb-3">
-            <label class="mb-1.5 block text-sm font-medium text-slate-700">模型 ID（用户请求时使用）</label>
-            <input v-model="formModelId" :disabled="isEditingModel" placeholder="如：claude-sonnet-4" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-slate-50 disabled:text-slate-400" />
-          </div>
-          <div class="mb-3">
             <label class="mb-1.5 block text-sm font-medium text-slate-700">分类</label>
             <select v-model="formCategory" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" @change="formTags = []">
               <option v-for="c in categories" :key="c.value" :value="c.value" :disabled="!c.enabled">{{ c.label }}{{ !c.enabled ? '（即将上线）' : '' }}</option>
@@ -1201,48 +1203,6 @@ onMounted(() => {
             <input v-model="formDescription" placeholder="可选" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
           </div>
 
-          <!-- 高级设置 -->
-          <div class="mb-4">
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
-              @click="showModelAdvanced = !showModelAdvanced"
-            >
-              <span class="text-xs transition-transform" :class="showModelAdvanced ? 'rotate-90' : ''">▶</span>
-              高级设置
-              <span class="text-xs text-slate-400">（关联凭证）</span>
-            </button>
-
-            <div v-if="showModelAdvanced" class="mt-3 space-y-3 rounded-lg border border-slate-100 p-4">
-              <template v-if="!isEditingModel">
-                <p class="text-xs text-slate-400">选择供应商和凭证后，自动为模型创建关联</p>
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-slate-700">供应商</label>
-                  <select v-model="formProviderId" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" @change="formCredentialId = null">
-                    <option :value="null">不关联</option>
-                    <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-                  </select>
-                </div>
-                <div v-if="formProviderId">
-                  <label class="mb-1.5 block text-sm font-medium text-slate-700">凭证</label>
-                  <select v-model="formCredentialId" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20">
-                    <option :value="null">请选择凭证</option>
-                    <option v-for="c in formFilteredCredentials" :key="c.id" :value="c.id">{{ c.credential_name }}</option>
-                  </select>
-                  <p v-if="formFilteredCredentials.length === 0" class="mt-1 text-xs text-slate-400">该供应商暂无可用凭证</p>
-                </div>
-                <div v-if="formCredentialId">
-                  <label class="mb-1.5 block text-sm font-medium text-slate-700">厂商模型名</label>
-                  <input v-model="formDeployModelName" placeholder="如 claude-sonnet-4-20250514" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  <p v-if="formDeployModelName" class="mt-1 text-xs text-slate-400">
-                    LiteLLM 标识: <span class="font-mono text-purple-600">{{ buildLitellmModelId(formCredentialId, formDeployModelName, formCategory) }}</span>
-                  </p>
-                </div>
-              </template>
-              <p v-else class="text-xs text-slate-400">编辑模式下请通过「添加凭证」管理关联</p>
-            </div>
-          </div>
-
           <p v-if="errorMessage" class="mb-3 text-sm text-red-500">{{ errorMessage }}</p>
           <div class="flex justify-end gap-3">
             <button type="button" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200" @click="showModelForm = false">取消</button>
@@ -1260,6 +1220,11 @@ onMounted(() => {
           <!-- 核心配置 -->
           <div class="mb-4 space-y-3">
             <div>
+              <label class="mb-1.5 block text-sm font-medium text-slate-700">模型 ID（用户请求时使用） <span class="text-red-400">*</span></label>
+              <input v-model="deployModelIdStr" placeholder="如：deepseek-v4-pro" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+              <p v-if="deployCredentialId && getCredentialFormat(deployCredentialId) === 'anthropic'" class="mt-1 text-xs text-amber-600">Anthropic 格式凭证，同步到 LiteLLM 时将自动注册为 {{ deployModelIdStr || '...' }}(Anthropic)</p>
+            </div>
+            <div>
               <label class="mb-1.5 block text-sm font-medium text-slate-700">供应商 <span class="text-red-400">*</span></label>
               <select v-model="deployProviderId" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" @change="deployCredentialId = null">
                 <option :value="null" disabled>请选择供应商</option>
@@ -1275,11 +1240,9 @@ onMounted(() => {
               <p v-if="deployFilteredCredentials.length === 0" class="mt-1 text-xs text-slate-400">该供应商暂无可用凭证</p>
             </div>
             <div>
-              <label class="mb-1.5 block text-sm font-medium text-slate-700">模型名称 <span class="text-red-400">*</span></label>
-              <input v-model="deployModelName" placeholder="厂商模型名，如 claude-sonnet-4-20250514" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-              <p v-if="deployCredentialId && deployModelName" class="mt-1 text-xs text-slate-400">
-                LiteLLM 标识: <span class="font-mono text-purple-600">{{ buildLitellmModelId(deployCredentialId, deployModelName, selectedModel?.category) }}</span>
-              </p>
+              <label class="mb-1.5 block text-sm font-medium text-slate-700">厂商模型名 <span class="text-red-400">*</span></label>
+              <input v-model="deployModelName" placeholder="如 claude-sonnet-4-20250514" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+              <p class="mt-1 text-xs text-slate-400">供应商 API 中的模型标识，用于实际调用上游</p>
             </div>
             <div>
               <label class="mb-1.5 block text-sm font-medium text-slate-700">备注名称</label>
@@ -1528,6 +1491,19 @@ onMounted(() => {
             <p v-if="flatDepartments.length === 0" class="py-2 text-center text-xs text-slate-400">暂无部门数据</p>
           </div>
           <p class="mt-1 text-xs text-slate-400">已选 {{ publishDepartmentIds.length }} 个部门</p>
+        </div>
+
+        <!-- 领用审批 -->
+        <div v-if="publishIsPublished" class="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 p-3">
+          <input
+            v-model="publishRequiresApproval"
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500/20"
+          />
+          <div>
+            <span class="text-sm font-medium text-slate-700">领用前需要审批</span>
+            <p class="text-xs text-slate-400">开启后用户申请使用此模型需管理员审批</p>
+          </div>
         </div>
 
         <div class="flex justify-end gap-3">

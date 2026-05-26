@@ -31,6 +31,23 @@ const categories = computed(() => {
   return Array.from(set).sort()
 })
 
+async function copyToClipboard(text: string): Promise<void> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+  } catch { /* ignore */ }
+}
+
 const filtered = computed(() => {
   return items.value.filter(item => {
     if (typeFilter.value !== 'all' && item._type !== typeFilter.value) return false
@@ -83,7 +100,7 @@ async function loadSkillInstall(skillId: number) {
 
 async function copySkillPrompt() {
   if (!skillInstallInfo.value) return
-  await navigator.clipboard.writeText(skillInstallInfo.value.agent_prompt)
+  await copyToClipboard(skillInstallInfo.value.agent_prompt)
   skillPromptCopied.value = true
   setTimeout(() => { skillPromptCopied.value = false }, 2000)
 }
@@ -126,7 +143,7 @@ async function loadMcpConfig(serverId: number) {
 async function copyMcpConfig() {
   if (!mcpConnectConfig.value) return
   const text = mcpConnectConfig.value.agent_prompt + JSON.stringify(mcpConnectConfig.value.config, null, 2)
-  await navigator.clipboard.writeText(text)
+  await copyToClipboard(text)
   mcpConfigCopied.value = true
   setTimeout(() => { mcpConfigCopied.value = false }, 2000)
 }
@@ -156,8 +173,8 @@ async function loadData() {
   isLoading.value = true
   try {
     const [skillRes, mcpRes, keysRes] = await Promise.all([
-      request<{ items: Skill[] }>('/api/v1/skills', { params: { is_published: true, page_size: 100 } }),
-      request<{ items: McpServer[] }>('/api/v1/mcp/servers', { params: { is_published: true, page_size: 100 } }),
+      request<{ items: Skill[] }>('/api/v1/skills/published', { params: { page_size: 100 } }),
+      request<{ items: McpServer[] }>('/api/v1/mcp/servers/published', { params: { page_size: 100 } }),
       getMyKeys(),
     ])
     const skillItems: MarketItem[] = (skillRes?.items ?? []).map(s => ({ ...s, _type: 'skill' as const }))
@@ -293,14 +310,14 @@ onMounted(loadData)
         <!-- Hover actions -->
         <div class="absolute inset-x-0 bottom-0 flex items-center justify-center rounded-b-2xl bg-gradient-to-t from-white/90 to-transparent px-5 pb-4 pt-8 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
           <button
-            v-if="isOwned(item) && item._type === 'skill'"
+            v-if="(isOwned(item) || !item.requires_approval) && item._type === 'skill'"
             class="rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-transform hover:scale-105"
             @click="handleCopyPrompt(item)"
           >
             安装 Skill
           </button>
           <button
-            v-else-if="isOwned(item) && item._type === 'mcp'"
+            v-else-if="(isOwned(item) || !item.requires_approval) && item._type === 'mcp'"
             class="flex items-center gap-1 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-transform hover:scale-105"
             @click="handleViewAccess(item)"
           >

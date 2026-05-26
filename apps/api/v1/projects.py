@@ -57,7 +57,7 @@ async def update_project(
 ):
     try:
         project = await project_service.update_project(
-            session, project_id, name=req.name, description=req.description
+            session, project_id, name=req.name, description=req.description, is_active=req.is_active
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="项目不存在")

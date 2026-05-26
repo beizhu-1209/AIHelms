@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { request } from '@aihelms/shared/src/api/request'
+import { getMyKeys, createResourceApplication, toast } from '@aihelms/shared'
 import type { Agent } from '@aihelms/shared/src/types/agent'
+import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import { Bot, Search, ExternalLink } from 'lucide-vue-next'
 import * as lucideIcons from 'lucide-vue-next'
 
@@ -10,10 +12,15 @@ function getLucideIcon(name: string) {
 }
 
 const agents = ref<Agent[]>([])
+const myAgents = ref<number[]>([])
 const isLoading = ref(true)
 const search = ref('')
 const categoryFilter = ref('')
 const platformFilter = ref('')
+const showApplyDialog = ref(false)
+const applyTarget = ref<Agent | null>(null)
+const applyReason = ref('')
+const applyingId = ref<number | null>(null)
 
 const categories = computed(() => {
   const set = new Set(agents.value.map(a => a.category).filter(Boolean))
@@ -37,16 +44,53 @@ const filtered = computed(() => {
   })
 })
 
+function isOwned(agent: Agent): boolean {
+  return myAgents.value.includes(agent.id)
+}
+
+function canDirectUse(agent: Agent): boolean {
+  return !agent.requires_approval || isOwned(agent)
+}
+
 function handleOpen(agent: Agent): void {
-  if (agent.chat_url) {
-    window.open(agent.chat_url, '_blank')
+  if (canDirectUse(agent)) {
+    if (agent.chat_url) {
+      window.open(agent.chat_url, '_blank')
+    }
+  } else {
+    applyTarget.value = agent
+    applyReason.value = ''
+    showApplyDialog.value = true
+  }
+}
+
+async function submitApply(): Promise<void> {
+  if (!applyTarget.value) return
+  applyingId.value = applyTarget.value.id
+  try {
+    await createResourceApplication({
+      resource_type: 'agent',
+      resource_id: applyTarget.value.id,
+      reason: applyReason.value.trim(),
+    })
+    toast.success('申请已提交')
+    showApplyDialog.value = false
+  } catch (e) {
+    toast.error((e as { message?: string }).message || '申请失败')
+  } finally {
+    applyingId.value = null
   }
 }
 
 onMounted(async () => {
   try {
-    const res = await request<{ items: Agent[] }>('/api/v1/agents', { params: { is_published: true, page_size: 100 } })
+    const [res, keysRes] = await Promise.all([
+      request<{ items: Agent[] }>('/api/v1/agents/published', { params: { page_size: 100 } }),
+      getMyKeys().catch(() => ({ personal: [], department: [], project: [] })),
+    ])
     agents.value = res.items ?? []
+    const mainKey = keysRes.personal?.find((k: AiKey) => k.key_type === 'personal_main')
+    myAgents.value = mainKey?.agents ?? []
   } catch { /* */ }
   finally { isLoading.value = false }
 })
@@ -119,7 +163,8 @@ onMounted(async () => {
             <h3 class="truncate text-sm font-semibold text-slate-900">{{ agent.name }}</h3>
             <p class="truncate text-xs text-slate-400">{{ agent.platform }}</p>
           </div>
-          <ExternalLink v-if="agent.chat_url" class="h-4 w-4 shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <ExternalLink v-if="canDirectUse(agent) && agent.chat_url" class="h-4 w-4 shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <span v-else-if="!canDirectUse(agent)" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">需申请</span>
         </div>
 
         <div v-if="agent.tags?.length" class="mt-3 flex flex-wrap gap-1.5">
@@ -142,5 +187,31 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- 申请对话框 -->
+    <Teleport to="body">
+      <div v-if="showApplyDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showApplyDialog = false">
+        <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <h3 class="text-lg font-semibold text-slate-900">申请使用智能体</h3>
+          <p class="mt-1 text-sm text-slate-500">{{ applyTarget?.name }}</p>
+          <textarea
+            v-model="applyReason"
+            rows="3"
+            placeholder="请填写申请理由（可选）"
+            class="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-purple-500 focus:outline-none"
+          />
+          <div class="mt-4 flex justify-end gap-3">
+            <button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="showApplyDialog = false">取消</button>
+            <button
+              class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              :disabled="applyingId !== null"
+              @click="submitApply"
+            >
+              {{ applyingId ? '提交中...' : '提交申请' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

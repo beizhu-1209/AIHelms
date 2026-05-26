@@ -12,6 +12,7 @@ from repositories import department_repo
 from repositories import project_repo
 from repositories import model_repo
 from services import litellm_client
+from services.model_service import ANTHROPIC_MODEL_SUFFIX
 
 logger = logging.getLogger(__name__)
 
@@ -131,12 +132,15 @@ async def create_key(
     # Sync to LiteLLM
     max_budget = float(budget_limit) if budget_limit and budget_hard_limit else None
     litellm_duration = budget_duration if budget_duration and budget_limit else duration
+    litellm_models, litellm_model_budgets = await _expand_models_with_anthropic(
+        session, models or [], model_budgets
+    )
     try:
         result = await litellm_client.create_key(
             key_alias=key_alias,
             user_id=litellm_user_id,
             team_id=team_id,
-            models=models or [],
+            models=litellm_models,
             max_budget=max_budget,
             metadata={"aihelms_key_id": ai_key.id, "key_type": key_type},
             duration=litellm_duration,
@@ -145,11 +149,11 @@ async def create_key(
         ai_key.litellm_key_alias = key_alias
 
         # Sync model_max_budget if set
-        if model_budgets and ai_key.litellm_key_id:
+        if litellm_model_budgets and ai_key.litellm_key_id:
             try:
                 await litellm_client.update_key(
                     key_id=ai_key.litellm_key_id,
-                    model_max_budget=model_budgets,
+                    model_max_budget=litellm_model_budgets,
                 )
             except litellm_client.LiteLLMError:
                 logger.warning("litellm sync model_max_budget failed for ai_key %s", ai_key.id)
@@ -239,6 +243,7 @@ async def update_key(
         mcps_changed=mcps is not None,
         budget_changed=(budget_limit is not None or budget_hard_limit is not None or budget_duration is not None),
         model_budgets_changed=model_budgets is not None,
+        session=session,
     )
 
     await session.commit()
@@ -270,7 +275,38 @@ async def update_key_resources(
         key.skills = skills
     if agents is not None:
         key.agents = agents
-    await _sync_key_to_litellm(key, models is not None, mcps is not None, False, False)
+    await _sync_key_to_litellm(key, models is not None, mcps is not None, False, False, session=session)
+
+
+async def _expand_models_with_anthropic(
+    session: AsyncSession,
+    model_ids: list[str],
+    model_budgets: dict[str, float] | None,
+) -> tuple[list[str], dict[str, float] | None]:
+    """Expand model list with (Anthropic) variants for models that have anthropic deployments."""
+    if not model_ids:
+        return model_ids, model_budgets
+    anthropic_models = await model_repo.find_model_ids_with_anthropic_deployments(session, model_ids)
+    if not anthropic_models:
+        return model_ids, model_budgets
+
+    expanded_models = list(model_ids)
+    for mid in model_ids:
+        if mid in anthropic_models:
+            variant = f"{mid}{ANTHROPIC_MODEL_SUFFIX}"
+            if variant not in expanded_models:
+                expanded_models.append(variant)
+
+    expanded_budgets = model_budgets
+    if model_budgets:
+        expanded_budgets = dict(model_budgets)
+        for mid in list(model_budgets.keys()):
+            if mid in anthropic_models:
+                variant = f"{mid}{ANTHROPIC_MODEL_SUFFIX}"
+                if variant not in expanded_budgets:
+                    expanded_budgets[variant] = model_budgets[mid]
+
+    return expanded_models, expanded_budgets
 
 
 async def _sync_key_to_litellm(
@@ -279,6 +315,7 @@ async def _sync_key_to_litellm(
     mcps_changed: bool,
     budget_changed: bool,
     model_budgets_changed: bool,
+    session: AsyncSession | None = None,
 ) -> None:
     if not key.litellm_key_id:
         return
@@ -288,12 +325,20 @@ async def _sync_key_to_litellm(
     effective_hard = key.budget_hard_limit
     effective_budget = float(key.budget_limit) if key.budget_limit and effective_hard else None
 
+    # Expand models with (Anthropic) variants
+    litellm_models = key.models
+    litellm_model_budgets = key.model_budgets if model_budgets_changed else None
+    if session and (models_changed or model_budgets_changed):
+        litellm_models, litellm_model_budgets = await _expand_models_with_anthropic(
+            session, key.models, key.model_budgets if model_budgets_changed else None
+        )
+
     try:
         await litellm_client.update_key(
             key_id=key.litellm_key_id,
-            models=key.models if models_changed else None,
+            models=litellm_models if models_changed else None,
             max_budget=effective_budget,
-            model_max_budget=key.model_budgets if model_budgets_changed else None,
+            model_max_budget=litellm_model_budgets,
         )
     except litellm_client.LiteLLMError:
         logger.warning("litellm update key failed for ai_key %s", key.id)
@@ -439,21 +484,26 @@ async def get_my_keys(session: AsyncSession, user_id: int) -> dict:
 
 
 async def create_personal_main_key(session: AsyncSession, user_id: int, username: str) -> AiKey | None:
-    """Auto-create a personal main key for a new user (disabled by default)."""
+    """Auto-create a personal main key for a new user (enabled, with public resources)."""
     existing = await ai_key_repo.find_personal_main(session, user_id)
     if existing:
         return existing
 
+    public_resources = await get_public_resources(session)
+
     key_alias = f"user:{username}/main"
     ai_key = AiKey(
         name="主 Key",
-        description="个人主 Key，审批通过后启用",
+        description="个人主 Key",
         key_type=KEY_TYPE_PERSONAL_MAIN,
         owner_type="user",
         owner_id=user_id,
         tags=[],
-        models=[],
-        is_active=False,
+        models=public_resources["models"],
+        skills=public_resources["skills"],
+        mcps=public_resources["mcps"],
+        agents=public_resources["agents"],
+        is_active=True,
         created_by=user_id,
     )
     ai_key = await ai_key_repo.create(session, ai_key)
@@ -462,11 +512,15 @@ async def create_personal_main_key(session: AsyncSession, user_id: int, username
     user = await user_repo.find_user_by_id(session, user_id)
     litellm_user_id = user.litellm_user_id if user else None
 
+    litellm_models, _ = await _expand_models_with_anthropic(
+        session, public_resources["models"], None
+    )
+
     try:
         result = await litellm_client.create_key(
             key_alias=key_alias,
             user_id=litellm_user_id,
-            max_budget=0.0,  # disabled by default
+            models=litellm_models,
             metadata={"aihelms_key_id": ai_key.id, "key_type": KEY_TYPE_PERSONAL_MAIN},
         )
         ai_key.litellm_key_id = result.get("key")
@@ -477,7 +531,62 @@ async def create_personal_main_key(session: AsyncSession, user_id: int, username
     return ai_key
 
 
-# --- Identity list ---
+# --- Public resource sync ---
+
+
+async def get_public_resources(session: AsyncSession) -> dict[str, list]:
+    """获取所有已发布且不需要审批的资源 ID。"""
+    from models.db import Model, Skill, McpServer, Agent
+    from sqlalchemy import select
+
+    models_result = await session.execute(
+        select(Model.model_id).where(
+            Model.is_published == True, Model.requires_approval == False, Model.is_active == True
+        )
+    )
+    skills_result = await session.execute(
+        select(Skill.id).where(
+            Skill.is_published == True, Skill.requires_approval == False
+        )
+    )
+    mcps_result = await session.execute(
+        select(McpServer.id).where(
+            McpServer.is_published == True, McpServer.requires_approval == False
+        )
+    )
+    agents_result = await session.execute(
+        select(Agent.id).where(
+            Agent.is_published == True, Agent.requires_approval == False, Agent.is_active == True
+        )
+    )
+    return {
+        "models": [r[0] for r in models_result.all()],
+        "skills": [r[0] for r in skills_result.all()],
+        "mcps": [r[0] for r in mcps_result.all()],
+        "agents": [r[0] for r in agents_result.all()],
+    }
+
+
+async def sync_public_resource_to_all_keys(
+    session: AsyncSession,
+    resource_type: str,
+    resource_id: str | int,
+) -> int:
+    """将一个公开资源同步到所有主 Key。返回更新的 Key 数量。"""
+    all_main_keys = await ai_key_repo.find_all_main_keys(session)
+    updated = 0
+    for key in all_main_keys:
+        field = getattr(key, resource_type, None)
+        if field is None:
+            continue
+        if resource_id not in field:
+            field.append(resource_id)
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(key, resource_type)
+            updated += 1
+    if updated:
+        await session.flush()
+    return updated
 
 
 async def list_identity(

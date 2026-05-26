@@ -115,6 +115,7 @@ async def ensure_super_admin(password: str) -> None:
             hashed_password=hashed,
             is_active=True,
             is_admin=True,
+            is_super_admin=True,
         )
         session.add(user)
         await session.flush()

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS aihelms.users (
     position VARCHAR(100) DEFAULT '',
     is_active BOOLEAN DEFAULT true,
     is_admin BOOLEAN DEFAULT false,
+    is_super_admin BOOLEAN DEFAULT false,
     litellm_user_id VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -143,6 +144,45 @@ CREATE TABLE IF NOT EXISTS aihelms.key_scenarios (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 业务场景字典（AI 效能模块使用，给资源打业务场景标签）
+-- 必须在 models / mcp_servers / skills / agents 之前创建（被引用）
+CREATE TABLE IF NOT EXISTS aihelms.business_scenarios (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT DEFAULT '',
+    icon VARCHAR(50) DEFAULT 'Target',
+    sort_order INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO aihelms.business_scenarios (code, name, icon, sort_order) VALUES
+    ('code_dev',         '代码开发', 'Code2',         10),
+    ('customer_service', '客户服务', 'Headphones',    20),
+    ('data_analysis',    '数据分析', 'BarChart3',     30),
+    ('content_creation', '内容创作', 'PenLine',       40),
+    ('document',         '文档处理', 'FileText',      50),
+    ('translation',      '翻译',     'Languages',     60),
+    ('other',            '其他',     'Target',        999)
+ON CONFLICT (code) DO NOTHING;
+
+-- MCP 分类（必须在 mcp_servers 之前创建）
+CREATE TABLE IF NOT EXISTS aihelms.mcp_categories (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO aihelms.mcp_categories (name, sort_order) VALUES
+    ('general', 0),
+    ('search', 10)
+ON CONFLICT (name) DO NOTHING;
+
 -- AI 身份 Key 表
 CREATE TABLE IF NOT EXISTS aihelms.ai_keys (
     id BIGSERIAL PRIMARY KEY,
@@ -193,24 +233,82 @@ CREATE TABLE IF NOT EXISTS aihelms.providers (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 供应商前缀映射表（LiteLLM 路由前缀对照）
+CREATE TABLE IF NOT EXISTS aihelms.provider_prefix_map (
+    id BIGSERIAL PRIMARY KEY,
+    provider_type VARCHAR(50) NOT NULL,
+    format VARCHAR(20) NOT NULL,            -- 'openai' | 'anthropic' | 'ollama'
+    category VARCHAR(50) NOT NULL,          -- 'chat' | 'embedding' | 'rerank' | 'completion' | 'image' | 'audio'
+    prefix VARCHAR(50) NOT NULL,            -- LiteLLM 路由前缀，如 'openai', 'anthropic', 'hosted_vllm'
+    needs_v1 BOOLEAN DEFAULT false,         -- api_base 是否需要自动补 /v1
+    UNIQUE(provider_type, format, category)
+);
+
+-- 初始数据
+INSERT INTO aihelms.provider_prefix_map (provider_type, format, category, prefix, needs_v1) VALUES
+    -- 有专属前缀的供应商
+    ('openai', 'openai', 'chat', 'openai', false),
+    ('openai', 'openai', 'embedding', 'openai', false),
+    ('openai', 'openai', 'image', 'openai', false),
+    ('openai', 'openai', 'audio', 'openai', false),
+    ('anthropic', 'anthropic', 'chat', 'anthropic', false),
+    ('azure', 'openai', 'chat', 'azure', false),
+    ('azure', 'openai', 'embedding', 'azure', false),
+    ('google', 'openai', 'chat', 'gemini', false),
+    ('google', 'openai', 'embedding', 'gemini', false),
+    ('deepseek', 'openai', 'chat', 'deepseek', false),
+    ('deepseek', 'anthropic', 'chat', 'anthropic', false),
+    ('bedrock', 'openai', 'chat', 'bedrock', false),
+    ('bedrock', 'openai', 'embedding', 'bedrock', false),
+    ('vertex_ai', 'openai', 'chat', 'vertex_ai', false),
+    ('vertex_ai', 'openai', 'embedding', 'vertex_ai', false),
+    -- 兼容多格式的供应商
+    ('volcengine', 'openai', 'chat', 'openai', true),
+    ('volcengine', 'openai', 'embedding', 'openai', true),
+    ('volcengine', 'anthropic', 'chat', 'anthropic', false),
+    ('dashscope', 'openai', 'chat', 'openai', true),
+    ('dashscope', 'openai', 'embedding', 'openai', true),
+    ('dashscope', 'anthropic', 'chat', 'anthropic', false),
+    ('zhipu', 'openai', 'chat', 'openai', true),
+    ('zhipu', 'anthropic', 'chat', 'anthropic', false),
+    ('moonshot', 'openai', 'chat', 'openai', true),
+    ('moonshot', 'anthropic', 'chat', 'anthropic', false),
+    ('minimax', 'openai', 'chat', 'openai', true),
+    ('minimax', 'anthropic', 'chat', 'anthropic', false),
+    -- 自部署
+    ('vllm', 'openai', 'chat', 'hosted_vllm', true),
+    ('vllm', 'openai', 'embedding', 'openai', true),
+    ('vllm', 'openai', 'rerank', 'hosted_vllm', true),
+    ('sglang', 'openai', 'chat', 'hosted_vllm', true),
+    ('sglang', 'openai', 'embedding', 'openai', true),
+    ('ollama', 'ollama', 'chat', 'ollama', false),
+    ('ollama', 'ollama', 'embedding', 'ollama', false),
+    ('lmstudio', 'openai', 'chat', 'openai', true),
+    -- 其他
+    ('other', 'openai', 'chat', 'openai', true),
+    ('other', 'openai', 'embedding', 'openai', true),
+    ('other', 'anthropic', 'chat', 'anthropic', false)
+ON CONFLICT DO NOTHING;
+
 -- 凭证（对齐 LiteLLM CredentialsTable）
 CREATE TABLE IF NOT EXISTS aihelms.credentials (
     id BIGSERIAL PRIMARY KEY,
-    credential_name VARCHAR(128) NOT NULL UNIQUE,  -- 凭证名（同步到 LiteLLM）
+    credential_name VARCHAR(128) NOT NULL,   -- 凭证名（同步到 LiteLLM）
     provider_id BIGINT REFERENCES aihelms.providers(id) ON DELETE SET NULL,
     credential_values JSONB NOT NULL DEFAULT '{}', -- 加密存储的认证信息（api_key, api_base 等）
     credential_info JSONB DEFAULT '{}',            -- 描述/元信息
     litellm_synced BOOLEAN DEFAULT false,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(credential_name, provider_id)
 );
 
 -- 平台统一模型（展示层）
 CREATE TABLE IF NOT EXISTS aihelms.models (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
-    model_id VARCHAR(128) NOT NULL UNIQUE,    -- 用户请求时用的名称 = LiteLLM model_name
+    model_id VARCHAR(128) UNIQUE,              -- 用户请求时用的名称 = LiteLLM model_name，首次添加凭证时设置
     category VARCHAR(50) DEFAULT 'chat',
     capabilities JSONB DEFAULT '[]',
     description TEXT DEFAULT '',
@@ -362,21 +460,6 @@ CREATE TABLE IF NOT EXISTS aihelms.mcp_tools (
     UNIQUE(server_id, tool_name)
 );
 
--- MCP 分类
-CREATE TABLE IF NOT EXISTS aihelms.mcp_categories (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(64) UNIQUE NOT NULL,
-    description TEXT DEFAULT '',
-    sort_order INT DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-INSERT INTO aihelms.mcp_categories (name, sort_order) VALUES
-    ('general', 0),
-    ('search', 10)
-ON CONFLICT (name) DO NOTHING;
-
 -- 统一 AI 资源申请审批表
 CREATE TABLE IF NOT EXISTS aihelms.resource_applications (
     id BIGSERIAL PRIMARY KEY,
@@ -475,30 +558,7 @@ INSERT INTO aihelms.sync_state (key, last_sync_at) VALUES
     ('mcp_logs', NOW() - INTERVAL '1 hour')
 ON CONFLICT DO NOTHING;
 
--- 业务场景字典（AI 效能模块使用，给资源打业务场景标签）
-CREATE TABLE IF NOT EXISTS aihelms.business_scenarios (
-    id BIGSERIAL PRIMARY KEY,
-    code VARCHAR(50) UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    description TEXT DEFAULT '',
-    icon VARCHAR(50) DEFAULT 'Target',
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-INSERT INTO aihelms.business_scenarios (code, name, icon, sort_order) VALUES
-    ('code_dev',         '代码开发', 'Code2',         10),
-    ('customer_service', '客户服务', 'Headphones',    20),
-    ('data_analysis',    '数据分析', 'BarChart3',     30),
-    ('content_creation', '内容创作', 'PenLine',       40),
-    ('document',         '文档处理', 'FileText',      50),
-    ('translation',      '翻译',     'Languages',     60),
-    ('other',            '其他',     'Target',        999)
-ON CONFLICT (code) DO NOTHING;
-
--- 索引
+-- MCP 索引
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_category ON aihelms.mcp_servers(category);
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_status ON aihelms.mcp_servers(status);
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_is_published ON aihelms.mcp_servers(is_published);
@@ -509,6 +569,8 @@ CREATE INDEX IF NOT EXISTS idx_mcp_call_logs_user ON aihelms.mcp_call_logs(user_
 CREATE INDEX IF NOT EXISTS idx_mcp_call_logs_server ON aihelms.mcp_call_logs(server_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_call_logs_called_at ON aihelms.mcp_call_logs(called_at);
 CREATE INDEX IF NOT EXISTS idx_mcp_call_logs_tool_name ON aihelms.mcp_call_logs(namespaced_tool_name);
+
+-- 资源申请索引
 CREATE INDEX IF NOT EXISTS idx_resource_apps_user ON aihelms.resource_applications(user_id);
 CREATE INDEX IF NOT EXISTS idx_resource_apps_type ON aihelms.resource_applications(resource_type);
 CREATE INDEX IF NOT EXISTS idx_resource_apps_status ON aihelms.resource_applications(status);
@@ -570,18 +632,6 @@ CREATE TABLE IF NOT EXISTS aihelms.agent_categories (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO aihelms.agent_categories (name, sort_order) VALUES
-    ('general', 0),
-    ('office', 10),
-    ('code', 20),
-    ('content', 30),
-    ('data', 40),
-    ('customer', 50),
-    ('hr', 60),
-    ('legal', 70),
-    ('finance', 80)
-ON CONFLICT (name) DO NOTHING;
-
 -- Agent 平台
 CREATE TABLE IF NOT EXISTS aihelms.agent_platforms (
     id BIGSERIAL PRIMARY KEY,
@@ -592,14 +642,6 @@ CREATE TABLE IF NOT EXISTS aihelms.agent_platforms (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-INSERT INTO aihelms.agent_platforms (name, label, sort_order) VALUES
-    ('dify', 'Dify', 0),
-    ('coze', 'Coze', 10),
-    ('maxkb', 'MaxKB', 20),
-    ('fastgpt', 'FastGPT', 30),
-    ('self', '自研', 40)
-ON CONFLICT (name) DO NOTHING;
 
 -- Agent 主表
 CREATE TABLE IF NOT EXISTS aihelms.agents (
@@ -612,6 +654,9 @@ CREATE TABLE IF NOT EXISTS aihelms.agents (
     category VARCHAR(50) DEFAULT 'general',
     business_scenario_id BIGINT REFERENCES aihelms.business_scenarios(id) ON DELETE SET NULL,
     department_id BIGINT REFERENCES aihelms.departments(id) ON DELETE SET NULL,
+    project_id BIGINT REFERENCES aihelms.projects(id) ON DELETE SET NULL,
+    cost_attribution VARCHAR(20) DEFAULT 'owner',
+    ai_key_id BIGINT REFERENCES aihelms.ai_keys(id) ON DELETE SET NULL,
     chat_url VARCHAR(500) DEFAULT '',
     external_id VARCHAR(100) DEFAULT '',
     tags JSONB DEFAULT '[]',
