@@ -14,7 +14,7 @@ class CreateServerRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     server_name: str = Field(..., min_length=1, max_length=128)
     url: str = Field(..., min_length=1)
-    transport: str = Field("sse", pattern=r"^(sse|http)$")
+    transport: str = Field("sse", pattern=r"^(sse|http|streamable_http|streamableHttp)$")
     auth_type: str = Field("none", max_length=30)
     credentials: dict | None = None
     description: str = Field("", max_length=2000)
@@ -42,7 +42,7 @@ class UpdateServerRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=128)
     server_name: str | None = Field(None, min_length=1, max_length=128)
     url: str | None = None
-    transport: str | None = Field(None, pattern=r"^(sse|http)$")
+    transport: str | None = Field(None, pattern=r"^(sse|http|streamable_http|streamableHttp)$")
     auth_type: str | None = None
     credentials: dict | None = None
     description: str | None = None
@@ -219,16 +219,17 @@ async def get_connect_config(
     base_url = settings.litellm_public_url.rstrip("/")
     server_name = server_data["server_name"]
 
+    mcp_url = f"{base_url}/{server_name}/mcp"
+
     config = {
         "mcpServers": {
             server_name: {
-                "type": server_data.get("transport", "sse"),
+                "url": mcp_url,
                 "description": server_data.get("description", ""),
                 "isActive": True,
                 "name": server_data["name"],
-                "baseUrl": f"{base_url}/mcp/{server_name}/sse",
                 "headers": {
-                    "Authorization": f"Bearer {user_key}"
+                    "x-litellm-api-key": f"Bearer {user_key}"
                 }
             }
         }
@@ -236,7 +237,6 @@ async def get_connect_config(
 
     agent_prompt = (
         f"请帮我安装 {server_data['name']} MCP 服务。\n\n"
-        f"将以下配置添加到你的 MCP 设置中：\n\n"
     )
 
     tools = server_data.get("tools") or []

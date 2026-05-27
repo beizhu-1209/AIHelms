@@ -6,14 +6,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      TZ: Asia/Shanghai
-      PGTZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
+      PGTZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
+    command: ["postgres", "-c", "timezone=${TZ:-Asia/Shanghai}"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
@@ -42,7 +42,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
-      TZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:

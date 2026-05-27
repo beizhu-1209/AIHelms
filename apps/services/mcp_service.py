@@ -73,8 +73,11 @@ async def create_server(
     requires_approval: bool = False,
     created_by: int | None = None,
 ) -> dict:
-    if transport not in ("sse", "http"):
-        raise ValidationError("transport 只支持 sse 或 http")
+    if transport not in ("sse", "http", "streamable_http", "streamableHttp"):
+        raise ValidationError("transport 只支持 sse 或 streamableHttp")
+
+    if "-" in server_name:
+        raise ValidationError("server_name 不能包含 '-'（LiteLLM 限制），请使用 '_' 替代")
 
     existing = await mcp_repo.find_server_by_name(session, server_name)
     if existing:
@@ -111,10 +114,23 @@ async def create_server(
         created_by=created_by,
     )
     server = await mcp_repo.create_server(session, server)
+    await session.flush()
+
+    try:
+        await _sync_server_to_litellm(server)
+    except LiteLLMError as e:
+        await session.rollback()
+        logger.error("sync mcp server to litellm failed: %s", str(e))
+        raise ValidationError("保存失败，服务器内部错误")
+
     await session.commit()
     await session.refresh(server)
 
-    await _sync_server_to_litellm(server)
+    # 创建后自动同步工具列表
+    try:
+        await refresh_tools(session, server.id)
+    except (ValidationError, LiteLLMError):
+        pass  # 工具同步失败不影响创建
 
     return _serialize_server(server)
 
@@ -128,10 +144,12 @@ async def update_server(
     if not server:
         raise NotFoundError("mcp_server", server_id)
 
-    if "transport" in kwargs and kwargs["transport"] not in ("sse", "http"):
-        raise ValidationError("transport 只支持 sse 或 http")
+    if "transport" in kwargs and kwargs["transport"] not in ("sse", "http", "streamable_http", "streamableHttp"):
+        raise ValidationError("transport 只支持 sse 或 streamableHttp")
 
     if "server_name" in kwargs and kwargs["server_name"] != server.server_name:
+        if "-" in kwargs["server_name"]:
+            raise ValidationError("server_name 不能包含 '-'（LiteLLM 限制），请使用 '_' 替代")
         existing = await mcp_repo.find_server_by_name(session, kwargs["server_name"])
         if existing:
             raise ConflictError(f"MCP Server 名称 '{kwargs['server_name']}' 已存在")
@@ -145,10 +163,17 @@ async def update_server(
         from services import ai_key_service
         await ai_key_service.sync_public_resource_to_all_keys(session, "mcps", server.id)
 
+    await session.flush()
+
+    try:
+        await _sync_server_to_litellm(server)
+    except LiteLLMError as e:
+        await session.rollback()
+        logger.error("sync mcp server to litellm failed: %s", str(e))
+        raise ValidationError("保存失败，服务器内部错误")
+
     await session.commit()
     await session.refresh(server)
-
-    await _sync_server_to_litellm(server)
 
     return _serialize_server(server)
 
@@ -162,8 +187,15 @@ async def delete_server(session: AsyncSession, server_id: int) -> None:
     await mcp_repo.delete_server(session, server_id)
     await session.commit()
 
+    # 在 LiteLLM 侧禁用而非删除
     if litellm_server_id:
-        await litellm_client.delete_mcp_server(litellm_server_id)
+        try:
+            await litellm_client.update_mcp_server(
+                server_id=litellm_server_id,
+                allow_all_keys=False,
+            )
+        except LiteLLMError:
+            pass  # LiteLLM 禁用失败不影响平台删除
 
 
 # ─── MCP Tools ───────────────────────────────────────────────────────────────
@@ -175,10 +207,11 @@ async def refresh_tools(session: AsyncSession, server_id: int) -> list[dict]:
         raise NotFoundError("mcp_server", server_id)
 
     creds = server.credentials if server.credentials else None
+    litellm_transport = "http" if server.transport in ("streamableHttp", "streamable_http") else server.transport
     try:
         remote_tools = await litellm_client.list_mcp_tools_from_server(
             url=server.url,
-            transport=server.transport,
+            transport=litellm_transport,
             auth_type=server.auth_type if server.auth_type != "none" else None,
             credentials=creds,
         )
@@ -186,12 +219,25 @@ async def refresh_tools(session: AsyncSession, server_id: int) -> list[dict]:
         logger.error("failed to fetch tools from mcp server: %s", str(e))
         raise ValidationError(f"无法从 MCP Server 获取工具列表: {e}")
 
+    # 保留已有 tool 的计费信息
+    existing_tools = await mcp_repo.find_tools_by_server(session, server_id)
+    billing_map = {
+        t.tool_name: {
+            "billing_type": t.billing_type,
+            "internal_cost_per_call": t.internal_cost_per_call,
+            "external_cost_per_call": t.external_cost_per_call,
+        }
+        for t in existing_tools
+        if t.billing_type or t.internal_cost_per_call or t.external_cost_per_call
+    }
+
     await mcp_repo.delete_tools_by_server(session, server_id)
 
     new_tools = []
     for tool_data in remote_tools:
         tool_name = tool_data.get("name", "")
         namespaced = f"{server.server_name}_{tool_name}"
+        billing = billing_map.get(tool_name, {})
         tool = McpTool(
             server_id=server_id,
             tool_name=tool_name,
@@ -199,6 +245,9 @@ async def refresh_tools(session: AsyncSession, server_id: int) -> list[dict]:
             display_name=tool_data.get("display_name", tool_name),
             description=tool_data.get("description", ""),
             input_schema=tool_data.get("inputSchema", tool_data.get("input_schema", {})),
+            billing_type=billing.get("billing_type"),
+            internal_cost_per_call=billing.get("internal_cost_per_call"),
+            external_cost_per_call=billing.get("external_cost_per_call"),
         )
         new_tools.append(tool)
 
@@ -237,6 +286,18 @@ async def update_tool_billing(
 
     await session.commit()
     await session.refresh(tool)
+
+    # 重新同步 server 的 cost_info 到 LiteLLM
+    server = await mcp_repo.find_server_by_id(session, tool.server_id)
+    if server and server.litellm_synced:
+        # 确保 tools relationship 包含最新数据
+        await session.refresh(server, ["tools"])
+        try:
+            await _sync_server_to_litellm(server)
+            await session.commit()
+        except LiteLLMError as e:
+            logger.error("sync mcp cost to litellm failed after tool billing update: %s", str(e))
+
     return _serialize_tool(tool)
 
 
@@ -250,10 +311,11 @@ async def health_check_server(session: AsyncSession, server_id: int) -> dict:
     if not server:
         raise NotFoundError("mcp_server", server_id)
 
+    litellm_transport = "http" if server.transport in ("streamableHttp", "streamable_http") else server.transport
     try:
         await litellm_client.test_mcp_connection(
             url=server.url,
-            transport=server.transport,
+            transport=litellm_transport,
             auth_type=server.auth_type if server.auth_type != "none" else None,
             credentials=server.credentials if server.credentials else None,
         )
@@ -273,33 +335,71 @@ async def health_check_server(session: AsyncSession, server_id: int) -> dict:
 
 
 async def _sync_server_to_litellm(server: McpServer) -> None:
+    mcp_info = _build_mcp_info(server)
+    # LiteLLM 只支持 sse/http/stdio，streamableHttp 映射为 http
+    litellm_transport = "http" if server.transport in ("streamableHttp", "streamable_http") else server.transport
+
     if server.litellm_synced:
         await litellm_client.update_mcp_server(
             server_id=server.server_id,
             server_name=server.server_name,
             url=server.url,
-            transport=server.transport,
+            transport=litellm_transport,
             auth_type=server.auth_type if server.auth_type != "none" else None,
             credentials=server.credentials if server.credentials else None,
             description=server.description,
             instructions=server.instructions,
-            mcp_info=server.mcp_info if server.mcp_info else None,
+            mcp_info=mcp_info,
             extra_headers=server.extra_headers if server.extra_headers else None,
+            allow_all_keys=True,
         )
     else:
         await litellm_client.create_mcp_server(
             server_name=server.server_name,
             url=server.url,
-            transport=server.transport,
+            transport=litellm_transport,
             auth_type=server.auth_type if server.auth_type != "none" else None,
             credentials=server.credentials if server.credentials else None,
             description=server.description,
             instructions=server.instructions,
-            mcp_info=server.mcp_info if server.mcp_info else None,
+            mcp_info=mcp_info,
             extra_headers=server.extra_headers if server.extra_headers else None,
         )
     server.litellm_synced = True
     server.litellm_sync_error = None
+
+
+def _build_mcp_info(server: McpServer) -> dict | None:
+    """组装 mcp_info，包含 LiteLLM 需要的 mcp_server_cost_info。"""
+    from core.config import settings
+
+    mcp_info = dict(server.mcp_info) if server.mcp_info else {}
+    rate = settings.usd_to_cny_rate
+
+    # 构建成本信息（平台存人民币，LiteLLM 需要美元）
+    tool_costs = {}
+    if server.tools:
+        for tool in server.tools:
+            if tool.external_cost_per_call:
+                tool_costs[tool.tool_name] = round(float(tool.external_cost_per_call) / rate, 6)
+
+    default_cost = round(float(server.external_cost_per_call) / rate, 6) if server.external_cost_per_call else None
+
+    if default_cost or tool_costs:
+        cost_info: dict = {}
+        if default_cost:
+            cost_info["default_cost_per_query"] = default_cost
+        if tool_costs:
+            cost_info["tool_name_to_cost_per_query"] = tool_costs
+        mcp_info["mcp_server_cost_info"] = cost_info
+    else:
+        mcp_info["mcp_server_cost_info"] = None
+
+    # 保留 description 和 server_name 供 LiteLLM 展示
+    mcp_info["description"] = server.description or ""
+    mcp_info["server_name"] = server.server_name
+
+    return mcp_info if mcp_info else None
 
 
 # ─── Serializers ─────────────────────────────────────────────────────────────

@@ -61,9 +61,13 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
   }
 
   if (response.status === 401) {
-    localStorage.removeItem('aihelms_token')
-    window.location.href = getLoginUrl()
-    throw new Error('未认证')
+    if (!silent) {
+      localStorage.removeItem('aihelms_token')
+      window.location.href = getLoginUrl()
+    }
+    const json: ApiResponse<T> = await response.json()
+    const message = json.message || '用户名或密码错误'
+    throw new Error(message)
   }
 
   const json: ApiResponse<T> = await response.json()

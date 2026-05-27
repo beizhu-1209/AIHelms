@@ -408,7 +408,7 @@ CREATE TABLE IF NOT EXISTS aihelms.mcp_servers (
     server_name VARCHAR(128) NOT NULL UNIQUE,
     description TEXT DEFAULT '',
     url TEXT NOT NULL,
-    transport VARCHAR(10) NOT NULL DEFAULT 'sse',
+    transport VARCHAR(20) NOT NULL DEFAULT 'sse',
     auth_type VARCHAR(30) DEFAULT 'none',
     credentials JSONB DEFAULT '{}',
     instructions TEXT DEFAULT '',
@@ -523,6 +523,8 @@ CREATE TABLE IF NOT EXISTS aihelms.llm_call_logs (
     ended_at TIMESTAMPTZ,
     session_id VARCHAR(100),
     error_message TEXT,
+    messages JSONB,
+    response JSONB,
     metadata JSONB DEFAULT '{}',
     synced_at TIMESTAMPTZ DEFAULT NOW()
 );

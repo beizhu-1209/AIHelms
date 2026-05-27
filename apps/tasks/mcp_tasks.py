@@ -73,11 +73,13 @@ async def _sync_call_logs():
                     continue
 
                 server_name = (
-                    namespaced_tool.split("_")[0] if "_" in namespaced_tool else ""
+                    namespaced_tool.split("/")[0] if "/" in namespaced_tool
+                    else namespaced_tool.split("_")[0] if "_" in namespaced_tool
+                    else ""
                 )
                 tool_name = (
-                    namespaced_tool.split("_", 1)[1]
-                    if "_" in namespaced_tool
+                    namespaced_tool.split("/", 1)[1] if "/" in namespaced_tool
+                    else namespaced_tool.split("_", 1)[1] if "_" in namespaced_tool
                     else namespaced_tool
                 )
 
@@ -88,14 +90,16 @@ async def _sync_call_logs():
 
                 server_id = server.id if server else 0
 
-                # 通过 api_key (LiteLLM token) 反查平台 ai_key → user_id
+                # 通过 metadata.user_api_key_alias 关联平台 ai_key → user_id
                 user_id = 0
                 ai_key_id = None
-                api_key_token = row[1]  # api_key column
-                if api_key_token:
+                metadata_raw = row[8] if len(row) > 8 else None
+                mcp_metadata_full = _parse_json(metadata_raw)
+                key_alias = mcp_metadata_full.get("user_api_key_alias") or ""
+                if key_alias:
                     from repositories import ai_key_repo
-                    ai_key = await ai_key_repo.find_by_litellm_key_id(
-                        session, api_key_token
+                    ai_key = await ai_key_repo.find_by_litellm_key_alias(
+                        session, key_alias
                     )
                     if ai_key:
                         ai_key_id = ai_key.id
@@ -130,10 +134,13 @@ async def _sync_call_logs():
                     except (TypeError, AttributeError):
                         pass
 
-                # 解析 messages → request_args，response → response_full
-                messages_raw = row[9] if len(row) > 9 else None
+                # 从已解析的 metadata 获取 mcp_tool_call_metadata 作为完整请求信息
+                mcp_metadata = mcp_metadata_full.get("mcp_tool_call_metadata", {})
+                arguments = mcp_metadata.get("arguments", {})
+
+                # request_args 存完整的 mcp_tool_call_metadata（包含 name、arguments、server 等）
                 response_raw = row[10] if len(row) > 10 else None
-                request_args = _parse_json(messages_raw)
+                request_args = mcp_metadata if mcp_metadata else arguments
                 response_full = _to_text(response_raw)
                 response_summary = response_full[:500] if response_full else ""
 

@@ -43,6 +43,15 @@ const form = ref({
 
 const error = ref('')
 const saving = ref(false)
+const serverNameError = ref('')
+
+function validateServerName() {
+  if (form.value.server_name.includes('-')) {
+    serverNameError.value = '唯一标识不能包含横杠（-），请使用下划线（_）替代'
+  } else {
+    serverNameError.value = ''
+  }
+}
 
 watch(
   () => props.visible,
@@ -97,6 +106,10 @@ async function handleSubmit(): Promise<void> {
   error.value = ''
   if (!form.value.name || !form.value.server_name || !form.value.url) {
     error.value = '请填写所有必填项'
+    return
+  }
+  if (form.value.server_name.includes('-')) {
+    error.value = '唯一标识不能包含横杠（-），请使用下划线（_）替代'
     return
   }
   saving.value = true
@@ -173,7 +186,11 @@ async function handleSubmit(): Promise<void> {
             v-model="form.server_name"
             :disabled="!!editing"
             class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none disabled:bg-slate-50"
+            :class="{ 'border-red-300': serverNameError }"
+            @input="validateServerName"
           />
+          <p v-if="serverNameError" class="mt-1 text-xs text-red-500">{{ serverNameError }}</p>
+          <p v-else class="mt-1 text-xs text-slate-400">仅支持字母、数字和下划线，不能包含横杠（-）</p>
         </div>
         <div class="col-span-2">
           <label class="mb-1 block text-sm font-medium text-slate-700">URL *</label>
@@ -190,7 +207,7 @@ async function handleSubmit(): Promise<void> {
             class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
           >
             <option value="sse">SSE</option>
-            <option value="http">HTTP</option>
+            <option value="streamableHttp">Streamable HTTP</option>
           </select>
         </div>
         <div>

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '@aihelms/shared'
 
 const router = useRouter()
-const { login, logout, currentUser } = useAuth()
+const { login, currentUser } = useAuth()
 
 const username = ref('')
 const password = ref('')
@@ -17,17 +17,18 @@ async function handleLogin(): Promise<void> {
     return
   }
   isLoading.value = true
-  errorMessage.value = ''
   try {
     await login(username.value, password.value)
     if (!currentUser.value?.is_admin) {
-      logout()
-      errorMessage.value = '该账号无管理后台权限'
+      // 清 token 但不跳转，保留错误信息
+      localStorage.removeItem('aihelms_token')
+      errorMessage.value = '该账号无权限登录管理后台'
       return
     }
+    errorMessage.value = ''
     router.push('/')
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '登录失败'
+    errorMessage.value = e instanceof Error ? e.message : '用户名或密码错误'
   } finally {
     isLoading.value = false
   }

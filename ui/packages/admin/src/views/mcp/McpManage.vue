@@ -11,7 +11,7 @@ import {
   type McpCategory,
 } from '@aihelms/shared'
 import { toast, usePermission } from '@aihelms/shared'
-import { Activity, RefreshCw, CheckCircle2, XCircle, HelpCircle } from 'lucide-vue-next'
+import { Activity, RefreshCw, CheckCircle2, XCircle, HelpCircle, Eye as EyeIcon, EyeOff as EyeOffIcon } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import McpServerForm from './McpServerForm.vue'
 import McpToolPanel from './McpToolPanel.vue'
@@ -31,6 +31,7 @@ const showCategoryForm = ref(false)
 const categoryFormName = ref('')
 const categoryFormDescription = ref('')
 const deleteCategoryTarget = ref<McpCategory | null>(null)
+const showAuthValue = ref(false)
 
 const categoriesWithCount = computed(() => {
   const counts = new Map<string, number>()
@@ -178,6 +179,8 @@ function healthIconColor(status: string): string {
 const transportLabels: Record<string, string> = {
   sse: 'SSE',
   http: 'HTTP',
+  streamable_http: 'Streamable HTTP',
+  streamableHttp: 'Streamable HTTP',
 }
 
 onMounted(loadData)
@@ -344,8 +347,21 @@ onMounted(loadData)
                 <span class="font-mono text-slate-700">{{ selectedServer.url }}</span>
               </div>
               <div>
+                <span class="text-slate-500">传输方式：</span>
+                <span class="text-slate-700">{{ transportLabels[selectedServer.transport] || selectedServer.transport }}</span>
+              </div>
+              <div>
                 <span class="text-slate-500">认证方式：</span>
-                <span class="text-slate-700">{{ selectedServer.auth_type }}</span>
+                <span class="text-slate-700">{{ selectedServer.auth_type === 'none' ? '无' : selectedServer.auth_type }}</span>
+              </div>
+              <div v-if="selectedServer.auth_type !== 'none'" class="col-span-2">
+                <span class="text-slate-500">认证值：</span>
+                <span class="font-mono text-slate-700">
+                  {{ showAuthValue ? (selectedServer.credentials?.auth_value || '-') : '••••••••' }}
+                </span>
+                <button class="ml-1 text-slate-400 hover:text-slate-600" @click="showAuthValue = !showAuthValue">
+                  <component :is="showAuthValue ? EyeOffIcon : EyeIcon" class="inline h-3.5 w-3.5" />
+                </button>
               </div>
               <div>
                 <span class="text-slate-500">分类：</span>

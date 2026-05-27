@@ -520,6 +520,8 @@ class LlmCallLog(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    messages: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     synced_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

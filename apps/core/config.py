@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     uploads_storage_dir: str = ""
     exports_storage_dir: str = ""
 
+    # 时区（LiteLLM 容器时区，用于日志同步时区转换）
+    timezone: str = "Asia/Shanghai"
+
     # 管理员日志保留天数
     audit_log_retention_days: int = 180
 
