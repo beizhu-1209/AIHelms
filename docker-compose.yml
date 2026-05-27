@@ -37,6 +37,11 @@ services:
   litellm:
     image: docker.litellm.ai/berriai/litellm:v1.85.1
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-50m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-3}"
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}?schema=public
@@ -59,6 +64,11 @@ services:
   aihelms:
     image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:${AIHELMS_VERSION:-latest}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-50m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}
       REDIS_URL: redis://:${REDIS_PASSWORD:-aihelms}@redis:6379/0
