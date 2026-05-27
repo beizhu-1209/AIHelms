@@ -13,11 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 async def record_skill_usage(
-    session: AsyncSession, user_id: int, skill_id: int, action: str
+    session: AsyncSession,
+    user_id: int,
+    skill_id: int,
+    action: str,
+    ai_key_id: int | None = None,
 ) -> None:
-    """记录 Skill 使用日志（download / install）。失败不影响主流程。"""
+    """记录 Skill 使用日志（download / install / agent_download）。失败不影响主流程。"""
     try:
-        log = SkillUsageLog(user_id=user_id, skill_id=skill_id, action=action)
+        log = SkillUsageLog(
+            user_id=user_id,
+            skill_id=skill_id,
+            action=action,
+            ai_key_id=ai_key_id,
+        )
         session.add(log)
         await session.commit()
     except Exception:  # noqa: BLE001
@@ -180,9 +189,12 @@ async def get_skill_zip(session: AsyncSession, skill_id: int, require_published:
     return skill.zip_path, download_name, skill.zip_size
 
 
-async def get_install_info(session: AsyncSession, skill_id: int) -> dict:
+async def get_install_info(
+    session: AsyncSession, skill_id: int, user_id: int | None = None
+) -> dict:
     """返回 Skill 安装信息：介绍 / agent prompt / 使用说明。
     agent_prompt 由后端按 platform_public_url 拼接的下载 URL 自动生成。
+    若提供 user_id，会查找用户主 Key 并在 URL 中嵌入 token。
     """
     skill = await skill_repo.find_by_id(session, skill_id)
     if not skill:
@@ -190,6 +202,12 @@ async def get_install_info(session: AsyncSession, skill_id: int) -> dict:
 
     base_url = settings.platform_public_url.rstrip("/")
     download_url = f"{base_url}/api/v1/skills/{skill.id}/zip"
+
+    if user_id:
+        from repositories import ai_key_repo
+        main_key = await ai_key_repo.find_personal_main(session, user_id)
+        if main_key and main_key.litellm_key_id:
+            download_url = f"{download_url}?token={main_key.litellm_key_id}"
 
     agent_prompt = f"请帮我下载{download_url} 并安装 {skill.name} 这个skill"
 

@@ -38,9 +38,21 @@ async def _aggregate() -> None:
             now = datetime.now(timezone.utc)
             sync_state = await session.get(SyncState, SYNC_KEY)
             if sync_state is None:
+                # 首次运行：从最早的日志开始聚合
+                earliest = await session.execute(
+                    text("""
+                        SELECT MIN(ts) FROM (
+                            SELECT MIN(started_at) AS ts FROM aihelms.llm_call_logs
+                            UNION ALL
+                            SELECT MIN(called_at) AS ts FROM aihelms.mcp_call_logs
+                        ) t
+                    """)
+                )
+                earliest_ts = earliest.scalar()
+                start_from = earliest_ts if earliest_ts else now - timedelta(days=1)
                 sync_state = SyncState(
                     key=SYNC_KEY,
-                    last_sync_at=now - timedelta(days=1),
+                    last_sync_at=start_from,
                 )
                 session.add(sync_state)
                 await session.flush()
@@ -189,7 +201,9 @@ async def _update_budget_used(session) -> None:
                 FROM key_costs kc
                 WHERE k.id = kc.ai_key_id
                   AND k.budget_duration = :duration
-                  AND k.budget_limit IS NOT NULL
+                  AND (k.budget_limit IS NOT NULL
+                       OR k.budget_models_total IS NOT NULL
+                       OR k.budget_mcps_total IS NOT NULL)
             """),
             {"duration": duration},
         )
@@ -198,7 +212,9 @@ async def _update_budget_used(session) -> None:
         text("""
             UPDATE aihelms.ai_keys
             SET budget_used = 0
-            WHERE budget_limit IS NOT NULL
+            WHERE (budget_limit IS NOT NULL
+                   OR budget_models_total IS NOT NULL
+                   OR budget_mcps_total IS NOT NULL)
               AND id NOT IN (
                   SELECT DISTINCT ai_key_id FROM aihelms.llm_call_logs
                   WHERE ai_key_id IS NOT NULL

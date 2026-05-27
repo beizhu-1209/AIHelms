@@ -64,11 +64,22 @@ class UpdateKeyRequest(BaseModel):
 
 
 class BatchUpdateRequest(BaseModel):
-    key_ids: list[int] = Field(..., min_length=1)
+    key_ids: list[int] | None = None
+    user_ids: list[int] | None = None
     models: list[str] | None = None
+    mcps: list[int] | None = None
+    skills: list[int] | None = None
+    agents: list[int] | None = None
     budget_limit: Decimal | None = None
     budget_hard_limit: bool | None = None
     budget_duration: str | None = Field(None, pattern=r"^(1d|7d|30d)$")
+    budget_scope: str | None = Field(None, pattern=r"^(unified|per_type|per_resource)$")
+    budget_models_total: Decimal | None = None
+    budget_mcps_total: Decimal | None = None
+    budget_models_per: str | None = Field(None, pattern=r"^(unified|each)$")
+    budget_mcps_per: str | None = Field(None, pattern=r"^(unified|each)$")
+    model_budgets: dict[str, float] | None = None
+    mcp_budgets: dict[str, float] | None = None
 
 
 class BatchCreateRequest(BaseModel):
@@ -286,6 +297,52 @@ async def get_key(
     return {"code": 200, "message": "ok", "data": key}
 
 
+@router.put("/batch", summary="批量更新 AI 身份 Key")
+async def batch_update_keys(
+    req: BatchUpdateRequest,
+    session: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_permission("user:update")),
+):
+    key_ids = list(req.key_ids) if req.key_ids else []
+    if req.user_ids:
+        from repositories import ai_key_repo
+        for uid in req.user_ids:
+            main_key = await ai_key_repo.find_personal_main(session, uid)
+            if main_key:
+                key_ids.append(main_key.id)
+    if not key_ids:
+        raise HTTPException(status_code=400, detail="未找到可更新的 Key")
+    success_count = 0
+    fail_count = 0
+    for key_id in key_ids:
+        try:
+            await ai_key_service.update_key(
+                session, key_id,
+                models=req.models,
+                mcps=req.mcps,
+                skills=req.skills,
+                agents=req.agents,
+                budget_limit=req.budget_limit,
+                budget_hard_limit=req.budget_hard_limit,
+                budget_duration=req.budget_duration,
+                budget_scope=req.budget_scope,
+                budget_models_total=req.budget_models_total,
+                budget_mcps_total=req.budget_mcps_total,
+                budget_models_per=req.budget_models_per,
+                budget_mcps_per=req.budget_mcps_per,
+                model_budgets=req.model_budgets,
+                mcp_budgets=req.mcp_budgets,
+            )
+            success_count += 1
+        except (NotFoundError, Exception):
+            fail_count += 1
+    return {
+        "code": 200,
+        "message": f"批量更新完成，成功 {success_count}/{success_count + fail_count}",
+        "data": {"success": success_count, "fail": fail_count},
+    }
+
+
 @router.put("/{key_id}", summary="更新 AI 身份 Key")
 async def update_key(
     key_id: int,
@@ -359,24 +416,3 @@ async def get_available_models(
         logger.warning("failed to fetch models from litellm")
         model_names = []
     return {"code": 200, "message": "ok", "data": model_names}
-
-
-@router.put("/batch", summary="批量更新 AI 身份 Key")
-async def batch_update_keys(
-    req: BatchUpdateRequest,
-    session: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_permission("user:update")),
-):
-    results = []
-    for key_id in req.key_ids:
-        try:
-            key = await ai_key_service.update_key(
-                session, key_id,
-                models=req.models,
-                budget_limit=req.budget_limit,
-                budget_hard_limit=req.budget_hard_limit,
-            )
-            results.append(key)
-        except NotFoundError:
-            pass
-    return {"code": 200, "message": "批量更新成功", "data": {"updated": len(results)}}

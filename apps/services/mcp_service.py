@@ -162,10 +162,8 @@ async def delete_server(session: AsyncSession, server_id: int) -> None:
     await mcp_repo.delete_server(session, server_id)
     await session.commit()
 
-    try:
+    if litellm_server_id:
         await litellm_client.delete_mcp_server(litellm_server_id)
-    except LiteLLMError:
-        logger.warning("failed to delete mcp server from litellm: %s", litellm_server_id)
 
 
 # ─── MCP Tools ───────────────────────────────────────────────────────────────
@@ -275,38 +273,33 @@ async def health_check_server(session: AsyncSession, server_id: int) -> dict:
 
 
 async def _sync_server_to_litellm(server: McpServer) -> None:
-    try:
-        if server.litellm_synced:
-            await litellm_client.update_mcp_server(
-                server_id=server.server_id,
-                server_name=server.server_name,
-                url=server.url,
-                transport=server.transport,
-                auth_type=server.auth_type if server.auth_type != "none" else None,
-                credentials=server.credentials if server.credentials else None,
-                description=server.description,
-                instructions=server.instructions,
-                mcp_info=server.mcp_info if server.mcp_info else None,
-                extra_headers=server.extra_headers if server.extra_headers else None,
-            )
-        else:
-            await litellm_client.create_mcp_server(
-                server_name=server.server_name,
-                url=server.url,
-                transport=server.transport,
-                auth_type=server.auth_type if server.auth_type != "none" else None,
-                credentials=server.credentials if server.credentials else None,
-                description=server.description,
-                instructions=server.instructions,
-                mcp_info=server.mcp_info if server.mcp_info else None,
-                extra_headers=server.extra_headers if server.extra_headers else None,
-            )
-        server.litellm_synced = True
-        server.litellm_sync_error = None
-    except LiteLLMError as e:
-        server.litellm_synced = False
-        server.litellm_sync_error = str(e)
-        logger.warning("litellm mcp sync failed for %s: %s", server.server_name, e)
+    if server.litellm_synced:
+        await litellm_client.update_mcp_server(
+            server_id=server.server_id,
+            server_name=server.server_name,
+            url=server.url,
+            transport=server.transport,
+            auth_type=server.auth_type if server.auth_type != "none" else None,
+            credentials=server.credentials if server.credentials else None,
+            description=server.description,
+            instructions=server.instructions,
+            mcp_info=server.mcp_info if server.mcp_info else None,
+            extra_headers=server.extra_headers if server.extra_headers else None,
+        )
+    else:
+        await litellm_client.create_mcp_server(
+            server_name=server.server_name,
+            url=server.url,
+            transport=server.transport,
+            auth_type=server.auth_type if server.auth_type != "none" else None,
+            credentials=server.credentials if server.credentials else None,
+            description=server.description,
+            instructions=server.instructions,
+            mcp_info=server.mcp_info if server.mcp_info else None,
+            extra_headers=server.extra_headers if server.extra_headers else None,
+        )
+    server.litellm_synced = True
+    server.litellm_sync_error = None
 
 
 # ─── Serializers ─────────────────────────────────────────────────────────────

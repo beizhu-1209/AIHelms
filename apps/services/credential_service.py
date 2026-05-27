@@ -53,15 +53,12 @@ async def create_credential(
     credential = await credential_repo.create(session, credential)
 
     # Sync to LiteLLM
-    try:
-        await litellm_client.create_credential(
-            credential_name=credential_name,
-            credential_values=credential_values,
-            credential_info=credential_info or {},
-        )
-        credential.litellm_synced = True
-    except litellm_client.LiteLLMError:
-        logger.warning("failed to sync credential to litellm: %s", credential_name)
+    await litellm_client.create_credential(
+        credential_name=credential_name,
+        credential_values=credential_values,
+        credential_info=credential_info or {},
+    )
+    credential.litellm_synced = True
 
     await session.commit()
     credential = await credential_repo.find_by_id(session, credential.id)
@@ -91,15 +88,12 @@ async def update_credential(
 
     # Sync to LiteLLM
     if credential_values is not None or credential_info is not None:
-        try:
-            await litellm_client.update_credential(
-                credential_name=credential.credential_name,
-                credential_values=credential_values,
-                credential_info=credential_info,
-            )
-            credential.litellm_synced = True
-        except litellm_client.LiteLLMError:
-            logger.warning("failed to sync credential update to litellm: %s", credential.credential_name)
+        await litellm_client.update_credential(
+            credential_name=credential.credential_name,
+            credential_values=credential_values,
+            credential_info=credential_info,
+        )
+        credential.litellm_synced = True
 
     await session.commit()
     credential = await credential_repo.find_by_id(session, credential.id)
@@ -116,10 +110,7 @@ async def delete_credential(session: AsyncSession, credential_id: int) -> None:
 
     # Delete from LiteLLM
     if credential.litellm_synced:
-        try:
-            await litellm_client.delete_credential(credential.credential_name)
-        except litellm_client.LiteLLMError:
-            logger.warning("failed to delete credential from litellm: %s", credential.credential_name)
+        await litellm_client.delete_credential(credential.credential_name)
 
     await session.delete(credential)
     await session.commit()

@@ -55,11 +55,8 @@ async def create_user(
     user = await user_repo.create_user(session, user)
 
     litellm_user_id = f"aihelms_user_{user.id}"
-    try:
-        await litellm_client.create_user(litellm_user_id, email)
-        user.litellm_user_id = litellm_user_id
-    except litellm_client.LiteLLMError:
-        logger.warning("litellm sync failed for user %s, skipping", user.id)
+    await litellm_client.create_user(litellm_user_id, email)
+    user.litellm_user_id = litellm_user_id
 
     # Auto-create personal main key (disabled by default)
     await ai_key_service.create_personal_main_key(session, user.id, username)

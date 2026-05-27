@@ -87,7 +87,19 @@ async def _sync_call_logs():
                 server = servers_cache[server_name]
 
                 server_id = server.id if server else 0
+
+                # 通过 api_key (LiteLLM token) 反查平台 ai_key → user_id
                 user_id = 0
+                ai_key_id = None
+                api_key_token = row[1]  # api_key column
+                if api_key_token:
+                    from repositories import ai_key_repo
+                    ai_key = await ai_key_repo.find_by_litellm_key_id(
+                        session, api_key_token
+                    )
+                    if ai_key:
+                        ai_key_id = ai_key.id
+                        user_id = ai_key.owner_id if ai_key.owner_type == "user" else 0
 
                 internal_cost = 0.0
                 external_cost = 0.0
@@ -139,6 +151,7 @@ async def _sync_call_logs():
                     duration_ms=duration_ms,
                     internal_cost=internal_cost,
                     external_cost=external_cost,
+                    ai_key_id=ai_key_id,
                     litellm_request_id=request_id,
                     called_at=start or end_time,
                 )

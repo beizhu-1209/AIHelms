@@ -56,13 +56,10 @@ async def update_department(session: AsyncSession, dept_id: int, name: str | Non
     if is_active is not None and is_active != dept.is_active:
         dept.is_active = is_active
         if dept.litellm_team_id:
-            try:
-                if is_active:
-                    await litellm_client.unblock_team(dept.litellm_team_id)
-                else:
-                    await litellm_client.block_team(dept.litellm_team_id)
-            except litellm_client.LiteLLMError:
-                logger.warning("litellm block/unblock team failed for dept %s", dept_id)
+            if is_active:
+                await litellm_client.unblock_team(dept.litellm_team_id)
+            else:
+                await litellm_client.block_team(dept.litellm_team_id)
 
     await session.commit()
     return await get_department_by_id(session, dept_id)

@@ -11,6 +11,7 @@ from repositories import user_repo
 from repositories import department_repo
 from repositories import project_repo
 from repositories import model_repo
+from repositories import mcp_repo
 from services import litellm_client
 from services.model_service import ANTHROPIC_MODEL_SUFFIX
 
@@ -135,30 +136,26 @@ async def create_key(
     litellm_models, litellm_model_budgets = await _expand_models_with_anthropic(
         session, models or [], model_budgets
     )
-    try:
-        result = await litellm_client.create_key(
-            key_alias=key_alias,
-            user_id=litellm_user_id,
-            team_id=team_id,
-            models=litellm_models,
-            max_budget=max_budget,
-            metadata={"aihelms_key_id": ai_key.id, "key_type": key_type},
-            duration=litellm_duration,
-        )
-        ai_key.litellm_key_id = result.get("key")
-        ai_key.litellm_key_alias = key_alias
+    mcp_server_names = await _resolve_mcp_server_names(session, mcps or [])
+    result = await litellm_client.create_key(
+        key_alias=key_alias,
+        user_id=litellm_user_id,
+        team_id=team_id,
+        models=litellm_models,
+        max_budget=max_budget,
+        metadata={"aihelms_key_id": ai_key.id, "key_type": key_type},
+        duration=litellm_duration,
+        allowed_mcp_servers=mcp_server_names if mcp_server_names else None,
+    )
+    ai_key.litellm_key_id = result.get("key")
+    ai_key.litellm_key_alias = key_alias
 
-        # Sync model_max_budget if set
-        if litellm_model_budgets and ai_key.litellm_key_id:
-            try:
-                await litellm_client.update_key(
-                    key_id=ai_key.litellm_key_id,
-                    model_max_budget=litellm_model_budgets,
-                )
-            except litellm_client.LiteLLMError:
-                logger.warning("litellm sync model_max_budget failed for ai_key %s", ai_key.id)
-    except litellm_client.LiteLLMError:
-        logger.warning("litellm create key failed for ai_key %s", ai_key.id)
+    # Sync model_max_budget if set
+    if litellm_model_budgets and ai_key.litellm_key_id:
+        await litellm_client.update_key(
+            key_id=ai_key.litellm_key_id,
+            model_max_budget=litellm_model_budgets,
+        )
 
     await session.commit()
     await session.refresh(ai_key)
@@ -278,6 +275,20 @@ async def update_key_resources(
     await _sync_key_to_litellm(key, models is not None, mcps is not None, False, False, session=session)
 
 
+async def _resolve_mcp_server_names(
+    session: AsyncSession, mcp_ids: list[int]
+) -> list[str]:
+    """Convert MCP server IDs to server_name list for LiteLLM."""
+    if not mcp_ids:
+        return []
+    names = []
+    for mcp_id in mcp_ids:
+        server = await mcp_repo.find_server_by_id(session, mcp_id)
+        if server:
+            names.append(server.server_name)
+    return names
+
+
 async def _expand_models_with_anthropic(
     session: AsyncSession,
     model_ids: list[str],
@@ -333,15 +344,18 @@ async def _sync_key_to_litellm(
             session, key.models, key.model_budgets if model_budgets_changed else None
         )
 
-    try:
-        await litellm_client.update_key(
-            key_id=key.litellm_key_id,
-            models=litellm_models if models_changed else None,
-            max_budget=effective_budget,
-            model_max_budget=litellm_model_budgets,
-        )
-    except litellm_client.LiteLLMError:
-        logger.warning("litellm update key failed for ai_key %s", key.id)
+    # Resolve MCP server names from IDs
+    mcp_server_names: list[str] | None = None
+    if mcps_changed and session:
+        mcp_server_names = await _resolve_mcp_server_names(session, key.mcps or [])
+
+    await litellm_client.update_key(
+        key_id=key.litellm_key_id,
+        models=litellm_models if models_changed else None,
+        max_budget=effective_budget,
+        model_max_budget=litellm_model_budgets,
+        allowed_mcp_servers=mcp_server_names,
+    )
 
 
 async def toggle_key(session: AsyncSession, key_id: int) -> dict:
@@ -357,10 +371,7 @@ async def toggle_key(session: AsyncSession, key_id: int) -> dict:
             max_budget = float(key.budget_limit) if key.budget_limit and key.budget_hard_limit else None
         else:
             max_budget = 0.0
-        try:
-            await litellm_client.update_key_budget(key.litellm_key_id, max_budget)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm toggle key failed for ai_key %s", key_id)
+        await litellm_client.update_key_budget(key.litellm_key_id, max_budget)
 
     await session.commit()
     await session.refresh(key)
@@ -373,10 +384,7 @@ async def delete_key(session: AsyncSession, key_id: int) -> None:
         raise NotFoundError("ai_key", key_id)
 
     if key.litellm_key_id:
-        try:
-            await litellm_client.delete_key(key.litellm_key_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm delete key failed for ai_key %s", key_id)
+        await litellm_client.delete_key(key.litellm_key_id)
 
     await session.delete(key)
     await session.commit()
@@ -516,17 +524,14 @@ async def create_personal_main_key(session: AsyncSession, user_id: int, username
         session, public_resources["models"], None
     )
 
-    try:
-        result = await litellm_client.create_key(
-            key_alias=key_alias,
-            user_id=litellm_user_id,
-            models=litellm_models,
-            metadata={"aihelms_key_id": ai_key.id, "key_type": KEY_TYPE_PERSONAL_MAIN},
-        )
-        ai_key.litellm_key_id = result.get("key")
-        ai_key.litellm_key_alias = key_alias
-    except litellm_client.LiteLLMError:
-        logger.warning("litellm create main key failed for user %s", user_id)
+    result = await litellm_client.create_key(
+        key_alias=key_alias,
+        user_id=litellm_user_id,
+        models=litellm_models,
+        metadata={"aihelms_key_id": ai_key.id, "key_type": KEY_TYPE_PERSONAL_MAIN},
+    )
+    ai_key.litellm_key_id = result.get("key")
+    ai_key.litellm_key_alias = key_alias
 
     return ai_key
 
@@ -584,6 +589,12 @@ async def sync_public_resource_to_all_keys(
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(key, resource_type)
             updated += 1
+            if resource_type == "models":
+                await _sync_key_to_litellm(
+                    key, models_changed=True, mcps_changed=False,
+                    budget_changed=False, model_budgets_changed=False,
+                    session=session,
+                )
     if updated:
         await session.flush()
     return updated
@@ -840,12 +851,13 @@ def _serialize_key(key: AiKey) -> dict:
         "mcps": key.mcps or [],
         "skills": key.skills or [],
         "agents": key.agents or [],
-        "budget_limit": str(key.budget_limit) if key.budget_limit else None,
+        "budget_limit": str(key.budget_limit) if key.budget_limit is not None else None,
+        "budget_used": str(key.budget_used) if key.budget_used else "0",
         "budget_hard_limit": key.budget_hard_limit,
         "budget_duration": key.budget_duration,
         "budget_scope": key.budget_scope,
-        "budget_models_total": str(key.budget_models_total) if key.budget_models_total else None,
-        "budget_mcps_total": str(key.budget_mcps_total) if key.budget_mcps_total else None,
+        "budget_models_total": str(key.budget_models_total) if key.budget_models_total is not None else None,
+        "budget_mcps_total": str(key.budget_mcps_total) if key.budget_mcps_total is not None else None,
         "budget_models_per": key.budget_models_per,
         "budget_mcps_per": key.budget_mcps_per,
         "model_budgets": key.model_budgets or {},

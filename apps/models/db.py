@@ -532,6 +532,7 @@ class SkillUsageLog(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     skill_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     action: Mapped[str] = mapped_column(String(20), nullable=False)
+    ai_key_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 

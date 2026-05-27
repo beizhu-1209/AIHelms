@@ -143,15 +143,12 @@ async def delete_model(session: AsyncSession, model_id: int) -> None:
     for d in deployments:
         if d.litellm_model_id:
             litellm_model_name = _get_litellm_model_name(model, d.credential)
-            try:
-                await litellm_client.update_model(
-                    litellm_model_id=d.litellm_model_id,
-                    model_name=litellm_model_name,
-                    litellm_params=_convert_cost_for_litellm(d.litellm_params),
-                    model_info={**(d.model_info or {}), "active": False},
-                )
-            except litellm_client.LiteLLMError:
-                logger.warning("litellm disable model failed for deployment %s", d.id)
+            await litellm_client.update_model(
+                litellm_model_id=d.litellm_model_id,
+                model_name=litellm_model_name,
+                litellm_params=_convert_cost_for_litellm(d.litellm_params),
+                model_info={**(d.model_info or {}), "active": False},
+            )
         d.is_active = False
 
     model.is_active = False
@@ -307,26 +304,23 @@ async def update_deployment(
         credential = await credential_repo.find_by_id(session, deployment.credential_id)
 
     if model and deployment.litellm_model_id:
-        try:
-            sync_params = dict(deployment.litellm_params)
-            if credential and "litellm_credential_name" not in sync_params and "api_key" not in sync_params:
-                sync_params["litellm_credential_name"] = credential.credential_name
-            if credential and "api_base" not in sync_params:
-                cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
-                if cred_api_base:
-                    sync_params["api_base"] = cred_api_base
-            sync_params = _convert_cost_for_litellm(sync_params)
-            sync_model_info = dict(deployment.model_info or {})
-            sync_model_info["active"] = deployment.is_active
-            litellm_model_name = _get_litellm_model_name(model, credential)
-            await litellm_client.update_model(
-                litellm_model_id=deployment.litellm_model_id,
-                model_name=litellm_model_name,
-                litellm_params=sync_params,
-                model_info=sync_model_info,
-            )
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm update model failed for deployment %s", deployment_id)
+        sync_params = dict(deployment.litellm_params)
+        if credential and "litellm_credential_name" not in sync_params and "api_key" not in sync_params:
+            sync_params["litellm_credential_name"] = credential.credential_name
+        if credential and "api_base" not in sync_params:
+            cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
+            if cred_api_base:
+                sync_params["api_base"] = cred_api_base
+        sync_params = _convert_cost_for_litellm(sync_params)
+        sync_model_info = dict(deployment.model_info or {})
+        sync_model_info["active"] = deployment.is_active
+        litellm_model_name = _get_litellm_model_name(model, credential)
+        await litellm_client.update_model(
+            litellm_model_id=deployment.litellm_model_id,
+            model_name=litellm_model_name,
+            litellm_params=sync_params,
+            model_info=sync_model_info,
+        )
     elif model and not deployment.litellm_model_id and deployment.is_active:
         await _sync_deployment_to_litellm(deployment, model, credential, session)
 
@@ -474,21 +468,18 @@ async def update_router_settings(
     settings = await model_repo.upsert_router_settings(session, settings)
 
     # Sync to LiteLLM
-    try:
-        litellm_settings = {
-            "routing_strategy": settings.routing_strategy,
-            "allowed_fails": settings.allowed_fails,
-            "cooldown_time": settings.cooldown_time,
-            "num_retries": settings.num_retries,
-            "timeout": settings.timeout,
-        }
-        if settings.fallbacks:
-            litellm_settings["fallbacks"] = settings.fallbacks
-        if settings.config:
-            litellm_settings.update(settings.config)
-        await litellm_client.update_router_settings(litellm_settings)
-    except litellm_client.LiteLLMError:
-        logger.warning("failed to sync router settings to litellm")
+    litellm_settings = {
+        "routing_strategy": settings.routing_strategy,
+        "allowed_fails": settings.allowed_fails,
+        "cooldown_time": settings.cooldown_time,
+        "num_retries": settings.num_retries,
+        "timeout": settings.timeout,
+    }
+    if settings.fallbacks:
+        litellm_settings["fallbacks"] = settings.fallbacks
+    if settings.config:
+        litellm_settings.update(settings.config)
+    await litellm_client.update_router_settings(litellm_settings)
 
     await session.commit()
     await session.refresh(settings)
@@ -627,21 +618,18 @@ async def _sync_deployment_to_litellm(
             if prefix_info.needs_v1 and "api_base" in litellm_params:
                 litellm_params["api_base"] = _ensure_v1_suffix(litellm_params["api_base"])
 
-    try:
-        sync_litellm_params = _convert_cost_for_litellm(litellm_params)
-        litellm_model_name = _get_litellm_model_name(model, credential)
-        result = await litellm_client.add_model(
-            model_name=litellm_model_name,
-            litellm_params=sync_litellm_params,
-            model_info=deployment.model_info or {},
-        )
-        litellm_id = result.get("model_info", {}).get("id")
-        if litellm_id:
-            deployment.litellm_model_id = litellm_id
-        # 写回处理后的 litellm_params（含前缀、api_base、credential_name）
-        deployment.litellm_params = litellm_params
-    except litellm_client.LiteLLMError as e:
-        logger.error("litellm add model failed for deployment %s: %s", deployment.id, e)
+    sync_litellm_params = _convert_cost_for_litellm(litellm_params)
+    litellm_model_name = _get_litellm_model_name(model, credential)
+    result = await litellm_client.add_model(
+        model_name=litellm_model_name,
+        litellm_params=sync_litellm_params,
+        model_info=deployment.model_info or {},
+    )
+    litellm_id = result.get("model_info", {}).get("id")
+    if litellm_id:
+        deployment.litellm_model_id = litellm_id
+    # 写回处理后的 litellm_params（含前缀、api_base、credential_name）
+    deployment.litellm_params = litellm_params
 
 
 def _serialize_model(model: Model) -> dict:
