@@ -59,7 +59,6 @@ services:
   aihelms:
     image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:${AIHELMS_VERSION:-latest}
     restart: unless-stopped
-    working_dir: /app/apps
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}
       REDIS_URL: redis://:${REDIS_PASSWORD:-aihelms}@redis:6379/0
@@ -67,6 +66,10 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       SECRET_KEY: ${SECRET_KEY:-aihelms}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-admin123}
+      LOG_LEVEL: ${LOG_LEVEL:-WARNING}
+      USD_TO_CNY_RATE: ${USD_TO_CNY_RATE:-7}
+      LLM_LOG_SYNC_INTERVAL_MINUTES: ${LLM_LOG_SYNC_INTERVAL_MINUTES:-5}
+      LLM_LOG_RETENTION_DAYS: ${LLM_LOG_RETENTION_DAYS:-0}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-0}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
@@ -79,11 +82,11 @@ services:
       AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
       TZ: ${TZ:-Asia/Shanghai}
       LOG_DIR: /logs
-      DATA_DIR: /data
+      DATA_DIR: /app/data
     volumes:
       - ./logs:/logs
-      - ./data:/data
-    command: ["bash", "-c", "celery -A celery_app worker --loglevel=${CELERY_LOGLEVEL:-info} & celery -A celery_app beat --loglevel=${CELERY_LOGLEVEL:-info} & gunicorn main:app -c gunicorn_conf.py"]
+      - ./data:/app/data
+      - frontend_dist:/frontend
     networks:
       - internal
       - external
@@ -111,8 +114,7 @@ services:
       - ./docker/nginx/proxy.conf.template:/etc/nginx/proxy.conf.template:ro
       - ./docker/nginx/default.conf.template:/etc/nginx/conf.d/default.conf.template:ro
       - ./docker/nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh:ro
-      - ./ui/packages/web/dist:/usr/share/nginx/html/web:ro
-      - ./ui/packages/admin/dist:/usr/share/nginx/html/admin:ro
+      - frontend_dist:/usr/share/nginx/html:ro
     entrypoint:
       [
         "sh",
@@ -128,6 +130,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  frontend_dist:
 
 networks:
   internal:
