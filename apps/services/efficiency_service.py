@@ -37,7 +37,7 @@ def _prev_period(start_date: date, end_date: date) -> tuple[date, date]:
     return prev_end - timedelta(days=days - 1), prev_end
 
 
-async def get_overview(session: AsyncSession, start_date: date, end_date: date) -> dict:
+async def get_overview(session: AsyncSession, start_date: date, end_date: date, granularity: str = "day") -> dict:
     total_users = await efficiency_repo.get_total_user_count(session)
     active_ids = await efficiency_repo.get_active_user_ids(
         session, start_date, end_date
@@ -60,7 +60,7 @@ async def get_overview(session: AsyncSession, start_date: date, end_date: date) 
     )
 
     trend = await efficiency_repo.get_daily_cost_and_users(
-        session, start_date, end_date
+        session, start_date, end_date, granularity
     )
     dept_ranking = await efficiency_repo.get_dept_ranking(session, start_date, end_date)
 
@@ -116,6 +116,33 @@ async def get_overview(session: AsyncSession, start_date: date, end_date: date) 
     }
 
 
+async def get_user_overview(
+    session: AsyncSession, start_date: date, end_date: date, user_id: int
+) -> dict:
+    """个人用量概览（web 端 scope=self）。"""
+    from sqlalchemy import select, func
+    from models.db import CostSummaryDaily
+
+    result = await session.execute(
+        select(
+            func.coalesce(func.sum(CostSummaryDaily.total_requests), 0),
+            func.coalesce(func.sum(CostSummaryDaily.internal_cost), 0),
+        ).where(
+            CostSummaryDaily.user_id == user_id,
+            CostSummaryDaily.summary_date >= start_date,
+            CostSummaryDaily.summary_date <= end_date,
+        )
+    )
+    row = result.one()
+    total_requests = int(row[0])
+    total_cost = float(row[1])
+
+    return {
+        "total_cost": total_cost,
+        "total_requests": total_requests,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Adoption
 # ---------------------------------------------------------------------------
@@ -166,6 +193,10 @@ async def get_adoption(
         session, start_date, end_date
     )
 
+    heavy_trend_raw = await efficiency_repo.get_daily_heavy_user_ratio(
+        session, start_date, end_date
+    )
+
     if dimension == "project":
         raw_table = await efficiency_repo.get_project_adoption_table(
             session, start_date, end_date
@@ -200,7 +231,10 @@ async def get_adoption(
             "values": [item["dau"] for item in active_trend_raw],
         },
         "depth_distribution": {"light": light, "medium": medium, "heavy": heavy},
-        "heavy_trend": {"dates": [], "ratios": []},
+        "heavy_trend": {
+            "dates": [item["date"] for item in heavy_trend_raw],
+            "ratios": [item["ratio"] for item in heavy_trend_raw],
+        },
         "department_table": department_table,
     }
 

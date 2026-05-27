@@ -29,14 +29,11 @@ async def create_project(session: AsyncSession, name: str, description: str = ""
     project = Project(name=name, description=description)
     project = await project_repo.create(session, project)
 
-    try:
-        result = await litellm_client.create_team(
-            team_alias=f"project_{project.id}_{name}",
-            metadata={"type": "project", "project_id": project.id},
-        )
-        project.litellm_team_id = result.get("team_id")
-    except litellm_client.LiteLLMError:
-        logger.warning("litellm sync failed for project %s", project.id)
+    result = await litellm_client.create_team(
+        team_alias=f"project_{project.id}_{name}",
+        metadata={"type": "project", "project_id": project.id},
+    )
+    project.litellm_team_id = result.get("team_id")
 
     await session.commit()
     await session.refresh(project)
@@ -55,13 +52,10 @@ async def update_project(session: AsyncSession, project_id: int, name: str | Non
     if is_active is not None and is_active != project.is_active:
         project.is_active = is_active
         if project.litellm_team_id:
-            try:
-                if is_active:
-                    await litellm_client.unblock_team(project.litellm_team_id)
-                else:
-                    await litellm_client.block_team(project.litellm_team_id)
-            except litellm_client.LiteLLMError:
-                logger.warning("litellm block/unblock team failed for project %s", project_id)
+            if is_active:
+                await litellm_client.unblock_team(project.litellm_team_id)
+            else:
+                await litellm_client.block_team(project.litellm_team_id)
 
     await session.commit()
     await session.refresh(project)
@@ -81,10 +75,7 @@ async def delete_project(session: AsyncSession, project_id: int) -> None:
     await session.commit()
 
     if project.litellm_team_id:
-        try:
-            await litellm_client.block_team(project.litellm_team_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm block team failed for project %s", project_id)
+        await litellm_client.block_team(project.litellm_team_id)
 
 
 async def get_project_members(session: AsyncSession, project_id: int) -> list[dict]:
@@ -124,10 +115,7 @@ async def add_project_member(session: AsyncSession, project_id: int, user_id: in
     await project_repo.add_member(session, user_id, project_id)
 
     if project.litellm_team_id and user.litellm_user_id:
-        try:
-            await litellm_client.add_team_member(project.litellm_team_id, user.litellm_user_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm add member failed: project=%s user=%s", project_id, user_id)
+        await litellm_client.add_team_member(project.litellm_team_id, user.litellm_user_id)
 
     await session.commit()
 
@@ -144,10 +132,7 @@ async def remove_project_member(session: AsyncSession, project_id: int, user_id:
     await project_repo.remove_member(session, user_id, project_id)
 
     if project.litellm_team_id and user.litellm_user_id:
-        try:
-            await litellm_client.remove_team_member(project.litellm_team_id, user.litellm_user_id)
-        except litellm_client.LiteLLMError:
-            logger.warning("litellm remove member failed: project=%s user=%s", project_id, user_id)
+        await litellm_client.remove_team_member(project.litellm_team_id, user.litellm_user_id)
 
     await session.commit()
 

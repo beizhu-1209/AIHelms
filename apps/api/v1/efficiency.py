@@ -28,6 +28,8 @@ async def get_overview(
     period: str | None = Query(None),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    granularity: str = Query("day"),
+    scope: str | None = Query(None),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -35,7 +37,12 @@ async def get_overview(
         start, end = start_date, end_date
     else:
         start, end = _parse_period(period)
-    data = await efficiency_service.get_overview(session, start, end)
+    if scope == "self":
+        data = await efficiency_service.get_user_overview(
+            session, start, end, current_user["id"]
+        )
+    else:
+        data = await efficiency_service.get_overview(session, start, end, granularity)
     return {"code": 200, "message": "ok", "data": data}
 
 

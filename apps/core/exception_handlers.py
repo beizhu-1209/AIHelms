@@ -13,6 +13,7 @@ from exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from services.litellm_client import LiteLLMError
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,20 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "code": exc.status_code,
                 "message": exc.detail or "请求错误",
+                "data": None,
+            },
+        )
+
+    @app.exception_handler(LiteLLMError)
+    async def litellm_error_handler(
+        request: Request, exc: LiteLLMError
+    ) -> JSONResponse:
+        logger.error("LiteLLM sync failed: %s", str(exc))
+        return JSONResponse(
+            status_code=502,
+            content={
+                "code": 502,
+                "message": "模型服务同步失败，请稍后重试",
                 "data": None,
             },
         )

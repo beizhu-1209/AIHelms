@@ -44,10 +44,16 @@ async def get_total_cost(
 
 
 async def get_daily_cost_and_users(
-    session: AsyncSession, start_date: date, end_date: date
+    session: AsyncSession, start_date: date, end_date: date, granularity: str = "day"
 ) -> list[dict]:
+    if granularity == "week":
+        trunc = "date_trunc('week', summary_date)::date"
+    elif granularity == "month":
+        trunc = "date_trunc('month', summary_date)::date"
+    else:
+        trunc = "summary_date::date"
     sql = text(
-        "SELECT summary_date::date AS d, COUNT(DISTINCT user_id) AS active_users,"
+        f"SELECT {trunc} AS d, COUNT(DISTINCT user_id) AS active_users,"
         " COALESCE(SUM(internal_cost), 0) AS cost"
         " FROM aihelms.cost_summary_daily"
         " WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL"
@@ -99,6 +105,25 @@ async def get_user_call_counts(
     )
     result = await session.execute(sql, {"start": start_date, "end": end_date})
     return [{"user_id": int(r[0]), "calls": int(r[1])} for r in result.fetchall()]
+
+
+async def get_daily_heavy_user_ratio(
+    session: AsyncSession, start_date: date, end_date: date, heavy_threshold: int = 10
+) -> list[dict]:
+    sql = text(
+        "SELECT d, COUNT(*) FILTER (WHERE calls >= :threshold)::float"
+        " / NULLIF(COUNT(*), 0) * 100 AS ratio"
+        " FROM ("
+        "   SELECT summary_date::date AS d, user_id, SUM(total_requests) AS calls"
+        "   FROM aihelms.cost_summary_daily"
+        "   WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL"
+        "   GROUP BY 1, 2"
+        " ) t GROUP BY d ORDER BY d"
+    )
+    result = await session.execute(
+        sql, {"start": start_date, "end": end_date, "threshold": heavy_threshold}
+    )
+    return [{"date": str(r[0]), "ratio": round(float(r[1] or 0), 1)} for r in result.fetchall()]
 
 
 async def get_dept_adoption_table(

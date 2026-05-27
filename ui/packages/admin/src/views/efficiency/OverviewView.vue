@@ -126,8 +126,8 @@ const trendChartOption = computed(() => {
   const { dates, active_users, cost } = data.value.trend
   return {
     tooltip: { trigger: 'axis' },
-    legend: { top: 0, right: 0, textStyle: { fontSize: 11 } },
-    grid: { top: 36, right: 60, bottom: 28, left: 50 },
+    legend: { show: false },
+    grid: { top: 20, right: 60, bottom: 28, left: 50 },
     xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10 } },
     yAxis: [
       { type: 'value', name: '活跃人数', nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 10 } },
@@ -249,7 +249,7 @@ onMounted(loadData)
       </div>
 
       <!-- ③ Dual-axis trend chart -->
-      <GlassCard title="活跃用户与成本趋势" tooltip="蓝色柱=当天有调用的独立用户数；橙色线=当天 LLM+MCP 总成本。支持切换日/周/月粒度。">
+      <GlassCard title="活跃用户与成本趋势" subtitle="柱状=活跃用户数 | 折线=成本(元)" tooltip="蓝色柱=当天有调用的独立用户数；橙色线=当天 LLM+MCP 总成本。支持切换日/周/月粒度。">
         <template #action>
           <div class="inline-flex rounded-md bg-slate-100 p-0.5">
             <button

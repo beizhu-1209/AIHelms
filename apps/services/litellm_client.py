@@ -112,6 +112,7 @@ async def create_key(
     max_budget: float | None = None,
     metadata: dict | None = None,
     duration: str | None = None,
+    allowed_mcp_servers: list[str] | None = None,
 ) -> dict:
     data: dict = {"key_alias": key_alias}
     if user_id:
@@ -126,6 +127,8 @@ async def create_key(
         data["metadata"] = metadata
     if duration:
         data["duration"] = duration
+    if allowed_mcp_servers is not None:
+        data["allowed_mcp_servers"] = allowed_mcp_servers
     return await _request("POST", "/key/generate", json_data=data)
 
 
@@ -139,6 +142,7 @@ async def update_key(
     max_budget: float | None = None,
     metadata: dict | None = None,
     model_max_budget: dict[str, float] | None = None,
+    allowed_mcp_servers: list[str] | None = None,
 ) -> dict:
     data: dict = {"key": key_id}
     if models is not None:
@@ -149,6 +153,8 @@ async def update_key(
         data["metadata"] = metadata
     if model_max_budget is not None:
         data["model_max_budget"] = model_max_budget
+    if allowed_mcp_servers is not None:
+        data["allowed_mcp_servers"] = allowed_mcp_servers
     return await _request("POST", "/key/update", json_data=data)
 
 
@@ -305,7 +311,6 @@ async def create_mcp_server(
         data["extra_headers"] = extra_headers
     if mcp_info:
         data["mcp_info"] = mcp_info
-    data["allow_all_keys"] = True
     return await _request("POST", "/v1/mcp/server", json_data=data)
 
 

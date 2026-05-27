@@ -1,6 +1,8 @@
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
+  enable_mcp_server: true
+  store_model_in_db: true
 
 litellm_settings:
   drop_params: true

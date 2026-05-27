@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '@aihelms/shared'
 
 const router = useRouter()
-const { login } = useAuth()
+const { login, logout, currentUser } = useAuth()
 
 const username = ref('')
 const password = ref('')
@@ -20,6 +20,11 @@ async function handleLogin(): Promise<void> {
   errorMessage.value = ''
   try {
     await login(username.value, password.value)
+    if (!currentUser.value?.is_admin) {
+      logout()
+      errorMessage.value = '该账号无管理后台权限'
+      return
+    }
     router.push('/')
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '登录失败'

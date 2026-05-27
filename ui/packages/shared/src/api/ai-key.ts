@@ -113,3 +113,29 @@ export function deleteModelLimit(keyId: number, modelId: number): Promise<null> 
     method: 'DELETE',
   })
 }
+
+export interface BatchUpdateResourcesParams {
+  key_ids?: number[]
+  user_ids?: number[]
+  models?: string[]
+  mcps?: number[]
+  skills?: number[]
+  agents?: number[]
+  budget_limit?: number | null
+  budget_hard_limit?: boolean
+  budget_duration?: string | null
+  budget_scope?: string
+  budget_models_total?: number | null
+  budget_mcps_total?: number | null
+  budget_models_per?: string
+  budget_mcps_per?: string
+  model_budgets?: Record<string, number> | null
+  mcp_budgets?: Record<string, number> | null
+}
+
+export function batchUpdateResources(params: BatchUpdateResourcesParams): Promise<{ success: number; fail: number }> {
+  return request<{ success: number; fail: number }>('/api/v1/ai-keys/batch', {
+    method: 'PUT',
+    body: params,
+  })
+}

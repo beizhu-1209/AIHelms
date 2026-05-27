@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { request } from '@aihelms/shared/src/api/request'
-import { getMyKeys, createResourceApplication, toast } from '@aihelms/shared'
+import { getMyKeys, createResourceApplication, recordAgentUsage, toast } from '@aihelms/shared'
 import type { Agent } from '@aihelms/shared/src/types/agent'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import { Bot, Search, ExternalLink } from 'lucide-vue-next'
@@ -55,6 +55,7 @@ function canDirectUse(agent: Agent): boolean {
 function handleOpen(agent: Agent): void {
   if (canDirectUse(agent)) {
     if (agent.chat_url) {
+      recordAgentUsage(agent.id, '').catch(() => {})
       window.open(agent.chat_url, '_blank')
     }
   } else {

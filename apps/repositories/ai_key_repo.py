@@ -16,6 +16,13 @@ async def find_by_id(session: AsyncSession, key_id: int) -> AiKey | None:
     return result.scalar_one_or_none()
 
 
+async def find_by_litellm_key_id(session: AsyncSession, token: str) -> AiKey | None:
+    result = await session.execute(
+        select(AiKey).where(AiKey.litellm_key_id == token)
+    )
+    return result.scalar_one_or_none()
+
+
 async def find_by_owner(
     session: AsyncSession,
     owner_type: str,

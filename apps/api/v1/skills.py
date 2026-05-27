@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_current_user, get_db, require_permission
+from core.deps import get_ai_key_identity, get_current_user, get_db, require_permission
 from exceptions import NotFoundError, ConflictError
 from services import skill_service
 
@@ -232,25 +232,42 @@ async def download_skill(
 async def get_install_info(
     skill_id: int,
     session: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     try:
-        data = await skill_service.get_install_info(session, skill_id)
+        data = await skill_service.get_install_info(
+            session, skill_id, user_id=current_user["id"]
+        )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Skill 不存在")
     return {"code": 200, "message": "ok", "data": data}
 
 
-@router.get("/{skill_id}/zip")
+@router.get("/{skill_id}/zip", summary="Agent 下载 Skill zip")
 async def get_skill_zip_public(
     skill_id: int,
     session: AsyncSession = Depends(get_db),
+    identity: dict = Depends(get_ai_key_identity),
 ):
-    """公开下载端点，供 Agent 通过 URL 直接拉取 zip。仅已发布的 Skill 可下载。"""
+    """Agent 下载端点，通过 AI Key 认证。仅已发布的 Skill 可下载。"""
     try:
         zip_path, download_name, _ = await skill_service.get_skill_zip(
             session, skill_id, require_published=True
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Skill 或 zip 文件不存在")
+
+    # 权限检查：需审批的 Skill 必须在 Key 的 skills 列表中
+    skill_data = await skill_service.get_skill(session, skill_id)
+    if skill_data.get("requires_approval"):
+        if skill_id not in identity["skills"]:
+            raise HTTPException(status_code=403, detail="请先申请使用该 Skill")
+
+    await skill_service.record_skill_usage(
+        session,
+        user_id=identity["user_id"],
+        skill_id=skill_id,
+        action="agent_download",
+        ai_key_id=identity["ai_key_id"],
+    )
     return FileResponse(zip_path, filename=download_name, media_type="application/zip")

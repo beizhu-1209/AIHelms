@@ -9,8 +9,8 @@
         >场景管理</button>
         <button
           class="rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:from-purple-600 hover:to-purple-700"
-          @click="handleCreateNew"
-        >创建 Key</button>
+          @click="showBatchResource = true"
+        >批量设置</button>
       </div>
     </div>
 
@@ -454,6 +454,12 @@
         <ScenarioTab />
       </div>
     </div>
+
+    <BatchResourceDialog
+      :visible="showBatchResource"
+      @close="showBatchResource = false"
+      @saved="showBatchResource = false; fetchData()"
+    />
   </div>
 </template>
 
@@ -483,6 +489,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import KeyFormDialog from './KeyFormDialog.vue'
 import ScenarioTab from './ScenarioTab.vue'
 import BudgetCell from './BudgetCell.vue'
+import BatchResourceDialog from './BatchResourceDialog.vue'
 
 const { hasPermission } = usePermission()
 const router = useRouter()
@@ -519,6 +526,7 @@ const deleteTarget = ref<AiKey | null>(null)
 const defaultOwnerType = ref<'user' | 'department' | 'project'>('user')
 const defaultOwnerId = ref<number | undefined>(undefined)
 const showScenarioDialog = ref(false)
+const showBatchResource = ref(false)
 
 async function fetchData(): Promise<void> {
   isLoading.value = true

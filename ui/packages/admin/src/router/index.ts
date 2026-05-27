@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@aihelms/shared'
 
 const router = createRouter({
   history: createWebHistory('/admin/'),
@@ -176,7 +177,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('aihelms_token')
   if (to.meta.requiresAuth !== false && !token) {
     next({ name: 'Login' })
@@ -185,6 +186,17 @@ router.beforeEach((to, _from, next) => {
   if (to.name === 'Login' && token) {
     next({ name: 'Dashboard' })
     return
+  }
+  if (to.meta.requiresAuth !== false && token) {
+    const { currentUser, fetchCurrentUser } = useAuth()
+    if (!currentUser.value) {
+      await fetchCurrentUser()
+    }
+    if (currentUser.value && !currentUser.value.is_admin) {
+      localStorage.removeItem('aihelms_token')
+      next({ name: 'Login' })
+      return
+    }
   }
   next()
 })

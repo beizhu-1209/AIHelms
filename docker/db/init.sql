@@ -539,6 +539,7 @@ CREATE TABLE IF NOT EXISTS aihelms.skill_usage_logs (
     user_id BIGINT NOT NULL,
     skill_id BIGINT NOT NULL,
     action VARCHAR(20) NOT NULL,
+    ai_key_id BIGINT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
