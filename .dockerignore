@@ -1,0 +1,70 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.python-version
+uv.lock
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Build output
+ui/packages/*/dist/
+ui/packages/*/.nuxt/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (keep supervisor configs needed in build)
+docker/
+!docker/supervisor/
+
+# Logs & Data
+*.log
+logs/
+data/
+
+# Dev (local only)
+dev/
+INTERNAL-DEV.md
+
+# Test & Tools
+.playwright*
+.agents
+
+# Docs (not needed in image)
+*.md
+!apps/**/*.md
