@@ -4,9 +4,11 @@
 """
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from exceptions import NotFoundError
 from models.db import Agent, AgentUsageLog, LlmCallLog, McpCallLog, SkillUsageLog
 from repositories import usage_log_repo
@@ -62,6 +64,8 @@ async def get_llm_log(session: AsyncSession, log_id: int) -> dict:
         deployments.get(log.deployment_id) if log.deployment_id else None
     )
     item["metadata"] = log.metadata_
+    item["messages"] = log.messages
+    item["response"] = log.response
     return item
 
 
@@ -75,6 +79,15 @@ async def llm_filters(session: AsyncSession) -> dict:
         "models": raw["models"],
         "providers": raw["providers"],
     }
+
+
+_LOCAL_TZ = ZoneInfo(settings.timezone)
+
+
+def _fmt_time(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    return dt.astimezone(_LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _serialize_llm(log: LlmCallLog, users: dict, keys: dict) -> dict:
@@ -98,8 +111,8 @@ def _serialize_llm(log: LlmCallLog, users: dict, keys: dict) -> dict:
         "internal_cost": str(log.internal_cost),
         "duration_ms": log.duration_ms,
         "ttft_ms": log.ttft_ms,
-        "started_at": log.started_at.isoformat() if log.started_at else None,
-        "ended_at": log.ended_at.isoformat() if log.ended_at else None,
+        "started_at": _fmt_time(log.started_at),
+        "ended_at": _fmt_time(log.ended_at),
         "session_id": log.session_id,
         "error_message": log.error_message,
     }
@@ -188,7 +201,7 @@ def _serialize_mcp(log: McpCallLog, users: dict, keys: dict, servers: dict) -> d
         "external_cost": str(log.external_cost),
         "response_summary": log.response_summary,
         "error_message": log.error_message,
-        "called_at": log.called_at.isoformat() if log.called_at else None,
+        "called_at": _fmt_time(log.called_at),
     }
 
 
@@ -237,7 +250,7 @@ def _serialize_skill(log: SkillUsageLog, users: dict, skills: dict) -> dict:
         "user": users.get(log.user_id),
         "skill": skills.get(log.skill_id),
         "action": log.action,
-        "created_at": log.created_at.isoformat() if log.created_at else None,
+        "created_at": _fmt_time(log.created_at),
     }
 
 
@@ -306,5 +319,5 @@ def _serialize_agent(
         ),
         "platform": agent.platform if agent else None,
         "session_id": log.session_id,
-        "created_at": log.created_at.isoformat() if log.created_at else None,
+        "created_at": _fmt_time(log.created_at),
     }

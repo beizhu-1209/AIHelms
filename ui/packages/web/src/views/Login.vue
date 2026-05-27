@@ -17,12 +17,12 @@ async function handleLogin(): Promise<void> {
     return
   }
   isLoading.value = true
-  errorMessage.value = ''
   try {
     await login(email.value, password.value)
+    errorMessage.value = ''
     router.push('/')
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '登录失败'
+    errorMessage.value = e instanceof Error ? e.message : '用户名或密码错误'
   } finally {
     isLoading.value = false
   }

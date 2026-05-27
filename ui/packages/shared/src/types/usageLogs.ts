@@ -57,6 +57,8 @@ export interface LlmLog {
 export interface LlmLogDetail extends LlmLog {
   deployment: { id: number; deploy_name: string } | null
   metadata: Record<string, unknown>
+  messages: unknown
+  response: unknown
 }
 
 export interface McpLog {

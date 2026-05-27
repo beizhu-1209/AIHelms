@@ -6,12 +6,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-aihelms}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aihelms}
       POSTGRES_DB: ${POSTGRES_DB:-aihelms}
-      TZ: Asia/Shanghai
-      PGTZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
+      PGTZ: ${TZ:-Asia/Shanghai}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
+    command: ["postgres", "-c", "timezone=${TZ:-Asia/Shanghai}"]
     networks:
       - internal
     healthcheck:
@@ -43,7 +43,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
-      TZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:
@@ -77,6 +77,7 @@ services:
       CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
       CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
       AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
+      TZ: ${TZ:-Asia/Shanghai}
       LOG_DIR: /logs
       DATA_DIR: /data
     volumes:

@@ -62,7 +62,7 @@ async def _sync() -> None:
                 await session.flush()
 
             start_time = sync_state.last_sync_at - timedelta(minutes=1)
-            # LiteLLM_SpendLogs.startTime 是 timestamp without timezone，需要去除 tzinfo
+            # SpendLogs.startTime 是 UTC naive，去掉 tzinfo 用于比较
             start_time_naive = start_time.replace(tzinfo=None) if start_time.tzinfo else start_time
 
             result = await session.execute(
@@ -70,7 +70,8 @@ async def _sync() -> None:
                     'SELECT request_id, api_key, "user", model, custom_llm_provider, '
                     "call_type, spend, total_tokens, prompt_tokens, completion_tokens, "
                     '"startTime", "endTime", "completionStartTime", '
-                    "session_id, status, metadata, mcp_namespaced_tool_name "
+                    "session_id, status, metadata, mcp_namespaced_tool_name, "
+                    "messages, response "
                     'FROM public."LiteLLM_SpendLogs" '
                     'WHERE "startTime" >= :start_time '
                     "  AND (mcp_namespaced_tool_name IS NULL "
@@ -115,6 +116,14 @@ async def _sync() -> None:
                 start = row[10]
                 end = row[11]
                 ttft_at = row[12]
+
+                # SpendLogs 时间是 UTC naive，标记为 UTC 避免 PG 按会话时区误转
+                if start and not start.tzinfo:
+                    start = start.replace(tzinfo=timezone.utc)
+                if end and not end.tzinfo:
+                    end = end.replace(tzinfo=timezone.utc)
+                if ttft_at and not ttft_at.tzinfo:
+                    ttft_at = ttft_at.replace(tzinfo=timezone.utc)
                 session_id = row[13] or ""
                 status = row[14] or "success"
                 metadata_raw = row[15]
@@ -127,6 +136,9 @@ async def _sync() -> None:
                             metadata = {}
                     elif isinstance(metadata_raw, dict):
                         metadata = metadata_raw
+
+                messages_raw = row[17]
+                response_raw = row[18]
 
                 cache_read = 0
                 cache_creation = 0
@@ -281,6 +293,8 @@ async def _sync() -> None:
                     ended_at=end,
                     session_id=session_id,
                     error_message=error_message,
+                    messages=messages_raw if isinstance(messages_raw, (dict, list)) else None,
+                    response=response_raw if isinstance(response_raw, (dict, list)) else None,
                     metadata_=metadata,
                 )
                 session.add(log)
