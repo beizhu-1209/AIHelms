@@ -53,7 +53,7 @@
 
 ```python
 # 用户唯一标识
-external_id = f"{corp_id}:{user_id}"  # 企业微信 corpId + userId
+external_id = f"{corp_id}:{user_id}"  # 企业微信 corp_id + user_id
 identity_provider = "wecom"
 
 # 查找或创建

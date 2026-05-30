@@ -19,11 +19,12 @@ Nginx (:80) → /api → FastAPI 后端 (:8000, 生产环境用 Gunicorn)
 
 后端分层：Router(api/v1/) → Service(services/) → Repository(repositories/) → PostgreSQL (aihelms schema)
                                                                             → LiteLLM HTTP (:4000)
-Celery：Redis 消息队列，异步处理日志同步、成本聚合、数据清理
+Celery（Worker + Beat）：Redis 消息队列，Worker 异步消费任务，Beat 驱动定时调度
 ```
 
 **核心原则：**
-- **平台数据库是唯一数据源** — 所有业务数据先写入平台表，再同步到 LiteLLM。LiteLLM 是下游消费者，不是主数据源
+- **平台数据库是 AI 业务数据的唯一数据源** — 所有 AI 业务数据（模型、Key、凭证、预算、权限等）先写入平台表，再同步到 LiteLLM。LiteLLM 是下游消费者，不是主数据源
+- **OA 是组织架构数据的唯一数据源** — 用户、部门、项目从 OA 同步，平台不独立创建。平台在此之上扩展 AI 特有属性（AI Key、角色、预算）
 - **不修改 LiteLLM 源码** — 只通过 HTTP API 交互，LiteLLM 可独立升级
 - **配置数据推送，运行时数据拉取** — 模型、Key、凭证等配置实时推送到 LiteLLM；usage、spend、logs 等运行时数据通过 Celery 定时从 LiteLLM 拉取
 
@@ -64,7 +65,7 @@ Celery：Redis 消息队列，异步处理日志同步、成本聚合、数据�
                   更新用户信息    首次登录自动创建用户
                      └──────┬───────┘
                             ↓
-                    签发平台 JWT（含 RBAC 角色和权限）
+                    签发平台 JWT（含 RBAC 角色和权限，有效期与 JWT 登录一致：24 小时）
 ```
 
 ### 企业微信对接
@@ -99,9 +100,9 @@ Celery：Redis 消息队列，异步处理日志同步、成本聚合、数据�
 
 ```
 apps/           — Python FastAPI 后端（详见 apps/CLAUDE.md）
-  api/v1/       — 路由层（20 个路由模块，约 150 个端点）
-  services/     — 业务逻辑层（24 个服务）
-  repositories/ — SQLAlchemy 2.0 异步数据访问（19 个仓库）
+  api/v1/       — 路由层（覆盖模型、身份、市场、安全等全部业务域）
+  services/     — 业务逻辑层
+  repositories/ — SQLAlchemy 2.0 异步数据访问
   models/db.py  — 所有 ORM 模型（41 张表，aihelms schema）
   core/         — 配置、安全、数据库会话、依赖注入、审计中间件
   tasks/        — Celery 任务（日志同步、成本聚合、数据清理）
@@ -114,6 +115,7 @@ docker/         — Docker 配置
   nginx/        — Nginx 模板 + 入口脚本
   litellm/      — LiteLLM 配置
   db/           — 数据库 init.sql（完整结构）+ migrations/（增量，不入库）
+  supervisor/   — 生产容器进程管理（Gunicorn + Celery Worker + Celery Beat）
 docs/           — 截图、开发发布流程、企业集成设计
 ```
 
