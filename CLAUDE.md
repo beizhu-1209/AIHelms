@@ -187,6 +187,40 @@ docker compose up -d
 - 地址：`registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms`
 - Tag：`aihelms:<version>`（版本号取自 `apps/pyproject.toml`）
 
+## 开发规范
+
+### 设计原则
+
+- **高内聚、低耦合** — 每个模块职责单一，模块间通过明确的接口通信，可独立理解和测试
+- **合理使用设计模式** — 不滥用、不为了模式而模式，选择最适合当前场景的模式
+- **高扩展性** — 新增功能通过扩展而非修改实现，对扩展开放、对修改关闭
+- **高质量代码** — 自文档化的命名、完整的类型注解、边界清晰的分层架构
+
+### 设计评审
+
+- **设计必须先评审，再实现** — 任何非平凡的功能设计，必须先使用 Claude 相关技能进行评审
+- 评审技能：`superpowers:brainstorming`（创意设计）→ `superpowers:writing-plans`（编写计划）→ 用户确认 → 实现
+- 实现前可用 `code-review` 技能对设计方案做代码级预审
+
+### 测试要求
+
+- 代码变更必须编写对应的测试用例
+- **功能测试** — 覆盖新增或修改的函数/组件，验证输入输出正确性
+- **端到端集成测试** — 使用 Playwright 模拟真实用户流程，验证端到端链路
+- 测试命名：`test_<功能>_<场景>_<预期结果>`
+- 测试通过是提交的前置条件
+
+```bash
+# 后端单元测试
+cd apps && python -m pytest -v
+
+# 前端单元测试
+cd ui && npm test
+
+# 端到端测试（Playwright）
+cd ui && npx playwright test
+```
+
 ## 提交前规则
 
 - **先测试，再提交** — 完成代码修改后必须先运行测试，测试通过后才能 git commit
