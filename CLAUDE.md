@@ -175,6 +175,23 @@ docker compose up -d
 - 地址：`registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms`
 - Tag：`aihelms:<version>`（版本号取自 `apps/pyproject.toml`）
 
+## 提交前规则
+
+- **先测试，再提交** — 完成代码修改后必须先运行测试，测试通过后才能 git commit
+- **只 commit，不 push** — 提交后不要自动 push，由用户自行决定何时推送到远程
+
+```bash
+# 后端测试
+cd apps && python -m pytest -v
+
+# 前端测试
+cd ui && npm test
+
+# 通过后再提交
+git add <files>
+git commit -m "feat: 功能描述"
+```
+
 ## Git 规范
 
 - 分支命名：`feature/xxx`、`fix/xxx`，合并到 `main`
