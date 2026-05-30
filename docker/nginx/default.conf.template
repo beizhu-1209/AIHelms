@@ -6,6 +6,12 @@ server {
     listen 80;
     server_name ${NGINX_SERVER_NAME};
 
+    # 安全头
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     # API 代理
     location /api {
         proxy_pass http://aihelms_api;

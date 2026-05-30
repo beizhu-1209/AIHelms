@@ -569,11 +569,13 @@ def _get_litellm_model_name(model: Model, credential=None) -> str:
     """Determine the LiteLLM model_name based on credential format.
 
     Anthropic-format credentials get an '(Anthropic)' suffix to form an independent model group.
+    Model IDs containing '/' are sanitized to avoid LiteLLM misparsing them as provider/model format.
     """
+    model_id = model.model_id.replace("/", "-")
     cred_format = _get_credential_format(credential)
     if cred_format == "anthropic":
-        return f"{model.model_id}{ANTHROPIC_MODEL_SUFFIX}"
-    return model.model_id
+        return f"{model_id}{ANTHROPIC_MODEL_SUFFIX}"
+    return model_id
 
 
 async def _sync_deployment_to_litellm(
@@ -607,16 +609,19 @@ async def _sync_deployment_to_litellm(
                 litellm_params["api_base"] = cred_api_base
 
     # Auto-resolve prefix and normalize api_base via provider_prefix_map
+    # other 类型供应商使用管理员填入的完整模型名，跳过前缀解析
     if session and credential:
-        prefix_info = await _resolve_prefix(session, credential, model.category)
-        if prefix_info:
-            raw_model = litellm_params.get("model", "")
-            model_name_raw = raw_model.split("/")[-1] if "/" in raw_model else raw_model
-            if not model_name_raw:
-                model_name_raw = model.model_id
-            litellm_params["model"] = f"{prefix_info.prefix}/{model_name_raw}"
-            if prefix_info.needs_v1 and "api_base" in litellm_params:
-                litellm_params["api_base"] = _ensure_v1_suffix(litellm_params["api_base"])
+        provider_type = credential.provider.provider_type if credential.provider else None
+        if provider_type and provider_type != "other":
+            prefix_info = await _resolve_prefix(session, credential, model.category)
+            if prefix_info:
+                raw_model = litellm_params.get("model", "")
+                model_name_raw = raw_model.split("/")[-1] if "/" in raw_model else raw_model
+                if not model_name_raw:
+                    model_name_raw = model.model_id
+                litellm_params["model"] = f"{prefix_info.prefix}/{model_name_raw}"
+                if prefix_info.needs_v1 and "api_base" in litellm_params:
+                    litellm_params["api_base"] = _ensure_v1_suffix(litellm_params["api_base"])
 
     sync_litellm_params = _convert_cost_for_litellm(litellm_params)
     litellm_model_name = _get_litellm_model_name(model, credential)

@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, Query, Request
+from fastapi import Depends, HTTPException, Request
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,15 +62,15 @@ async def _authenticate_api_key(token: str) -> dict:
     if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="API Key 已过期")
 
-    # 异步更新 last_used_at，不阻塞请求
-    asyncio.create_task(_update_last_used(api_key.id))
+    # 异步更新 last_used_at，保持任务引用防止被 GC
+    _task = asyncio.create_task(_update_last_used(api_key.id))
 
     return {
         "id": api_key.id,
         "username": api_key.name,
         "identity_type": "api_key",
-        "is_admin": True,
-        "permissions": [],
+        "is_admin": api_key.is_admin if hasattr(api_key, 'is_admin') else False,
+        "permissions": api_key.permissions if hasattr(api_key, 'permissions') else [],
     }
 
 
@@ -95,15 +95,13 @@ def require_permission(permission_code: str):
 
 async def get_ai_key_identity(
     request: Request,
-    token: str | None = Query(None),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    """从 query param ?token= 或 Authorization: Bearer 提取 AI Key，验证身份。"""
-    raw_token = token
-    if not raw_token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            raw_token = auth_header.split(" ", 1)[1]
+    """从 Authorization: Bearer 提取 AI Key，验证身份。"""
+    raw_token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        raw_token = auth_header.split(" ", 1)[1]
 
     if not raw_token:
         raise HTTPException(status_code=401, detail="未提供 AI Key 认证凭证")

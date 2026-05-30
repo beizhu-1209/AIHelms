@@ -5,7 +5,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 from core.config import settings
 
-LOG_DIR = os.environ.get("LOG_DIR", "/logs")
+LOG_DIR = settings.log_dir
 LOG_LEVEL = getattr(logging, settings.log_level.upper(), logging.WARNING)
 
 

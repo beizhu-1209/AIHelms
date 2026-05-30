@@ -55,11 +55,20 @@ async def create_user(
     user = await user_repo.create_user(session, user)
 
     litellm_user_id = f"aihelms_user_{user.id}"
-    await litellm_client.create_user(litellm_user_id, email)
+    try:
+        await litellm_client.create_user(litellm_user_id, email)
+    except Exception:
+        logger.warning("failed to create LiteLLM user, continuing with local-only user",
+                       exc_info=True, extra={"user_id": user.id})
+        litellm_user_id = ""
     user.litellm_user_id = litellm_user_id
 
     # Auto-create personal main key (disabled by default)
-    await ai_key_service.create_personal_main_key(session, user.id, username)
+    try:
+        await ai_key_service.create_personal_main_key(session, user.id, username)
+    except Exception:
+        logger.warning("failed to create personal main key", exc_info=True,
+                       extra={"user_id": user.id})
 
     await session.commit()
     return _serialize_user(user)
@@ -101,14 +110,20 @@ async def update_user(
     return _serialize_user_detail(user)
 
 
-async def delete_user(session: AsyncSession, user_id: int) -> None:
+async def deactivate_user(session: AsyncSession, user_id: int) -> None:
+    """停用用户（保留数据，仅标记 is_active=False）。"""
     user = await user_repo.find_user_by_id(session, user_id)
     if not user:
         raise NotFoundError("user", user_id)
     if user.is_admin:
-        raise ConflictError("不能删除管理员账户")
+        raise ConflictError("不能停用管理员账户")
     user.is_active = False
     await session.commit()
+
+
+async def delete_user(session: AsyncSession, user_id: int) -> None:
+    """删除用户（兼容旧接口，内部调用 deactivate_user）。"""
+    return await deactivate_user(session, user_id)
 
 
 async def reset_password(session: AsyncSession, user_id: int, new_password: str) -> None:

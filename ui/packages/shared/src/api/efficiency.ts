@@ -49,3 +49,12 @@ export function getEfficiencyReports(params?: Params) {
 export function getEfficiencyReport(id: number) {
   return request<EfficiencyReport>(`/api/v1/efficiency/reports/${id}`)
 }
+
+export function createEfficiencyReport(body: {
+  report_type: string
+  period_start: string
+  period_end: string
+  model_used?: string
+}) {
+  return request('/api/v1/efficiency/reports', { method: 'POST', body })
+}
