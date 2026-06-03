@@ -312,8 +312,8 @@ async def batch_update_keys(
                 key_ids.append(main_key.id)
     if not key_ids:
         raise HTTPException(status_code=400, detail="未找到可更新的 Key")
-    success_count = 0
-    fail_count = 0
+    successes: list[int] = []
+    failures: list[dict] = []
     for key_id in key_ids:
         try:
             await ai_key_service.update_key(
@@ -333,13 +333,15 @@ async def batch_update_keys(
                 model_budgets=req.model_budgets,
                 mcp_budgets=req.mcp_budgets,
             )
-            success_count += 1
-        except (NotFoundError, Exception):
-            fail_count += 1
+            successes.append(key_id)
+        except NotFoundError:
+            failures.append({"key_id": key_id, "error": "Key 不存在"})
+        except Exception as e:
+            failures.append({"key_id": key_id, "error": str(e)})
     return {
         "code": 200,
-        "message": f"批量更新完成，成功 {success_count}/{success_count + fail_count}",
-        "data": {"success": success_count, "fail": fail_count},
+        "message": f"批量更新完成，成功 {len(successes)}/{len(key_ids)}",
+        "data": {"successes": successes, "failures": failures},
     }
 
 

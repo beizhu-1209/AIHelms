@@ -383,8 +383,10 @@ CREATE TABLE IF NOT EXISTS aihelms.router_settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 插入默认路由配置
-INSERT INTO aihelms.router_settings (routing_strategy) VALUES ('simple-shuffle') ON CONFLICT DO NOTHING;
+-- 插入默认路由配置（避免重复插入）
+INSERT INTO aihelms.router_settings (routing_strategy)
+SELECT 'simple-shuffle'
+WHERE NOT EXISTS (SELECT 1 FROM aihelms.router_settings);
 
 -- Key 模型限制（每个 key 对每个模型的速率限制）
 CREATE TABLE IF NOT EXISTS aihelms.ai_key_model_limits (
@@ -683,7 +685,7 @@ CREATE INDEX IF NOT EXISTS idx_agents_department ON aihelms.agents(department_id
 -- Agent 使用日志
 CREATE TABLE IF NOT EXISTS aihelms.agent_usage_logs (
     id BIGSERIAL PRIMARY KEY,
-    agent_id BIGINT NOT NULL REFERENCES aihelms.agents(id) ON DELETE CASCADE,
+    agent_id BIGINT REFERENCES aihelms.agents(id) ON DELETE SET NULL,
     user_id BIGINT NOT NULL REFERENCES aihelms.users(id),
     session_id VARCHAR(100) DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW()

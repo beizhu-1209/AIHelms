@@ -1,5 +1,8 @@
 # Stage 1: Build frontend
-FROM node:18-alpine AS frontend
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-alpine AS frontend
+
+ARG NPM_MIRROR=https://registry.npmmirror.com
 
 WORKDIR /ui
 
@@ -8,7 +11,7 @@ COPY ui/packages/shared/package.json ./packages/shared/
 COPY ui/packages/admin/package.json ./packages/admin/
 COPY ui/packages/web/package.json ./packages/web/
 
-RUN npm config set registry https://registry.npmmirror.com && npm install
+RUN npm config set registry ${NPM_MIRROR} && npm install
 
 COPY ui/ ./
 
@@ -26,16 +29,22 @@ RUN npm run build --workspace=@aihelms/shared \
 # Stage 2: Build backend
 FROM python:3.11-slim-bookworm
 
+ARG APT_MIRROR=mirrors.aliyun.com
+ARG PIP_INDEX=https://mirrors.aliyun.com/pypi/simple/
+
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
 WORKDIR /app
 
+# Create non-root user
+RUN groupadd -r aihelms && useradd -r -g aihelms aihelms
+
 # Install Python dependencies + supervisor
 COPY apps/pyproject.toml ./apps/
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends gcc libffi-dev \
-    && cd apps && uv pip install --system --index-url https://mirrors.aliyun.com/pypi/simple/ -e . \
-    && uv pip install --system --index-url https://mirrors.aliyun.com/pypi/simple/ supervisor \
+    && cd apps && uv pip install --system --index-url ${PIP_INDEX} -e . \
+    && uv pip install --system --index-url ${PIP_INDEX} supervisor \
     && apt-get purge -y gcc libffi-dev && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Copy backend source
@@ -51,10 +60,13 @@ COPY docker/supervisor/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 # Create frontend volume mount points
-RUN mkdir -p /frontend/web /frontend/admin
+RUN mkdir -p /frontend/web /frontend/admin /logs /data \
+    && chown -R aihelms:aihelms /app /frontend /logs /data
 
 WORKDIR /app/apps
 
 EXPOSE 8000
+
+USER aihelms
 
 CMD ["/app/start.sh"]

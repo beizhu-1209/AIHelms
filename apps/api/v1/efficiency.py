@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -172,7 +172,7 @@ async def get_report(
 ):
     data = await efficiency_service.get_report_detail(session, report_id)
     if not data:
-        return {"code": 404, "message": "报告不存在", "data": None}
+        raise HTTPException(status_code=404, detail="报告不存在")
     return {"code": 200, "message": "ok", "data": data}
 
 
@@ -218,5 +218,5 @@ async def update_suggestion(
         session, suggestion_id, req.status, req.note, current_user["id"]
     )
     if not data:
-        return {"code": 404, "message": "建议不存在", "data": None}
+        raise HTTPException(status_code=404, detail="建议不存在")
     return {"code": 200, "message": "建议状态更新成功", "data": data}

@@ -18,6 +18,24 @@ function getToken(): string | null {
   return localStorage.getItem('aihelms_token')
 }
 
+async function parseResponseJSON<T>(response: Response, silent: boolean): Promise<ApiResponse<T>> {
+  let text: string
+  try {
+    text = await response.text()
+  } catch {
+    const message = '读取响应数据失败'
+    if (!silent) toast.error(message)
+    throw new Error(message)
+  }
+  try {
+    return JSON.parse(text) as ApiResponse<T>
+  } catch {
+    const message = `服务器返回了非 JSON 数据: ${text.slice(0, 200)}`
+    if (!silent) toast.error(message)
+    throw new Error(message)
+  }
+}
+
 export async function request<T>(url: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, params, silent = false } = options
 
@@ -60,17 +78,16 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     throw new Error(message)
   }
 
+  const json = await parseResponseJSON<T>(response, silent)
+
   if (response.status === 401) {
     if (!silent) {
       localStorage.removeItem('aihelms_token')
       window.location.href = getLoginUrl()
     }
-    const json: ApiResponse<T> = await response.json()
     const message = json.message || '用户名或密码错误'
     throw new Error(message)
   }
-
-  const json: ApiResponse<T> = await response.json()
 
   if (!response.ok) {
     const message = json.message || `请求失败: ${response.status}`
