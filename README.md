@@ -188,7 +188,7 @@ docker compose up -d
 
 1. Fork 本仓库
 2. 创建分支：`git checkout -b feature/xxx`
-3. 提交代码：`git commit -m "feat: 功能描述"`
+3. 提交代码到dev分支：`git commit -m "feat: 功能描述"`
 4. 推送并创建 Pull Request
 
 详细开发规范见 [开发与发布流程](docs/INTERNAL.md)
