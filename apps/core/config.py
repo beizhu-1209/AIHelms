@@ -31,11 +31,12 @@ class Settings(BaseSettings):
 
     # 日志
     log_level: str = "WARNING"
+    log_dir: str = "/logs"
 
     # 应用
-    secret_key: str = "dev-secret-key"
+    secret_key: str = ""
     access_token_expire_minutes: int = 60 * 24
-    super_admin_password: str = "admin123"
+    super_admin_password: str = ""
 
     # 成本计算
     usd_to_cny_rate: float = 7.0  # LiteLLM spend(美元) → 人民币汇率
@@ -99,7 +100,7 @@ class Settings(BaseSettings):
         return self
 
     class Config:
-        env_file = "../.env"
+        env_file = str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent / ".env")
         extra = "ignore"
 
 

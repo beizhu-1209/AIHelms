@@ -96,7 +96,6 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
       { label: '落地', icon: Users, path: '/efficiency/adoption', permission: 'efficiency:read' },
       { label: '成本', icon: DollarSign, path: '/efficiency/cost', permission: 'efficiency:read' },
       { label: '预算', icon: Wallet, path: '/efficiency/budget', permission: 'efficiency:read' },
-      { label: '报告', icon: FileText, path: '/efficiency/reports', permission: 'efficiency:read' },
     ],
   },
   {
@@ -104,7 +103,6 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     icon: Lock,
     items: [
       { label: '管理员日志', icon: Shield, path: '/audit', permission: 'audit_log:read' },
-      { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
       { label: 'API Key', icon: KeyRound, path: '/api-keys', permission: 'api_key:read' },
     ],
   },
@@ -112,6 +110,9 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     title: 'AI实验室',
     icon: FlaskConical,
     items: [
+      { label: '报告', icon: FileText, path: '/efficiency/reports', permission: 'efficiency:read' },
+      { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
+      { label: 'A2A', icon: GitBranch, path: '/a2a', disabled: true },
       { label: '上下文缓存', icon: Database, path: '/caching', disabled: true },
       { label: '策略管理', icon: Ruler, path: '/policies', disabled: true },
       { label: '文件处理', icon: File, path: '/files', disabled: true },

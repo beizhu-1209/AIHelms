@@ -83,8 +83,10 @@ async def update_credential(
         credential.provider_id = provider_id
     if credential_info is not None:
         credential.credential_info = credential_info
-    if is_active is not None:
+    active_changed = False
+    if is_active is not None and is_active != credential.is_active:
         credential.is_active = is_active
+        active_changed = True
 
     # Sync to LiteLLM
     if credential_values is not None or credential_info is not None:
@@ -94,6 +96,11 @@ async def update_credential(
             credential_info=credential_info,
         )
         credential.litellm_synced = True
+
+    # 启用/禁用凭证时，同步其关联 deployments 在 LiteLLM 侧的路由可用性
+    if active_changed:
+        from services import model_service
+        await model_service.sync_credential_routing(session, credential)
 
     await session.commit()
     credential = await credential_repo.find_by_id(session, credential.id)

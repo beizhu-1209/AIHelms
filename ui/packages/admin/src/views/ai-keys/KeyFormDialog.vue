@@ -584,7 +584,7 @@ onMounted(async () => {
   const [modelsRes, scenariosRes, usersRes, mcpsRes, skillsRes, agentsRes] = await Promise.all([
     getActiveModels(),
     getAllKeyScenarios(),
-    getUsers(1, 200),
+    getUsers(1, 100),
     getMcpServers(1, 200),
     getSkills(1, 200),
     getAgents(1, 200),
