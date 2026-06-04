@@ -312,9 +312,10 @@ async def update_deployment(
             if cred_api_base:
                 sync_params["api_base"] = cred_api_base
         sync_params = _convert_cost_for_litellm(sync_params)
+        routable = _deployment_routable(deployment, credential)
         sync_model_info = dict(deployment.model_info or {})
-        sync_model_info["active"] = deployment.is_active
-        litellm_model_name = _get_litellm_model_name(model, credential)
+        sync_model_info["active"] = routable
+        litellm_model_name = _get_litellm_model_name(model, credential, routable=routable)
         await litellm_client.update_model(
             litellm_model_id=deployment.litellm_model_id,
             model_name=litellm_model_name,
@@ -564,16 +565,34 @@ def _get_credential_format(credential) -> str:
 
 ANTHROPIC_MODEL_SUFFIX = "(Anthropic)"
 
+# 禁用标记后缀：把 deployment 在 LiteLLM 侧的 model_name 改成带此后缀，
+# 使其脱离原 model group 的路由池（真禁用），且不改动 litellm_model_id（保数据关联）。
+DISABLED_MODEL_SUFFIX = "__disabled__"
 
-def _get_litellm_model_name(model: Model, credential=None) -> str:
-    """Determine the LiteLLM model_name based on credential format.
+
+def _deployment_routable(deployment: ModelDeployment, credential=None) -> bool:
+    """deployment 是否应参与 LiteLLM 路由：部署自身启用 且 关联凭证启用。"""
+    if not deployment.is_active:
+        return False
+    if credential is not None and not credential.is_active:
+        return False
+    return True
+
+
+def _get_litellm_model_name(model: Model, credential=None, routable: bool = True) -> str:
+    """Determine the LiteLLM model_name based on credential format and routability.
 
     Anthropic-format credentials get an '(Anthropic)' suffix to form an independent model group.
+    Non-routable deployments get a '__disabled__' suffix so they leave the active routing pool.
     """
     cred_format = _get_credential_format(credential)
     if cred_format == "anthropic":
-        return f"{model.model_id}{ANTHROPIC_MODEL_SUFFIX}"
-    return model.model_id
+        name = f"{model.model_id}{ANTHROPIC_MODEL_SUFFIX}"
+    else:
+        name = model.model_id
+    if not routable:
+        name = f"{name}{DISABLED_MODEL_SUFFIX}"
+    return name
 
 
 async def _sync_deployment_to_litellm(
@@ -758,11 +777,12 @@ async def resync_anthropic_deployments(session: AsyncSession) -> dict:
         try:
             sync_params = dict(deployment.litellm_params)
             sync_params = _convert_cost_for_litellm(sync_params)
+            routable = _deployment_routable(deployment, credential)
             sync_model_info = dict(deployment.model_info or {})
-            sync_model_info["active"] = deployment.is_active
+            sync_model_info["active"] = routable
             await litellm_client.update_model(
                 litellm_model_id=deployment.litellm_model_id,
-                model_name=litellm_model_name,
+                model_name=_get_litellm_model_name(model, credential, routable=routable),
                 litellm_params=sync_params,
                 model_info=sync_model_info,
             )
@@ -796,3 +816,39 @@ async def resync_anthropic_deployments(session: AsyncSession) -> dict:
         "deployment_errors": errors,
         "keys_updated": keys_updated,
     }
+
+
+async def sync_credential_routing(session: AsyncSession, credential) -> dict:
+    """根据凭证的 is_active 状态，同步其关联 deployments 在 LiteLLM 侧的路由可用性。
+
+    禁用凭证 -> 关联 deployment 的 LiteLLM model_name 加 __disabled__ 后缀，脱离路由组；
+    启用凭证 -> 去掉后缀，重新加入路由组。litellm_model_id 不变，历史成本/日志关联完整。
+    不提交事务，由调用方统一 commit。
+    """
+    synced = 0
+    errors = 0
+    for deployment in credential.deployments or []:
+        if not deployment.litellm_model_id:
+            continue
+        model = await model_repo.find_by_id(session, deployment.model_id)
+        if not model:
+            continue
+        routable = _deployment_routable(deployment, credential)
+        sync_params = dict(deployment.litellm_params)
+        if "litellm_credential_name" not in sync_params and "api_key" not in sync_params:
+            sync_params["litellm_credential_name"] = credential.credential_name
+        sync_params = _convert_cost_for_litellm(sync_params)
+        sync_model_info = dict(deployment.model_info or {})
+        sync_model_info["active"] = routable
+        try:
+            await litellm_client.update_model(
+                litellm_model_id=deployment.litellm_model_id,
+                model_name=_get_litellm_model_name(model, credential, routable=routable),
+                litellm_params=sync_params,
+                model_info=sync_model_info,
+            )
+            synced += 1
+        except litellm_client.LiteLLMError as e:
+            logger.error("credential routing sync failed for deployment %s: %s", deployment.id, e)
+            errors += 1
+    return {"deployments_synced": synced, "deployment_errors": errors}

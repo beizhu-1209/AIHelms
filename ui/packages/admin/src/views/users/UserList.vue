@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getUsers, deleteUser, updateUser, type User } from '@aihelms/shared'
+import { getUsers, updateUser, type User } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
 import Pagination from '../../components/Pagination.vue'
-import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 const router = useRouter()
 const { hasPermission } = usePermission()
@@ -17,7 +16,6 @@ const keyword = ref('')
 const filterRole = ref('')
 const filterStatus = ref('')
 const isLoading = ref(false)
-const deleteTarget = ref<User | null>(null)
 
 async function fetchUsers(): Promise<void> {
   isLoading.value = true
@@ -46,13 +44,6 @@ function handleCreate(): void {
 
 function handleEdit(user: User): void {
   router.push({ name: 'UserEdit', params: { id: user.id } })
-}
-
-async function handleConfirmDelete(): Promise<void> {
-  if (!deleteTarget.value) return
-  await deleteUser(deleteTarget.value.id)
-  deleteTarget.value = null
-  fetchUsers()
 }
 
 async function handleToggleActive(user: User): Promise<void> {
@@ -211,13 +202,6 @@ onMounted(fetchUsers)
                 >
                   {{ user.is_active ? '禁用' : '启用' }}
                 </button>
-                <button
-                  v-if="hasPermission('user:delete') && !user.is_admin"
-                  class="text-sm text-red-500 transition-colors hover:text-red-600"
-                  @click="deleteTarget = user"
-                >
-                  删除
-                </button>
               </div>
             </td>
           </tr>
@@ -230,14 +214,6 @@ onMounted(fetchUsers)
       :page-size="pageSize"
       :total="total"
       @change="handlePageChange"
-    />
-
-    <ConfirmDialog
-      :visible="!!deleteTarget"
-      title="确认删除"
-      :message="`确定要删除用户「${deleteTarget?.username}」吗？`"
-      @confirm="handleConfirmDelete"
-      @cancel="deleteTarget = null"
     />
   </div>
 </template>

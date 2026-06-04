@@ -7,10 +7,13 @@
 
 import base64
 import hashlib
+import logging
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _derive_fernet_key() -> bytes:
@@ -31,4 +34,5 @@ def decrypt(ciphertext: str) -> str:
     try:
         return _fernet.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
     except InvalidToken:
+        logger.warning("decrypt failed: ciphertext corrupted or SECRET_KEY changed")
         return ""

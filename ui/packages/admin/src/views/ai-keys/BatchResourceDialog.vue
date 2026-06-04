@@ -190,7 +190,12 @@ async function handleSubmit(): Promise<void> {
       model_budgets: Object.keys(mBudgets).length ? mBudgets : null,
       mcp_budgets: Object.keys(mcBudgets).length ? mcBudgets : null,
     })
-    toast.success(`批量设置完成，成功 ${result.success} 个`)
+    const failCount = result.failures.length
+    if (failCount > 0) {
+      toast.error(`批量设置完成，成功 ${result.successes.length} 个，失败 ${failCount} 个`)
+    } else {
+      toast.success(`批量设置完成，成功 ${result.successes.length} 个`)
+    }
     emit('saved')
   } catch {
     toast.error('批量设置失败')

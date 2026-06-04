@@ -93,8 +93,14 @@ async def update_user(
         user.position = position
     if avatar is not None:
         user.avatar = avatar
-    if is_active is not None:
+    active_changed = False
+    if is_active is not None and is_active != user.is_active:
         user.is_active = is_active
+        active_changed = True
+
+    # 用户启用/禁用时，同步名下所有 AI Key 到 LiteLLM（禁用=卡住预算，启用=恢复）
+    if active_changed:
+        await ai_key_service.sync_user_keys_active(session, user_id, is_active)
 
     await session.commit()
     await session.refresh(user)
@@ -108,6 +114,8 @@ async def delete_user(session: AsyncSession, user_id: int) -> None:
     if user.is_admin:
         raise ConflictError("不能删除管理员账户")
     user.is_active = False
+    # 软删除用户时，同步卡住其名下所有 AI Key（LiteLLM 侧预算置 0）
+    await ai_key_service.sync_user_keys_active(session, user_id, False)
     await session.commit()
 
 

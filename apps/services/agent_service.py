@@ -22,8 +22,8 @@ async def list_agents(
     platform: str | None = None,
     is_published: bool | None = None,
 ) -> dict:
-    total = await agent_repo.count_all(session, category, platform, is_published)
-    items = await agent_repo.find_all(session, page, page_size, category, platform, is_published)
+    total = await agent_repo.count_all(session, category, platform, is_published, is_active=True)
+    items = await agent_repo.find_all(session, page, page_size, category, platform, is_published, is_active=True)
     return {
         "items": [_serialize(a) for a in items],
         "total": total,
@@ -110,7 +110,7 @@ async def delete_agent(session: AsyncSession, agent_id: int) -> None:
     agent = await agent_repo.find_by_id(session, agent_id)
     if not agent:
         raise NotFoundError("agent", agent_id)
-    await agent_repo.delete(session, agent_id)
+    agent.is_active = False
     await session.commit()
 
 

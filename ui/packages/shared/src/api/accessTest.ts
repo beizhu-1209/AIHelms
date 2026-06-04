@@ -1,5 +1,5 @@
+import { request } from './request'
 import type { TestAccessParams, TestAccessResult, TestEmbeddingParams, TestEmbeddingResult, TestRerankParams, TestRerankResult } from '../types/accessTest'
-import type { ApiResponse } from './request'
 
 function getToken(): string | null {
   return localStorage.getItem('aihelms_token')
@@ -13,6 +13,7 @@ export function testModelAccessStream(params: TestAccessParams): Promise<Respons
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
+  // 流式请求需要原始 fetch 以支持 SSE 流读取
   return fetch('/api/v1/access-test/test', {
     method: 'POST',
     headers,
@@ -20,53 +21,23 @@ export function testModelAccessStream(params: TestAccessParams): Promise<Respons
   })
 }
 
-export async function testModelAccessSync(params: TestAccessParams): Promise<TestAccessResult> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  const token = getToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  const response = await fetch('/api/v1/access-test/test', {
+export function testModelAccessSync(params: TestAccessParams): Promise<TestAccessResult> {
+  return request<TestAccessResult>('/api/v1/access-test/test', {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ ...params, stream: false }),
+    body: { ...params, stream: false },
   })
-  const json: ApiResponse<TestAccessResult> = await response.json()
-  return json.data
 }
 
-export async function testEmbedding(params: TestEmbeddingParams): Promise<TestEmbeddingResult> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  const token = getToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  const response = await fetch('/api/v1/access-test/test-embedding', {
+export function testEmbedding(params: TestEmbeddingParams): Promise<TestEmbeddingResult> {
+  return request<TestEmbeddingResult>('/api/v1/access-test/test-embedding', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(params),
+    body: params,
   })
-  const json: ApiResponse<TestEmbeddingResult> = await response.json()
-  return json.data
 }
 
-export async function testRerank(params: TestRerankParams): Promise<TestRerankResult> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  const token = getToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  const response = await fetch('/api/v1/access-test/test-rerank', {
+export function testRerank(params: TestRerankParams): Promise<TestRerankResult> {
+  return request<TestRerankResult>('/api/v1/access-test/test-rerank', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(params),
+    body: params,
   })
-  const json: ApiResponse<TestRerankResult> = await response.json()
-  return json.data
 }
