@@ -3,33 +3,38 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-aihelms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aihelms}
+      POSTGRES_DB: ${POSTGRES_DB:-aihelms}
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${TZ:-Asia/Shanghai}
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     command: ["postgres", "-c", "timezone=${TZ:-Asia/Shanghai}"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aihelms}"]
       interval: 5s
       timeout: 3s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD:-aihelms}
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-aihelms}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -38,9 +43,9 @@ services:
     image: docker.litellm.ai/berriai/litellm:v1.85.1
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aihelms}:${POSTGRES_PASSWORD:-aihelms}@db:5432/${POSTGRES_DB:-aihelms}?schema=public
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-change-me}
       STORE_MODEL_IN_DB: "True"
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
@@ -51,6 +56,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   nginx:
     image: nginx:latest

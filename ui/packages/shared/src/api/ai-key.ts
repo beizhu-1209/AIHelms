@@ -133,8 +133,13 @@ export interface BatchUpdateResourcesParams {
   mcp_budgets?: Record<string, number> | null
 }
 
-export function batchUpdateResources(params: BatchUpdateResourcesParams): Promise<{ success: number; fail: number }> {
-  return request<{ success: number; fail: number }>('/api/v1/ai-keys/batch', {
+export interface BatchUpdateResult {
+  successes: number[]
+  failures: { key_id: number; error: string }[]
+}
+
+export function batchUpdateResources(params: BatchUpdateResourcesParams): Promise<BatchUpdateResult> {
+  return request<BatchUpdateResult>('/api/v1/ai-keys/batch', {
     method: 'PUT',
     body: params,
   })
