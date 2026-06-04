@@ -5,7 +5,7 @@ from models.db import User, UserRole, UserDepartment, UserProject
 
 
 async def count_users(session: AsyncSession, keyword: str = "") -> int:
-    stmt = select(func.count(User.id)).where(User.is_super_admin == False, User.is_active == True)
+    stmt = select(func.count(User.id)).where(User.is_super_admin == False)
     if keyword:
         pattern = f"%{keyword}%"
         stmt = stmt.where(
@@ -22,7 +22,7 @@ async def count_users(session: AsyncSession, keyword: str = "") -> int:
 
 async def find_users(session: AsyncSession, page: int, page_size: int, keyword: str = "") -> list[User]:
     offset = (page - 1) * page_size
-    stmt = select(User).where(User.is_super_admin == False, User.is_active == True).order_by(User.id)
+    stmt = select(User).where(User.is_super_admin == False).order_by(User.id)
     if keyword:
         pattern = f"%{keyword}%"
         stmt = stmt.where(

@@ -378,6 +378,31 @@ async def toggle_key(session: AsyncSession, key_id: int) -> dict:
     return _serialize_key(key)
 
 
+async def sync_user_keys_active(session: AsyncSession, user_id: int, active: bool) -> int:
+    """随用户启用/禁用，同步其名下所有 AI Key 在 LiteLLM 侧的可用性。
+
+    禁用用户 -> 名下 key 预算卡成 0（沿用 toggle_key 的禁用模式）；
+    启用用户 -> 恢复各 key 预算（有 hard_limit 则按 budget_limit，否则 None）。
+    平台侧同步 key.is_active。不在此提交事务，由调用方统一 commit。
+    """
+    keys = await ai_key_repo.find_by_user(session, user_id)
+    synced = 0
+    for key in keys:
+        key.is_active = active
+        if not key.litellm_key_id:
+            continue
+        if active:
+            max_budget = float(key.budget_limit) if key.budget_limit and key.budget_hard_limit else None
+        else:
+            max_budget = 0.0
+        try:
+            await litellm_client.update_key_budget(key.litellm_key_id, max_budget)
+            synced += 1
+        except litellm_client.LiteLLMError as e:
+            logger.error("sync user key %s active=%s failed: %s", key.id, active, e)
+    return synced
+
+
 async def delete_key(session: AsyncSession, key_id: int) -> None:
     key = await ai_key_repo.find_by_id(session, key_id)
     if not key:
