@@ -40,6 +40,10 @@ celery_app.conf.beat_schedule = {
         "task": "efficiency.aggregate",
         "schedule": 5 * 60,
     },
+    "cleanup-export-tasks": {
+        "task": "export_task.cleanup",
+        "schedule": crontab(hour=3, minute=30),
+    },
 }
 
 # 显式导入 tasks 包以注册所有 celery 任务

@@ -32,6 +32,7 @@ def _apply_llm_filters(
     user_id,
     ai_key_id,
     model,
+    models,
     provider,
     status,
 ):
@@ -43,7 +44,9 @@ def _apply_llm_filters(
         stmt = stmt.where(LlmCallLog.user_id == user_id)
     if ai_key_id is not None:
         stmt = stmt.where(LlmCallLog.ai_key_id == ai_key_id)
-    if model:
+    if models:
+        stmt = stmt.where(LlmCallLog.model.in_(models))
+    elif model:
         stmt = stmt.where(LlmCallLog.model == model)
     if provider:
         stmt = stmt.where(LlmCallLog.provider == provider)
@@ -63,12 +66,13 @@ async def find_llm_logs(
     user_id: int | None = None,
     ai_key_id: int | None = None,
     model: str | None = None,
+    models: list[str] | None = None,
     provider: str | None = None,
     status: str | None = None,
 ) -> list[LlmCallLog]:
     stmt = select(LlmCallLog).order_by(LlmCallLog.started_at.desc())
     stmt = _apply_llm_filters(
-        stmt, start_time, end_time, user_id, ai_key_id, model, provider, status
+        stmt, start_time, end_time, user_id, ai_key_id, model, models, provider, status
     )
     offset = (page - 1) * page_size
     stmt = stmt.limit(page_size).offset(offset)
@@ -83,12 +87,13 @@ async def count_llm_logs(
     user_id: int | None = None,
     ai_key_id: int | None = None,
     model: str | None = None,
+    models: list[str] | None = None,
     provider: str | None = None,
     status: str | None = None,
 ) -> int:
     stmt = select(func.count(LlmCallLog.id))
     stmt = _apply_llm_filters(
-        stmt, start_time, end_time, user_id, ai_key_id, model, provider, status
+        stmt, start_time, end_time, user_id, ai_key_id, model, models, provider, status
     )
     result = await session.execute(stmt)
     return result.scalar_one()
@@ -203,12 +208,16 @@ async def mcp_log_filters(session: AsyncSession) -> dict:
     server_ids = (await session.execute(
         select(distinct(McpCallLog.server_id))
     )).scalars().all()
+    ai_key_ids = (await session.execute(
+        select(distinct(McpCallLog.ai_key_id)).where(McpCallLog.ai_key_id.isnot(None))
+    )).scalars().all()
     tool_names = (await session.execute(
         select(distinct(McpCallLog.tool_name)).order_by(McpCallLog.tool_name)
     )).scalars().all()
     return {
         "user_ids": [u for u in user_ids if u],
         "server_ids": [s for s in server_ids if s],
+        "ai_key_ids": [k for k in ai_key_ids if k],
         "tool_names": [t for t in tool_names if t],
     }
 
@@ -357,7 +366,7 @@ async def load_users(session: AsyncSession, user_ids: list[int]) -> dict[int, di
 
     返回 {user_id: {username, display_name, department_name}}。
     """
-    ids = [i for i in user_ids if i]
+    ids = list({i for i in user_ids if i})
     if not ids:
         return {}
     result = await session.execute(
@@ -383,7 +392,7 @@ async def load_users(session: AsyncSession, user_ids: list[int]) -> dict[int, di
 
 
 async def load_ai_keys(session: AsyncSession, key_ids: list[int]) -> dict[int, dict]:
-    ids = [i for i in key_ids if i]
+    ids = list({i for i in key_ids if i})
     if not ids:
         return {}
     result = await session.execute(
@@ -404,7 +413,7 @@ def _mask_key(key: str | None) -> str:
 
 
 async def load_skills(session: AsyncSession, skill_ids: list[int]) -> dict[int, dict]:
-    ids = [i for i in skill_ids if i]
+    ids = list({i for i in skill_ids if i})
     if not ids:
         return {}
     result = await session.execute(select(Skill).where(Skill.id.in_(ids)))
@@ -417,7 +426,7 @@ async def load_skills(session: AsyncSession, skill_ids: list[int]) -> dict[int, 
 async def load_mcp_servers(
     session: AsyncSession, server_ids: list[int]
 ) -> dict[int, dict]:
-    ids = [i for i in server_ids if i]
+    ids = list({i for i in server_ids if i})
     if not ids:
         return {}
     result = await session.execute(select(McpServer).where(McpServer.id.in_(ids)))
@@ -430,7 +439,7 @@ async def load_mcp_servers(
 async def load_deployments(
     session: AsyncSession, deployment_ids: list[int]
 ) -> dict[int, dict]:
-    ids = [i for i in deployment_ids if i]
+    ids = list({i for i in deployment_ids if i})
     if not ids:
         return {}
     result = await session.execute(

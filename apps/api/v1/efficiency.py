@@ -6,10 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_current_user, get_db
+from core.deps import get_current_user, get_db, require_permission
 from services import efficiency_service
 
 router = APIRouter(prefix="/efficiency")
+
+
+def _parse_scope_ids(scope_ids: str, scope_id: str, department: str) -> list[int]:
+    raw = scope_ids or scope_id or department
+    return [int(item) for item in raw.split(',') if item.strip().isdigit()]
 
 
 def _parse_period(period: str | None) -> tuple[date, date]:
@@ -29,6 +34,7 @@ async def get_overview(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
     granularity: str = Query("day"),
+    dimension: str = Query("department", pattern="^(department|project)$"),
     scope: str | None = Query(None),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -42,111 +48,236 @@ async def get_overview(
             session, start, end, current_user["id"]
         )
     else:
-        data = await efficiency_service.get_overview(session, start, end, granularity)
+        data = await efficiency_service.get_overview(
+            session, start, end, granularity, dimension
+        )
+    if isinstance(data, dict):
+        data["freshness"] = await efficiency_service.get_freshness(session)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/trend")
+async def get_trend(
+    period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    group_by: str = Query("day", pattern="^(day|week|month)$"),
+    granularity: str | None = Query(None, pattern="^(day|week|month)$"),
+    scope: str | None = Query(None),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    bucket = granularity or group_by
+    user_id = current_user["id"] if scope == "self" else None
+    data = await efficiency_service.get_trend(session, start, end, bucket, user_id)
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/adoption")
 async def get_adoption(
     period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
     dimension: str = Query("department"),
     metric: str = Query("dau"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = _parse_period(period)
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
     data = await efficiency_service.get_adoption(session, start, end, dimension, metric)
+    if isinstance(data, dict):
+        data["freshness"] = await efficiency_service.get_freshness(session)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/adoption/scope-users")
+async def get_adoption_scope_users(
+    period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    dimension: str = Query("department", pattern="^(department|project)$"),
+    scope_id: int = Query(...),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    data = await efficiency_service.get_adoption_scope_users(
+        session, start, end, dimension, scope_id
+    )
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/adoption/agents")
 async def get_adoption_agents(
     period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    dimension: str = Query("department", pattern="^(department|project)$"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = _parse_period(period)
-    data = await efficiency_service.get_adoption_agents(session, start, end)
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    data = await efficiency_service.get_adoption_agents(session, start, end, dimension)
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/adoption/resources")
 async def get_adoption_resources(
     period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
     type: str = Query("mcp"),
+    dimension: str = Query("department", pattern="^(department|project)$"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = _parse_period(period)
-    data = await efficiency_service.get_adoption_resources(session, start, end, type)
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    data = await efficiency_service.get_adoption_resources(session, start, end, type, dimension)
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/adoption/unused-users")
 async def get_unused_users(
     period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    dimension: str = Query("department", pattern="^(department|project)$"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = _parse_period(period)
-    data = await efficiency_service.get_unused_users(session, start, end)
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    data = await efficiency_service.get_unused_users(session, start, end, dimension)
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/cost")
 async def get_cost(
     period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
     resource_type: str = Query(""),
+    dimension: str = Query("department", pattern="^(department|project)$"),
     department: str = Query(""),
+    scope_id: str = Query(""),
+    scope_ids: str = Query(""),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = _parse_period(period)
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
     cost_type = resource_type if resource_type else "all"
-    dept_id = int(department) if department.isdigit() else None
-    data = await efficiency_service.get_cost(session, start, end, cost_type, dept_id)
+    selected_scopes = _parse_scope_ids(scope_ids, scope_id, department)
+    dept_id = selected_scopes if dimension == "department" else None
+    project_id = selected_scopes if dimension == "project" else None
+    data = await efficiency_service.get_cost(
+        session, start, end, cost_type, dept_id, dimension, project_id
+    )
+    if isinstance(data, dict):
+        data["freshness"] = await efficiency_service.get_freshness(session)
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/cost/detail")
 async def get_cost_detail(
     period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
     tab: str = Query("department"),
     resource_type: str = Query(""),
+    dimension: str = Query("department", pattern="^(department|project)$"),
     department: str = Query(""),
+    scope_id: str = Query(""),
+    scope_ids: str = Query(""),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start, end = _parse_period(period)
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
     cost_type = resource_type if resource_type else "all"
-    dept_id = int(department) if department.isdigit() else None
+    selected_scopes = _parse_scope_ids(scope_ids, scope_id, department)
+    dept_id = selected_scopes if dimension == "department" else None
+    project_id = selected_scopes if dimension == "project" else None
     data = await efficiency_service.get_cost_detail(
-        session, start, end, tab, cost_type, dept_id
+        session, start, end, tab, cost_type, dept_id, dimension, project_id
     )
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/budget")
 async def get_budget(
+    month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    data = await efficiency_service.get_budget(session)
+    data = await efficiency_service.get_budget(session, month)
+    data["freshness"] = await efficiency_service.get_freshness(session)
     return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/budget/alerts")
 async def get_budget_alerts(
+    month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    data = await efficiency_service.get_budget_alerts(session)
+    data = await efficiency_service.get_budget_alerts(session, month)
     return {"code": 200, "message": "ok", "data": data}
 
 
 # ---------------------------------------------------------------------------
 # Reports
 # ---------------------------------------------------------------------------
+
+
+@router.post("/refresh", summary="刷新效能数据")
+async def refresh_efficiency(
+    scope: str = Query("all"),
+    current_user: dict = Depends(require_permission("efficiency:write")),
+):
+    data = await efficiency_service.request_refresh(scope)
+    return {"code": 200, "message": "刷新任务已提交", "data": data}
+
+
+@router.get("/refresh/{task_id}")
+async def get_refresh_status(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    data = efficiency_service.get_refresh_status(task_id)
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/health")
+async def get_ai_health(
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    data = await efficiency_service.get_ai_health(session)
+    data["freshness"] = await efficiency_service.get_freshness(session)
+    return {"code": 200, "message": "ok", "data": data}
 
 
 @router.get("/reports")

@@ -24,6 +24,7 @@ interface CommonQuery {
 export interface LlmLogQuery extends CommonQuery {
   ai_key_id?: number
   model?: string
+  models?: string
   provider?: string
   status?: 'success' | 'failure'
 }

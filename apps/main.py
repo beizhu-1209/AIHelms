@@ -8,6 +8,7 @@ from core.config import settings
 from core.database import close_engine
 from core.exception_handlers import register_exception_handlers
 from core.logging import setup_logging
+from core.migrate import run_migrations
 from services.auth_service import ensure_super_admin
 
 # Initialize logging before anything else
@@ -16,6 +17,7 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await run_migrations()
     await ensure_super_admin(settings.super_admin_password)
     yield
     await close_engine()

@@ -59,7 +59,7 @@ docker/db/migrations_bak
 
 # Logs
 *.log
-logs/
+/logs/
 
 # 用户数据（运行时上传/导出的内容不提交，保留目录结构通过 .gitkeep）
 data/skills/*

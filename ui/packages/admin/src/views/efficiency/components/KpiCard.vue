@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-vue-next'
+import TooltipIcon from '../../../components/TooltipIcon.vue'
 
 interface Props {
   label: string
@@ -13,6 +14,7 @@ interface Props {
   sparkline?: number[]
   sparkColor?: string
   valueColor?: string
+  tooltip?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -23,6 +25,7 @@ const props = withDefaults(defineProps<Props>(), {
   sparkline: () => [],
   sparkColor: '#6366f1',
   valueColor: '',
+  tooltip: '',
 })
 
 const sparkPath = computed(() => {
@@ -64,8 +67,11 @@ const changeLabel = computed(() => {
 </script>
 
 <template>
-  <div class="relative overflow-hidden rounded-xl border border-white/80 bg-white/70 px-5 py-4 shadow-sm backdrop-blur-xl">
-    <div class="text-xs text-slate-500">{{ label }}</div>
+  <div class="relative rounded-xl border border-white/80 bg-white/70 px-5 py-4 shadow-sm backdrop-blur-xl">
+    <div class="flex items-center gap-1 text-xs text-slate-500">
+      <span>{{ label }}</span>
+      <TooltipIcon v-if="tooltip" :text="tooltip" />
+    </div>
     <div class="mt-1.5 flex items-baseline gap-1">
       <span class="text-2xl font-semibold tracking-tight" :class="valueColor || 'text-slate-900'">
         {{ value }}

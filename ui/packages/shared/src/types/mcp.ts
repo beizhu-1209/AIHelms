@@ -20,6 +20,7 @@ export interface McpServer {
   url: string
   transport: string
   auth_type: string
+  credentials?: Record<string, unknown>
   instructions: string
   mcp_info: Record<string, unknown>
   extra_headers: string[]

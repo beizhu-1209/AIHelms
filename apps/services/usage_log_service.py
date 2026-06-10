@@ -24,11 +24,12 @@ async def list_llm_logs(
     user_id: int | None = None,
     ai_key_id: int | None = None,
     model: str | None = None,
+    models: list[str] | None = None,
     provider: str | None = None,
     status: str | None = None,
 ) -> dict:
     total = await usage_log_repo.count_llm_logs(
-        session, start_time, end_time, user_id, ai_key_id, model, provider, status
+        session, start_time, end_time, user_id, ai_key_id, model, models, provider, status
     )
     logs = await usage_log_repo.find_llm_logs(
         session,
@@ -39,6 +40,7 @@ async def list_llm_logs(
         user_id,
         ai_key_id,
         model,
+        models,
         provider,
         status,
     )
@@ -177,9 +179,11 @@ async def mcp_filters(session: AsyncSession) -> dict:
     raw = await usage_log_repo.mcp_log_filters(session)
     users = await usage_log_repo.load_users(session, raw["user_ids"])
     servers = await usage_log_repo.load_mcp_servers(session, raw["server_ids"])
+    keys = await usage_log_repo.load_ai_keys(session, raw["ai_key_ids"])
     return {
         "users": [users[u] for u in raw["user_ids"] if u in users],
         "servers": [servers[s] for s in raw["server_ids"] if s in servers],
+        "ai_keys": [keys[k] for k in raw["ai_key_ids"] if k in keys],
         "tool_names": raw["tool_names"],
     }
 

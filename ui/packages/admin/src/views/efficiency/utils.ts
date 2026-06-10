@@ -1,3 +1,5 @@
+import { refreshEfficiencyData } from '@aihelms/shared'
+
 /** Efficiency 模块共享格式化函数 */
 
 export function formatCost(val: number): string {
@@ -24,13 +26,6 @@ export function formatChange(val: number | null | undefined): string {
   if (val === null || val === undefined) return '--'
   const sign = val > 0 ? '+' : ''
   return `${sign}${val.toFixed(1)}%`
-}
-
-export function formatTokens(val: number): string {
-  if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(2)}B`
-  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`
-  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}k`
-  return val.toString()
 }
 
 export interface DatePreset {
@@ -82,4 +77,16 @@ export function presetToRange(key: string): { start: string; end: string } {
     }
   }
   return { start: today, end: today }
+}
+
+export async function submitEfficiencyRefresh(scope: string): Promise<void> {
+  const refresh = await refreshEfficiencyData(scope)
+  if (!['queued', 'running'].includes(refresh.update_status || '') || !refresh.task_id) {
+    throw new Error(refresh.reason || '刷新任务提交失败')
+  }
+}
+
+
+export function keepRefreshIndicator(ms = 8000): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }

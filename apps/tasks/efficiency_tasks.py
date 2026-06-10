@@ -1,7 +1,7 @@
-"""AI 效能：增量聚合 llm_call_logs + mcp_call_logs 到 cost_summary_daily。
+"""AI 效能：聚合 llm_call_logs + mcp_call_logs 到 cost_summary_daily。
 
-每 5 分钟跑一次，从上次聚合时间点开始，按维度 GROUP BY 后 UPSERT 到聚合表。
-同时更新 ai_keys.budget_used（各 Key 在其 budget_duration 周期内的累计成本）。
+每 5 分钟跑一次，重建最近一段时间的派生汇总，避免 sync_state 推进但汇总表
+缺行时无法自愈。业务成本源仍然只取平台日志表。
 """
 
 import asyncio
@@ -17,6 +17,7 @@ from models.db import SyncState
 logger = logging.getLogger(__name__)
 
 SYNC_KEY = "cost_summary_daily"
+ROLLING_REBUILD_DAYS = 60
 
 
 def _run_async(coro):
@@ -38,35 +39,46 @@ async def _aggregate() -> None:
             now = datetime.now(timezone.utc)
             sync_state = await session.get(SyncState, SYNC_KEY)
             if sync_state is None:
-                # 首次运行：从最早的日志开始聚合
-                earliest = await session.execute(
-                    text("""
-                        SELECT MIN(ts) FROM (
-                            SELECT MIN(started_at) AS ts FROM aihelms.llm_call_logs
-                            UNION ALL
-                            SELECT MIN(called_at) AS ts FROM aihelms.mcp_call_logs
-                        ) t
-                    """)
-                )
-                earliest_ts = earliest.scalar()
-                start_from = earliest_ts if earliest_ts else now - timedelta(days=1)
-                sync_state = SyncState(
-                    key=SYNC_KEY,
-                    last_sync_at=start_from,
-                )
+                sync_state = SyncState(key=SYNC_KEY, last_sync_at=now)
                 session.add(sync_state)
                 await session.flush()
 
-            last_ts = sync_state.last_sync_at
+            earliest = await session.execute(
+                text("""
+                    SELECT MIN(ts) FROM (
+                        SELECT MIN(started_at) AS ts FROM aihelms.llm_call_logs
+                        UNION ALL
+                        SELECT MIN(called_at) AS ts FROM aihelms.mcp_call_logs
+                    ) t
+                """)
+            )
+            earliest_ts = earliest.scalar()
+            summary_count = await session.execute(
+                text("SELECT COUNT(*) FROM aihelms.cost_summary_daily")
+            )
+            has_summary = int(summary_count.scalar() or 0) > 0
+            if not has_summary and earliest_ts:
+                rebuild_start = earliest_ts.date()
+            else:
+                rebuild_start = (now - timedelta(days=ROLLING_REBUILD_DAYS)).date()
+
+            # cost_summary_daily 是平台日志的派生汇总。滚动窗口重建可以修复漏聚合，
+            # 不修改 llm_call_logs / mcp_call_logs 等业务源数据。
+            await session.execute(
+                text("""
+                    DELETE FROM aihelms.cost_summary_daily
+                    WHERE summary_date >= :rebuild_start
+                """),
+                {"rebuild_start": rebuild_start},
+            )
 
             # LLM 日志聚合
             await session.execute(
                 text("""
                     INSERT INTO aihelms.cost_summary_daily (
-                        summary_date, user_id, ai_key_id, department_id,
-                        project_id, model, provider_id, cost_type, key_type,
-                        total_requests, successful_requests, failed_requests,
-                        input_tokens, output_tokens, cache_tokens,
+                        summary_date, user_id, ai_key_id, model, provider_id,
+                        cost_type, key_type, total_requests, successful_requests,
+                        failed_requests, input_tokens, output_tokens, cache_tokens,
                         external_cost, internal_cost, total_duration_ms,
                         last_aggregated_at
                     )
@@ -74,8 +86,6 @@ async def _aggregate() -> None:
                         date_trunc('day', l.started_at)::date AS summary_date,
                         l.user_id,
                         l.ai_key_id,
-                        ud.department_id,
-                        up.project_id,
                         l.model,
                         d.credential_id AS provider_id,
                         'llm' AS cost_type,
@@ -92,38 +102,20 @@ async def _aggregate() -> None:
                         NOW()
                     FROM aihelms.llm_call_logs l
                     LEFT JOIN aihelms.ai_keys k ON k.id = l.ai_key_id
-                    LEFT JOIN aihelms.user_departments ud ON ud.user_id = l.user_id
-                    LEFT JOIN aihelms.user_projects up ON up.user_id = l.user_id
                     LEFT JOIN aihelms.model_deployments d ON d.id = l.deployment_id
-                    WHERE l.started_at >= :last_ts AND l.started_at < :now
-                    GROUP BY 1,2,3,4,5,6,7,8,9
-                    ON CONFLICT (summary_date,
-                        COALESCE(user_id,0), COALESCE(ai_key_id,0),
-                        COALESCE(department_id,0), COALESCE(project_id,0),
-                        COALESCE(model,''), COALESCE(provider_id,0),
-                        COALESCE(server_id,0), cost_type, COALESCE(key_type,''))
-                    DO UPDATE SET
-                        total_requests = cost_summary_daily.total_requests + EXCLUDED.total_requests,
-                        successful_requests = cost_summary_daily.successful_requests + EXCLUDED.successful_requests,
-                        failed_requests = cost_summary_daily.failed_requests + EXCLUDED.failed_requests,
-                        input_tokens = cost_summary_daily.input_tokens + EXCLUDED.input_tokens,
-                        output_tokens = cost_summary_daily.output_tokens + EXCLUDED.output_tokens,
-                        cache_tokens = cost_summary_daily.cache_tokens + EXCLUDED.cache_tokens,
-                        external_cost = cost_summary_daily.external_cost + EXCLUDED.external_cost,
-                        internal_cost = cost_summary_daily.internal_cost + EXCLUDED.internal_cost,
-                        total_duration_ms = cost_summary_daily.total_duration_ms + EXCLUDED.total_duration_ms,
-                        last_aggregated_at = NOW()
+                    WHERE l.started_at::date >= :rebuild_start
+                      AND l.started_at < :now
+                    GROUP BY 1,2,3,4,5,6,7
                 """),
-                {"last_ts": last_ts, "now": now},
+                {"rebuild_start": rebuild_start, "now": now},
             )
 
             # MCP 日志聚合
             await session.execute(
                 text("""
                     INSERT INTO aihelms.cost_summary_daily (
-                        summary_date, user_id, ai_key_id, department_id,
-                        project_id, server_id, cost_type, key_type,
-                        total_requests, successful_requests, failed_requests,
+                        summary_date, user_id, ai_key_id, server_id, cost_type,
+                        key_type, total_requests, successful_requests, failed_requests,
                         external_cost, internal_cost, total_duration_ms,
                         last_aggregated_at
                     )
@@ -131,8 +123,6 @@ async def _aggregate() -> None:
                         date_trunc('day', m.called_at)::date AS summary_date,
                         m.user_id,
                         m.ai_key_id,
-                        ud.department_id,
-                        up.project_id,
                         m.server_id,
                         'mcp' AS cost_type,
                         k.key_type,
@@ -145,25 +135,11 @@ async def _aggregate() -> None:
                         NOW()
                     FROM aihelms.mcp_call_logs m
                     LEFT JOIN aihelms.ai_keys k ON k.id = m.ai_key_id
-                    LEFT JOIN aihelms.user_departments ud ON ud.user_id = m.user_id
-                    LEFT JOIN aihelms.user_projects up ON up.user_id = m.user_id
-                    WHERE m.called_at >= :last_ts AND m.called_at < :now
-                    GROUP BY 1,2,3,4,5,6,7,8
-                    ON CONFLICT (summary_date,
-                        COALESCE(user_id,0), COALESCE(ai_key_id,0),
-                        COALESCE(department_id,0), COALESCE(project_id,0),
-                        COALESCE(model,''), COALESCE(provider_id,0),
-                        COALESCE(server_id,0), cost_type, COALESCE(key_type,''))
-                    DO UPDATE SET
-                        total_requests = cost_summary_daily.total_requests + EXCLUDED.total_requests,
-                        successful_requests = cost_summary_daily.successful_requests + EXCLUDED.successful_requests,
-                        failed_requests = cost_summary_daily.failed_requests + EXCLUDED.failed_requests,
-                        external_cost = cost_summary_daily.external_cost + EXCLUDED.external_cost,
-                        internal_cost = cost_summary_daily.internal_cost + EXCLUDED.internal_cost,
-                        total_duration_ms = cost_summary_daily.total_duration_ms + EXCLUDED.total_duration_ms,
-                        last_aggregated_at = NOW()
+                    WHERE m.called_at::date >= :rebuild_start
+                      AND m.called_at < :now
+                    GROUP BY 1,2,3,4,5,6
                 """),
-                {"last_ts": last_ts, "now": now},
+                {"rebuild_start": rebuild_start, "now": now},
             )
 
             # 更新 ai_keys.budget_used
@@ -171,7 +147,7 @@ async def _aggregate() -> None:
 
             sync_state.last_sync_at = now
             await session.commit()
-            logger.info("efficiency aggregation completed")
+            logger.info("efficiency aggregation completed: rebuild_start=%s", rebuild_start)
     except Exception:
         logger.error("efficiency aggregation failed", exc_info=True)
 

@@ -9,8 +9,10 @@ export type { Provider, CreateProviderParams, UpdateProviderParams, ProviderList
 export type { Credential, CreateCredentialParams, UpdateCredentialParams, CredentialListResult, ProviderFieldMetadata, ProviderFieldsInfo } from './types/credential'
 export type { ModelInfo, Deployment, CreateModelParams, UpdateModelParams, CreateDeploymentParams, UpdateDeploymentParams, ModelListResult, ActiveModel, AccessGroup, CreateAccessGroupParams, UpdateAccessGroupParams, RouterSettings, UpdateRouterSettingsParams, ModelVisibility, UpdateModelPublishParams } from './types/model'
 export type { ApiResponse } from './api/request'
+export type { ExportOptionItem, ExportTask, ExportTaskListResult, ExportTaskQuery, ExportTaskParams, CreateExportTaskParams, CleanupExportTaskResult } from './types/exportTask'
 
 export { request } from './api/request'
+export { getExportTasks, createExportTask, cancelExportTask, retryExportTask, cleanupExportTasks, downloadExportTask } from './api/exportTask'
 export { login, getMe, changePassword } from './api/auth'
 export { getUsers, getUserById, createUser, updateUser, deleteUser, resetUserPassword, updateUserRoles, updateUserDepartments, updateUserProjects } from './api/user'
 export { getDepartmentTree, getDepartmentById, createDepartment, updateDepartment, deleteDepartment, getDepartmentMembers, addDepartmentMember, removeDepartmentMember, updateDepartmentManagers } from './api/department'
@@ -55,9 +57,10 @@ export {
 } from './api/usageLogs'
 export type { LlmLogQuery, McpLogQuery, SkillLogQuery, AgentLogQuery } from './api/usageLogs'
 export type {
-  DashboardData, DashboardStatus, PendingItem, HourlyTrend, ResourceSummary, RecentActivity,
+  DashboardData, DashboardStatus, PendingItem, HourlyTrend, TrendPoint, ResourceSummary, RecentActivity, ServiceStatusItem,
 } from './types/dashboard'
-export { getDashboard } from './api/dashboard'
+export { getDashboard, refreshDashboard, getDashboardRefreshStatus } from './api/dashboard'
+export type { DashboardQuery, RefreshTaskStatus } from './api/dashboard'
 export { useAuth } from './composables/useAuth'
 export { usePermission } from './composables/usePermission'
 export { toast } from './utils/toast'
@@ -70,5 +73,9 @@ export type {
 export {
   getEfficiencyOverview, getEfficiencyTrend, getEfficiencyComposition,
   getKeyTypeComparison, getEfficiencyRanking, getEfficiencyAnalysis,
-  getBudgetOverview, getEfficiencyReports, getEfficiencyReport,
+  getBudgetOverview, getEfficiencyReports, getEfficiencyReport, createEfficiencyReport,
+  refreshEfficiencyData, getEfficiencyAdoption, getEfficiencyAdoptionAgents,
+  getEfficiencyAdoptionResources, getEfficiencyAdoptionUnusedUsers,
+  getEfficiencyAdoptionScopeUsers, getEfficiencyCost, getEfficiencyCostDetail,
+  getEfficiencyBudget, getEfficiencyBudgetAlerts, getEfficiencyHealth,
 } from './api/efficiency'

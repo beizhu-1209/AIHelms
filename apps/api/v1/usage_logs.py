@@ -21,6 +21,7 @@ async def list_llm_logs(
     user_id: int | None = Query(None),
     ai_key_id: int | None = Query(None),
     model: str | None = Query(None),
+    models: str | None = Query(None),
     provider: str | None = Query(None),
     status: str | None = Query(None),
     session: AsyncSession = Depends(get_db),
@@ -35,6 +36,7 @@ async def list_llm_logs(
         user_id=user_id,
         ai_key_id=ai_key_id,
         model=model,
+        models=[m.strip() for m in models.split(',') if m.strip()] if models else None,
         provider=provider,
         status=status,
     )

@@ -1,15 +1,118 @@
 """AI 效能 Service 层。"""
 
-import calendar
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 
-from models.db import EfficiencyReport
-from repositories import efficiency_repo
+from celery_app import celery_app
+
+from core.config import settings
+
+from repositories import dashboard_repo, efficiency_repo
+from services.efficiency_budget_service import get_budget, get_budget_alerts
+from services.efficiency_cost_service import get_cost, get_cost_detail
+from services.efficiency_health_service import get_ai_health
+from services.efficiency_report_service import (
+    create_report,
+    get_report_detail,
+    list_reports,
+    update_suggestion_status,
+)
 
 logger = logging.getLogger(__name__)
+
+REFRESH_STATE_KEY = "aihelms:efficiency:refresh_task_id"
+REFRESH_STATE_TTL_SECONDS = 3600
+
+
+async def _redis() -> Redis:
+    return Redis.from_url(settings.redis_url, decode_responses=True)
+
+
+async def _set_refresh_task(task_id: str) -> None:
+    client = await _redis()
+    try:
+        await client.set(REFRESH_STATE_KEY, task_id, ex=REFRESH_STATE_TTL_SECONDS)
+    finally:
+        await client.aclose()
+
+
+async def _get_refresh_task_id() -> str:
+    client = await _redis()
+    try:
+        value = await client.get(REFRESH_STATE_KEY)
+    finally:
+        await client.aclose()
+    return str(value or "")
+
+
+def _task_update_status(task_id: str) -> str:
+    if not task_id:
+        return "idle"
+    state = celery_app.AsyncResult(task_id).state
+    if state in {"PENDING", "STARTED", "RETRY"}:
+        return "running"
+    if state == "FAILURE":
+        return "failed"
+    return "idle"
+
+def _iso_or_none(value) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _format_freshness(value: datetime | None) -> str:
+    if not value:
+        return "--"
+    if value.tzinfo is None:
+        now = datetime.now()
+    else:
+        now = datetime.now(value.tzinfo)
+    diff_minutes = max(0, int((now - value).total_seconds() // 60))
+    if diff_minutes < 60:
+        return "刚刚" if diff_minutes < 1 else f"{diff_minutes}分钟前"
+    return value.strftime("%Y-%m-%d %H:%M")
+
+
+async def get_freshness(session: AsyncSession) -> dict:
+    last_updated_at = await dashboard_repo.get_last_updated_at(session)
+    refresh_task_id = await _get_refresh_task_id()
+    return {
+        "last_updated_at": _iso_or_none(last_updated_at),
+        "last_updated_label": _format_freshness(last_updated_at),
+        "update_status": _task_update_status(refresh_task_id),
+        "task_id": refresh_task_id or None,
+    }
+
+async def request_refresh(scope: str = "all") -> dict:
+    """Submit aggregation and expose one shared refresh state for all admins."""
+    try:
+        existing_task_id = await _get_refresh_task_id()
+        existing_status = _task_update_status(existing_task_id)
+        if existing_status == "running":
+            return {"update_status": "running", "task_id": existing_task_id, "scope": scope}
+
+        from tasks.efficiency_tasks import aggregate_cost_summary
+
+        task = aggregate_cost_summary.delay()
+        await _set_refresh_task(task.id)
+        return {"update_status": "queued", "task_id": task.id, "scope": scope}
+    except Exception:  # pragma: no cover - depends on worker runtime
+        logger.exception("efficiency refresh request failed")
+        return {"update_status": "unavailable", "reason": "刷新任务创建失败", "scope": scope}
+
+
+def get_refresh_status(task_id: str) -> dict:
+    result = celery_app.AsyncResult(task_id)
+    state = result.state
+    return {
+        "task_id": task_id,
+        "state": state,
+        "ready": result.ready(),
+        "successful": result.successful(),
+        "failed": result.failed(),
+    }
 
 
 def _calc_change(current: float, previous: float) -> float | None:
@@ -37,7 +140,15 @@ def _prev_period(start_date: date, end_date: date) -> tuple[date, date]:
     return prev_end - timedelta(days=days - 1), prev_end
 
 
-async def get_overview(session: AsyncSession, start_date: date, end_date: date, granularity: str = "day") -> dict:
+async def get_overview(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    granularity: str = "day",
+    dimension: str = "department",
+) -> dict:
+    dimension = "project" if dimension == "project" else "department"
+    dimension_label = "项目" if dimension == "project" else "部门"
     total_users = await efficiency_repo.get_total_user_count(session)
     active_ids = await efficiency_repo.get_active_user_ids(
         session, start_date, end_date
@@ -45,65 +156,93 @@ async def get_overview(session: AsyncSession, start_date: date, end_date: date, 
     active_count = len(active_ids)
     total_cost = await efficiency_repo.get_total_cost(session, start_date, end_date)
     coverage_rate = round(active_count / total_users * 100, 1) if total_users > 0 else 0
-    per_capita = round(total_cost / active_count, 2) if active_count > 0 else 0
+    active_per_capita = round(total_cost / active_count, 2) if active_count > 0 else 0
 
     prev_start, prev_end = _prev_period(start_date, end_date)
     prev_active_ids = await efficiency_repo.get_active_user_ids(
         session, prev_start, prev_end
     )
-    prev_cost = await efficiency_repo.get_total_cost(session, prev_start, prev_end)
+    prev_total_cost = await efficiency_repo.get_total_cost(session, prev_start, prev_end)
     prev_coverage = (
         round(len(prev_active_ids) / total_users * 100, 1) if total_users > 0 else 0
     )
-    prev_per_capita = (
-        round(prev_cost / len(prev_active_ids), 2) if len(prev_active_ids) > 0 else 0
+    prev_active_per_capita = (
+        round(prev_total_cost / len(prev_active_ids), 2) if len(prev_active_ids) > 0 else 0
     )
 
     trend = await efficiency_repo.get_daily_cost_and_users(
         session, start_date, end_date, granularity
     )
-    dept_ranking = await efficiency_repo.get_dept_ranking(session, start_date, end_date)
+    current_rows = await efficiency_repo.get_scope_overview(
+        session, start_date, end_date, dimension
+    )
+    previous_rows = await efficiency_repo.get_scope_overview(
+        session, prev_start, prev_end, dimension
+    )
+    previous_map = {row["id"]: row for row in previous_rows}
 
     ranking_items, table_items = [], []
-    for dept in dept_ranking:
-        t, a = dept["total_users"], dept["active_users"]
-        cov = round(a / t * 100, 1) if t > 0 else 0
-        pc = round(dept["total_cost"] / a, 2) if a > 0 else 0
+    for row in current_rows:
+        total_members = row["total_users"]
+        active_members = row["active_users"]
+        scope_cost = row["total_cost"]
+        coverage = round(active_members / total_members * 100, 1) if total_members > 0 else 0
+        row_active_per_capita = round(scope_cost / active_members, 2) if active_members > 0 else 0
+        previous = previous_map.get(row["id"], {})
+        prev_active = int(previous.get("active_users", 0) or 0)
+        prev_scope_cost = float(previous.get("total_cost", 0) or 0)
+        prev_active_per_capita_row = round(prev_scope_cost / prev_active, 2) if prev_active > 0 else 0
+
         ranking_items.append(
-            {"name": dept["name"], "coverage_rate": cov, "per_capita_cost": pc}
+            {
+                "name": row["name"],
+                "coverage_rate": coverage,
+                "per_capita_cost": row_active_per_capita,
+            }
         )
         table_items.append(
             {
-                "name": dept["name"],
-                "total_members": t,
-                "active_members": a,
-                "coverage_rate": cov,
-                "total_cost": dept["total_cost"],
-                "per_capita_cost": pc,
-                "change": 0,
+                "id": row["id"],
+                "name": row["name"],
+                "path": row["path"],
+                "total_members": total_members,
+                "active_members": active_members,
+                "coverage_rate": coverage,
+                "total_cost": scope_cost,
+                "per_capita_cost": row_active_per_capita,
+                "active_per_capita_cost": row_active_per_capita,
+                "cost_change": _calc_change(scope_cost, prev_scope_cost),
+                "active_per_capita_change": _calc_change(
+                    row_active_per_capita, prev_active_per_capita_row
+                ),
+                "change": _calc_change(scope_cost, prev_scope_cost),
+                "active_people": row.get("active_people", []),
             }
         )
 
     conclusion = (
         f"AI 覆盖 {coverage_rate}% 员工，"
-        f"总投入 ¥{total_cost:,.0f}，人均 ¥{per_capita:,.0f}/月"
+        f"总投入 ¥{total_cost:,.0f}，活跃人均 ¥{active_per_capita:,.0f}"
     )
     warnings = [
-        f"{d['name']}人均成本偏高（¥{d['per_capita_cost']:,.0f}）"
-        for d in ranking_items
-        if d["per_capita_cost"] > per_capita * 1.5 and per_capita > 0
+        f"{item['name']}活跃人均成本偏高（¥{item['per_capita_cost']:,.0f}）"
+        for item in ranking_items
+        if item["per_capita_cost"] > active_per_capita * 1.5 and active_per_capita > 0
     ]
 
     return {
         "conclusion": conclusion,
         "warnings": warnings,
+        "dimension": dimension,
+        "dimension_label": dimension_label,
         "kpi": {
             "coverage_rate": coverage_rate,
             "total_cost": total_cost,
-            "per_capita_cost": per_capita,
+            "per_capita_cost": active_per_capita,
+            "active_per_capita_cost": active_per_capita,
             "coverage_change": _calc_change(coverage_rate, prev_coverage),
-            "cost_change": _calc_change(total_cost, prev_cost),
-            "per_capita_change": _calc_change(per_capita, prev_per_capita),
+            "cost_change": _calc_change(total_cost, prev_total_cost),
+            "per_capita_change": _calc_change(active_per_capita, prev_active_per_capita),
         },
         "trend": {
             "dates": [t["date"] for t in trend],
@@ -179,12 +318,12 @@ async def get_adoption(
         daily_avg_frequency = (
             round(total_calls / active_count / days, 1) if active_count > 0 else 0
         )
-        heavy_user_count = sum(1 for u in user_calls if u["calls"] >= 10 * days)
+        heavy_user_count = sum(1 for u in user_calls if u["calls"] > 20 * days)
     heavy_user_ratio = (
         round(heavy_user_count / active_count * 100, 1) if active_count > 0 else 0
     )
 
-    light_t, heavy_t = 3 * days, 10 * days
+    light_t, heavy_t = 5 * days, 20 * days
     light = sum(1 for u in user_calls if u["calls"] < light_t)
     medium = sum(1 for u in user_calls if light_t <= u["calls"] < heavy_t)
     heavy = sum(1 for u in user_calls if u["calls"] >= heavy_t)
@@ -208,6 +347,7 @@ async def get_adoption(
 
     department_table = [
         {
+            "id": row["id"],
             "name": row["name"],
             "total_members": row["total"],
             "active_members": row["active"],
@@ -239,14 +379,27 @@ async def get_adoption(
     }
 
 
-async def get_adoption_agents(
-    session: AsyncSession, start_date: date, end_date: date
+async def get_adoption_scope_users(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    dimension: str,
+    scope_id: int,
 ) -> list[dict]:
-    raw = await efficiency_repo.get_agent_hotness(session, start_date, end_date)
+    return await efficiency_repo.get_adoption_scope_users(
+        session, start_date, end_date, dimension, scope_id
+    )
+
+
+async def get_adoption_agents(
+    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
+) -> list[dict]:
+    raw = await efficiency_repo.get_agent_hotness(session, start_date, end_date, dimension)
     result = []
     for i, agent in enumerate(raw):
         result.append(
             {
+                "id": agent["id"],
                 "rank": i + 1,
                 "name": agent["name"],
                 "platform": agent["platform"],
@@ -264,36 +417,39 @@ async def get_adoption_resources(
     start_date: date,
     end_date: date,
     resource_type: str = "mcp",
+    dimension: str = "department",
 ) -> list[dict]:
     if resource_type == "skill":
-        raw = await efficiency_repo.get_skill_hotness(session, start_date, end_date)
+        raw = await efficiency_repo.get_skill_hotness(session, start_date, end_date, dimension)
         return [
             {
+                "id": item["id"],
                 "name": item["name"],
                 "type": "skill",
                 "user_count": item.get("install_count", 0),
                 "monthly_calls": item.get("monthly_downloads", 0),
-                "department": "",
+                "department": item.get("scope_names", ""),
             }
             for item in raw
         ]
-    raw = await efficiency_repo.get_mcp_hotness(session, start_date, end_date)
+    raw = await efficiency_repo.get_mcp_hotness(session, start_date, end_date, dimension)
     return [
         {
+            "id": item["id"],
             "name": item["name"],
             "type": "mcp",
             "user_count": item["user_count"],
             "monthly_calls": item["monthly_calls"],
-            "department": "",
+            "department": item.get("scope_names", ""),
         }
         for item in raw
     ]
 
 
 async def get_unused_users(
-    session: AsyncSession, start_date: date, end_date: date
+    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
 ) -> list[dict]:
-    raw = await efficiency_repo.get_unused_users(session, start_date, end_date)
+    raw = await efficiency_repo.get_unused_users(session, start_date, end_date, dimension)
     return [
         {
             "name": item["display_name"],
@@ -304,358 +460,3 @@ async def get_unused_users(
         }
         for item in raw
     ]
-
-
-# ---------------------------------------------------------------------------
-# Cost
-# ---------------------------------------------------------------------------
-
-
-async def get_cost(
-    session: AsyncSession,
-    start_date: date,
-    end_date: date,
-    cost_type: str = "all",
-    department_id: int | None = None,
-) -> dict:
-    days = (end_date - start_date).days + 1
-    prev_start, prev_end = _prev_period(start_date, end_date)
-    cost_filters = None if cost_type == "all" else cost_type
-
-    trend_raw = await efficiency_repo.get_cost_trend(
-        session, start_date, end_date, cost_filters, department_id
-    )
-    prev_trend_raw = await efficiency_repo.get_cost_trend(
-        session, prev_start, prev_end, cost_filters, department_id
-    )
-    total_cost = sum(r["cost"] for r in trend_raw)
-    prev_total = sum(r["cost"] for r in prev_trend_raw)
-
-    date_map: dict[str, dict] = {}
-    for r in trend_raw:
-        d = r["date"]
-        if d not in date_map:
-            date_map[d] = {"date": d, "llm_cost": 0, "mcp_cost": 0, "is_anomaly": False}
-        if r["cost_type"] == "llm":
-            date_map[d]["llm_cost"] = r["cost"]
-        elif r["cost_type"] == "mcp":
-            date_map[d]["mcp_cost"] = r["cost"]
-
-    by_type = await efficiency_repo.get_cost_by_type(
-        session, start_date, end_date, department_id
-    )
-    by_dept = await efficiency_repo.get_cost_by_dept(session, start_date, end_date)
-    raw_pc = await efficiency_repo.get_dept_per_capita_cost(
-        session, start_date, end_date
-    )
-
-    return {
-        "kpi": {
-            "total_cost": round(total_cost, 2),
-            "daily_avg_cost": round(total_cost / days, 2) if days > 0 else 0,
-            "cost_change": _calc_change(total_cost, prev_total),
-        },
-        "trend": sorted(date_map.values(), key=lambda x: x["date"]),
-        "composition": {"by_resource_type": by_type, "by_department": by_dept},
-        "per_capita": [
-            {"department": i["name"], "per_capita_cost": i["value"]} for i in raw_pc
-        ],
-    }
-
-
-async def get_cost_detail(
-    session: AsyncSession,
-    start_date: date,
-    end_date: date,
-    tab: str = "department",
-    cost_type: str = "all",
-    department_id: int | None = None,
-) -> dict:
-    ct = None if cost_type == "all" else cost_type
-    if tab == "model":
-        raw = await efficiency_repo.get_cost_detail_by_model(
-            session, start_date, end_date, ct, department_id
-        )
-        total_cost = sum(item["cost"] for item in raw)
-        items = [
-            {
-                "model": item["model"],
-                "requests": item["requests"],
-                "tokens": item["input_tokens"] + item["output_tokens"],
-                "cost": item["cost"],
-                "ratio": round(item["cost"] / total_cost, 4) if total_cost > 0 else 0,
-                "avg_cost": (
-                    round(item["cost"] / item["requests"], 4)
-                    if item["requests"] > 0
-                    else 0
-                ),
-            }
-            for item in raw
-        ]
-        return {"model": items}
-    elif tab == "date":
-        raw = await efficiency_repo.get_cost_detail_by_date(
-            session, start_date, end_date, ct, department_id
-        )
-        items = [
-            {
-                "date": item["date"],
-                "llm_cost": 0,
-                "mcp_cost": 0,
-                "total_cost": item["cost"],
-                "requests": item["requests"],
-                "active_users": item["users"],
-            }
-            for item in raw
-        ]
-        return {"date": items}
-    else:
-        raw = await efficiency_repo.get_cost_detail_by_department(
-            session, start_date, end_date, ct, department_id
-        )
-        items = [
-            {
-                "department": item["name"],
-                "llm_cost": 0,
-                "mcp_cost": 0,
-                "total_cost": item["cost"],
-                "requests": item["requests"],
-                "per_capita_cost": item["per_capita"],
-                "cost_change": None,
-            }
-            for item in raw
-        ]
-        return {"department": items}
-
-
-# ---------------------------------------------------------------------------
-# Budget
-# ---------------------------------------------------------------------------
-
-
-async def get_budget(session: AsyncSession) -> dict:
-    today = date.today()
-    month_start = today.replace(day=1)
-    days_in_month = calendar.monthrange(today.year, today.month)[1]
-    days_passed = (today - month_start).days + 1
-
-    keys = await efficiency_repo.get_all_keys_with_budget(session)
-    total_budget = sum(float(k.budget_limit) for k in keys)
-    total_used = sum(float(k.budget_used) for k in keys)
-    execution_rate = (
-        round(total_used / total_budget * 100, 1) if total_budget > 0 else 0
-    )
-    remaining = round(total_budget - total_used, 2)
-    predicted = (
-        round(total_used / days_passed * days_in_month, 2)
-        if days_passed > 0
-        else total_used
-    )
-
-    cumulative_raw = await efficiency_repo.get_cumulative_cost_by_date(
-        session, month_start, today
-    )
-    daily_budget = round(total_budget / days_in_month, 2) if days_in_month > 0 else 0
-    trend = [
-        {
-            "date": item["date"],
-            "actual_cumulative": item["actual"],
-            "predicted_cumulative": None,
-            "budget_limit": round(daily_budget * (i + 1), 2),
-        }
-        for i, item in enumerate(cumulative_raw)
-    ]
-
-    month_end = today.replace(day=days_in_month)
-    dept_rows = await efficiency_repo.get_dept_budget_usage(
-        session, month_start, month_end
-    )
-    departments = []
-    for row in dept_rows:
-        b, u = row["budget"], row["used"]
-        rate = round(u / b * 100, 1) if b > 0 else 0
-        departments.append(
-            {
-                "department": row["name"],
-                "monthly_budget": b,
-                "used": u,
-                "execution_rate": rate,
-                "predicted_end": (
-                    round(u / days_passed * days_in_month, 2) if days_passed > 0 else u
-                ),
-                "risk": _risk_level(rate),
-                "trend": [],
-            }
-        )
-
-    project_rows = await efficiency_repo.get_project_budget_usage(session)
-    projects = []
-    for row in project_rows:
-        b, u = row["budget"], row["used"]
-        rate = round(u / b * 100, 1) if b > 0 else 0
-        projects.append(
-            {
-                "project": row["name"],
-                "monthly_budget": b,
-                "used": u,
-                "execution_rate": rate,
-                "predicted_end": (
-                    round(u / days_passed * days_in_month, 2) if days_passed > 0 else u
-                ),
-                "risk": _risk_level(rate),
-            }
-        )
-
-    key_raw = await efficiency_repo.get_key_top10_budget(session)
-    keys_list = [
-        {
-            "key_name": i["name"],
-            "owner": i["owner"],
-            "key_type": i["key_type"],
-            "budget": i["budget"],
-            "used": i["used"],
-            "execution_rate": i["rate"],
-        }
-        for i in key_raw
-    ]
-
-    return {
-        "global": {
-            "budget": total_budget,
-            "used": total_used,
-            "execution_rate": execution_rate,
-            "remaining": remaining,
-            "predicted": predicted,
-            "risk": _risk_level(execution_rate),
-        },
-        "trend": trend,
-        "departments": departments,
-        "projects": projects,
-        "keys": keys_list,
-    }
-
-
-async def get_budget_alerts(session: AsyncSession) -> list[dict]:
-    today = date.today()
-    month_start = today.replace(day=1)
-    days_in_month = calendar.monthrange(today.year, today.month)[1]
-    days_passed = (today - month_start).days + 1
-
-    alerts = []
-    for k in await efficiency_repo.get_all_keys_with_budget(session):
-        budget, used = float(k.budget_limit), float(k.budget_used)
-        if budget <= 0:
-            continue
-        rate = round(used / budget * 100, 1)
-        pred = round(used / days_passed * days_in_month, 2) if days_passed > 0 else used
-        if rate >= 80 or pred > budget:
-            alerts.append(
-                {
-                    "target": k.name,
-                    "type": k.key_type or "",
-                    "execution_rate": rate,
-                    "predicted_overspend": (
-                        round(pred - budget, 2) if pred > budget else 0
-                    ),
-                    "suggestion": (
-                        "建议提升预算额度" if pred > budget else "关注使用趋势"
-                    ),
-                }
-            )
-    return alerts
-
-
-# ---------------------------------------------------------------------------
-# Reports
-# ---------------------------------------------------------------------------
-
-
-async def list_reports(
-    session: AsyncSession, page: int = 1, page_size: int = 20
-) -> tuple[list, int]:
-    reports, total = await efficiency_repo.list_reports(session, page, page_size)
-    items = [
-        {
-            "id": r.id,
-            "report_type": r.report_type,
-            "period_start": str(r.period_start),
-            "period_end": str(r.period_end),
-            "model_used": r.model_used,
-            "summary": r.summary,
-            "created_at": str(r.created_at),
-        }
-        for r in reports
-    ]
-    return items, total
-
-
-async def get_report_detail(session: AsyncSession, report_id: int) -> dict | None:
-    report = await efficiency_repo.get_report_by_id(session, report_id)
-    if not report:
-        return None
-    suggestions = await efficiency_repo.list_suggestions_by_report(session, report_id)
-    return {
-        "id": report.id,
-        "report_type": report.report_type,
-        "period_start": str(report.period_start),
-        "period_end": str(report.period_end),
-        "filters": report.filters,
-        "model_used": report.model_used,
-        "summary": report.summary,
-        "content_md": report.content_md,
-        "created_at": str(report.created_at),
-        "generation_cost": float(report.generation_cost),
-        "generation_duration_ms": report.generation_duration_ms,
-        "suggestions": [
-            {
-                "id": s.id,
-                "title": s.title,
-                "description": s.description,
-                "priority": s.priority,
-                "expected_impact": s.expected_impact,
-                "status": s.status,
-                "status_note": s.status_note,
-            }
-            for s in suggestions
-        ],
-    }
-
-
-async def create_report(
-    session: AsyncSession,
-    report_type: str,
-    period_start: date,
-    period_end: date,
-    created_by: int,
-    model_used: str | None = None,
-    filters: dict | None = None,
-) -> dict:
-    report = EfficiencyReport(
-        report_type=report_type,
-        period_start=period_start,
-        period_end=period_end,
-        filters=filters or {},
-        model_used=model_used,
-        summary="报告生成中...",
-        content_md="",
-        created_by=created_by,
-    )
-    report = await efficiency_repo.create_report(session, report)
-    await session.commit()
-    return {"id": report.id, "status": "created"}
-
-
-async def update_suggestion_status(
-    session: AsyncSession,
-    suggestion_id: int,
-    status: str,
-    note: str,
-    updated_by: int,
-) -> dict | None:
-    suggestion = await efficiency_repo.update_suggestion_status(
-        session, suggestion_id, status, note, updated_by
-    )
-    if not suggestion:
-        return None
-    await session.commit()
-    return {"id": suggestion.id, "status": suggestion.status}

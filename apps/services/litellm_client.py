@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote
 
 import httpx
 
@@ -231,16 +232,19 @@ async def update_credential(
     credential_values: dict | None = None,
     credential_info: dict | None = None,
 ) -> dict:
-    data: dict = {"credential_name": credential_name}
-    if credential_values:
-        data["credential_values"] = credential_values
-    if credential_info:
-        data["credential_info"] = credential_info
-    return await _request("PATCH", f"/credentials/{credential_name}", json_data=data)
+    # LiteLLM's CredentialItem schema requires all three fields on PATCH.
+    data: dict = {
+        "credential_name": credential_name,
+        "credential_values": credential_values or {},
+        "credential_info": credential_info or {},
+    }
+    encoded_name = quote(credential_name, safe="")
+    return await _request("PATCH", f"/credentials/{encoded_name}", json_data=data)
 
 
 async def delete_credential(credential_name: str) -> None:
-    await _request("DELETE", f"/credentials/{credential_name}")
+    encoded_name = quote(credential_name, safe="")
+    await _request("DELETE", f"/credentials/{encoded_name}")
 
 
 async def list_credentials() -> list[dict]:

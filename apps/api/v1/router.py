@@ -11,6 +11,7 @@ from api.v1.credentials import router as credentials_router
 from api.v1.dashboard import router as dashboard_router
 from api.v1.departments import router as departments_router
 from api.v1.efficiency import router as efficiency_router
+from api.v1.export_tasks import router as export_tasks_router
 from api.v1.key_scenarios import router as key_scenarios_router
 from api.v1.mcp import router as mcp_router
 from api.v1.models import router as models_router
@@ -46,6 +47,7 @@ router.include_router(resource_applications_router, tags=["资源审计"])
 router.include_router(audit_logs_router, tags=["安全"])
 router.include_router(api_keys_router, tags=["安全"])
 router.include_router(usage_logs_router, tags=["资源审计"])
+router.include_router(export_tasks_router, tags=["资源审计"])
 router.include_router(business_scenarios_router, tags=["AI 身份"])
 router.include_router(efficiency_router, tags=["AI 效能"])
 router.include_router(dashboard_router, tags=["系统"])
