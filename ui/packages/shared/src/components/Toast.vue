@@ -5,14 +5,22 @@ interface ToastItem {
   id: number
   message: string
   type: 'success' | 'error' | 'warning' | 'info'
+  actionLabel?: string
+  actionPath?: string
 }
 
 const toasts = ref<ToastItem[]>([])
 let nextId = 0
 
-function addToast(message: string, type: ToastItem['type'] = 'info', duration = 4000) {
+function addToast(
+  message: string,
+  type: ToastItem['type'] = 'info',
+  duration = 4000,
+  actionLabel?: string,
+  actionPath?: string
+) {
   const id = nextId++
-  toasts.value.push({ id, message, type })
+  toasts.value.push({ id, message, type, actionLabel, actionPath })
   setTimeout(() => {
     removeToast(id)
   }, duration)
@@ -24,7 +32,14 @@ function removeToast(id: number) {
 
 function handleToastEvent(e: Event) {
   const detail = (e as CustomEvent).detail
-  addToast(detail.message, detail.type, detail.duration)
+  addToast(detail.message, detail.type, detail.duration, detail.actionLabel, detail.actionPath)
+}
+
+function handleAction(toast: ToastItem) {
+  if (toast.actionPath) {
+    window.location.href = toast.actionPath
+  }
+  removeToast(toast.id)
 }
 
 onMounted(() => {
@@ -72,9 +87,16 @@ const iconPaths: Record<ToastItem['type'], string> = {
           <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="iconPaths[toast.type]" />
           </svg>
-          <span class="text-sm font-medium">{{ toast.message }}</span>
+          <span class="text-sm font-medium leading-5">{{ toast.message }}</span>
           <button
-            class="ml-2 shrink-0 opacity-60 hover:opacity-100"
+            v-if="toast.actionLabel"
+            class="ml-2 shrink-0 rounded-md border border-current/30 px-2 py-1 text-xs font-semibold hover:bg-white/40"
+            @click="handleAction(toast)"
+          >
+            {{ toast.actionLabel }}
+          </button>
+          <button
+            class="ml-1 shrink-0 opacity-60 hover:opacity-100"
             @click="removeToast(toast.id)"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

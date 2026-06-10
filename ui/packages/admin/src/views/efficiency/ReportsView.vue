@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { FileText, Plus, ClipboardCopy } from 'lucide-vue-next'
-import { getEfficiencyReport, getEfficiencyReports, request } from '@aihelms/shared'
+import { createEfficiencyReport, getEfficiencyReport, getEfficiencyReports } from '@aihelms/shared'
 import type { EfficiencyReport, EfficiencySuggestion } from '@aihelms/shared'
 
 import GlassCard from './components/GlassCard.vue'
@@ -112,14 +112,11 @@ async function createReport() {
   isCreating.value = true
   try {
     const range = presetToRange(createForm.value.preset)
-    await request('/api/v1/efficiency/reports', {
-      method: 'POST',
-      body: {
-        report_type: createForm.value.report_type,
-        period_start: range.start,
-        period_end: range.end,
-        model_used: createForm.value.model_used || undefined,
-      },
+    await createEfficiencyReport({
+      report_type: createForm.value.report_type,
+      period_start: range.start,
+      period_end: range.end,
+      filters: {},
     })
     showCreateModal.value = false
     await loadReports()

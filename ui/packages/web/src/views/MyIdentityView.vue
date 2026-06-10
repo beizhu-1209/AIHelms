@@ -153,8 +153,8 @@ onMounted(async () => {
   try {
     const [keysData, kpiData, trendData, appsData, mcpRes, skillRes, configData] = await Promise.all([
       getMyKeys().catch(() => ({ personal: [] as AiKey[], department: [] as AiKey[], project: [] as AiKey[] })),
-      request<unknown>('/api/v1/efficiency/overview', { params: { scope: 'self' }, silent: true }).catch(() => null),
-      request<unknown[]>('/api/v1/efficiency/trend', { params: { scope: 'self', group_by: 'day' }, silent: true }).catch(() => []),
+      request<EfficiencyKpi>('/api/v1/efficiency/overview', { params: { scope: 'self' }, silent: true }).catch(() => null),
+      request<TrendItem[]>('/api/v1/efficiency/trend', { params: { scope: 'self', group_by: 'day' }, silent: true }).catch(() => []),
       request<{ items: ResourceApplication[] }>('/api/v1/resource-applications/my', { params: { page: 1, page_size: 10 }, silent: true }).catch(() => ({ items: [] as ResourceApplication[] })),
       request<{ items: McpServer[] }>('/api/v1/mcp/servers/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
       request<{ items: Skill[] }>('/api/v1/skills/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),

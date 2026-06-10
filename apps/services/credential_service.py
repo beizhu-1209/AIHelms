@@ -77,30 +77,43 @@ async def update_credential(
     if not credential:
         raise NotFoundError("credential", credential_id)
 
-    if credential_values is not None:
-        credential.credential_values = credential_values
+    values_changed = credential_values is not None
+    info_changed = credential_info is not None
+    if values_changed:
+        merged_values = dict(credential.credential_values or {})
+        merged_values.update(credential_values or {})
+        credential.credential_values = merged_values
     if provider_id is not None:
         credential.provider_id = provider_id
-    if credential_info is not None:
+    if info_changed:
         credential.credential_info = credential_info
     active_changed = False
     if is_active is not None and is_active != credential.is_active:
         credential.is_active = is_active
         active_changed = True
 
-    # Sync to LiteLLM
-    if credential_values is not None or credential_info is not None:
+    credential_payload_changed = values_changed or info_changed
+
+    # Sync the full effective credential payload to LiteLLM. LiteLLM PATCH does
+    # not behave as a partial update for credentials.
+    if credential_payload_changed:
         await litellm_client.update_credential(
             credential_name=credential.credential_name,
-            credential_values=credential_values,
-            credential_info=credential_info,
+            credential_values=credential.credential_values or {},
+            credential_info=credential.credential_info or {},
         )
         credential.litellm_synced = True
 
-    # 启用/禁用凭证时，同步其关联 deployments 在 LiteLLM 侧的路由可用性
-    if active_changed:
+    # 凭证内容或启用状态变化时，同步关联 deployments 在 LiteLLM 侧的路由参数。
+    if credential_payload_changed or active_changed:
         from services import model_service
-        await model_service.sync_credential_routing(session, credential)
+        result = await model_service.sync_credential_routing(session, credential)
+        if result.get("deployment_errors"):
+            logger.error(
+                "credential deployment sync finished with errors: credential=%s errors=%s",
+                credential.id,
+                result["deployment_errors"],
+            )
 
     await session.commit()
     credential = await credential_repo.find_by_id(session, credential.id)

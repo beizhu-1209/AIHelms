@@ -2,9 +2,13 @@ export interface DashboardStatus {
   activeUsers: number
   activeUsersChange: number
   todayRequests: number
+  totalRequests: number
   llmRequests: number
   mcpRequests: number
   todayCost: number
+  internalCost: number
+  externalCost: number
+  costDiff: number
   costChangePercent: number
   pendingCount: number
   pendingApprovals: number
@@ -12,16 +16,26 @@ export interface DashboardStatus {
 }
 
 export interface PendingItem {
+  id?: number
   type: 'approval' | 'budget_alert'
-  description: string
+  applicant?: string
+  resourceType?: string
+  resourceTypeLabel?: string
+  resourceName?: string
+  reason?: string
+  description?: string
+  createdAt?: string | null
   timeAgo: string
   linkUrl: string
 }
 
-export interface HourlyTrend {
+export interface TrendPoint {
+  label: string
   hour: number
   requests: number
 }
+
+export type HourlyTrend = TrendPoint
 
 export interface ResourceSummary {
   name: string
@@ -38,10 +52,31 @@ export interface RecentActivity {
   timeAgo: string
 }
 
+export interface ServiceStatusItem {
+  key: string
+  label: string
+  healthy: number
+  total: number
+  state: 'healthy' | 'warning' | 'danger' | 'empty'
+  description: string
+}
+
+export interface DashboardPeriod {
+  startDate: string
+  endDate: string
+  label: string
+}
+
 export interface DashboardData {
+  period: DashboardPeriod
+  lastUpdatedAt: string | null
+  lastUpdatedLabel: string
   status: DashboardStatus
   pendingItems: PendingItem[]
-  hourlyTrend: HourlyTrend[]
+  pendingApprovalsList: PendingItem[]
+  hourlyTrend: TrendPoint[]
+  requestTrend: TrendPoint[]
   resources: ResourceSummary[]
   recentActivities: RecentActivity[]
+  serviceStatus: ServiceStatusItem[]
 }

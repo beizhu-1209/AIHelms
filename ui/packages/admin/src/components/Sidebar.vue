@@ -31,6 +31,8 @@ import {
   ClipboardCheck,
   UserCircle2,
   DollarSign,
+  HeartPulse,
+  Download,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -63,6 +65,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     items: [
       { label: '审批管理', icon: ClipboardCheck, path: '/resource-approval', permission: 'resource_application:read' },
       { label: '日志管理', icon: FileText, path: '/logs', permission: 'usage_log:read' },
+      { label: '导出任务', icon: Download, path: '/export-tasks', permission: 'usage_log:read' },
     ],
   },
   {
@@ -111,6 +114,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     icon: FlaskConical,
     items: [
       { label: '报告', icon: FileText, path: '/efficiency/reports', permission: 'efficiency:read' },
+      { label: 'AI健康', icon: HeartPulse, path: '/ai-health', permission: 'efficiency:read' },
       { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
       { label: 'A2A', icon: GitBranch, path: '/a2a', disabled: true },
       { label: '上下文缓存', icon: Database, path: '/caching', disabled: true },

@@ -304,13 +304,18 @@ async def update_deployment(
         credential = await credential_repo.find_by_id(session, deployment.credential_id)
 
     if model and deployment.litellm_model_id:
-        sync_params = dict(deployment.litellm_params)
-        if credential and "litellm_credential_name" not in sync_params and "api_key" not in sync_params:
-            sync_params["litellm_credential_name"] = credential.credential_name
-        if credential and "api_base" not in sync_params:
-            cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
-            if cred_api_base:
-                sync_params["api_base"] = cred_api_base
+        sync_params = _apply_credential_to_litellm_params(deployment.litellm_params or {}, credential)
+        if credential:
+            prefix_info = await _resolve_prefix(session, credential, model.category)
+            if prefix_info:
+                raw_model = sync_params.get("model", "")
+                model_name_raw = raw_model.split("/")[-1] if "/" in raw_model else raw_model
+                if not model_name_raw:
+                    model_name_raw = model.model_id
+                sync_params["model"] = f"{prefix_info.prefix}/{model_name_raw}"
+                if prefix_info.needs_v1 and sync_params.get("api_base"):
+                    sync_params["api_base"] = _ensure_v1_suffix(sync_params["api_base"])
+        deployment.litellm_params = sync_params
         sync_params = _convert_cost_for_litellm(sync_params)
         routable = _deployment_routable(deployment, credential)
         sync_model_info = dict(deployment.model_info or {})
@@ -595,6 +600,22 @@ def _get_litellm_model_name(model: Model, credential=None, routable: bool = True
     return name
 
 
+def _apply_credential_to_litellm_params(litellm_params: dict, credential) -> dict:
+    """Keep credential-managed deployments aligned with the selected credential."""
+    if not credential:
+        return litellm_params
+    litellm_params = dict(litellm_params or {})
+    # 部署已绑定平台凭证时，LiteLLM 路由必须引用平台凭证，避免历史 inline key/base 覆盖编辑后的凭证。
+    litellm_params.pop("api_key", None)
+    litellm_params["litellm_credential_name"] = credential.credential_name
+    cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
+    if cred_api_base:
+        litellm_params["api_base"] = cred_api_base
+    else:
+        litellm_params.pop("api_base", None)
+    return litellm_params
+
+
 async def _sync_deployment_to_litellm(
     deployment: ModelDeployment,
     model: Model,
@@ -603,27 +624,18 @@ async def _sync_deployment_to_litellm(
 ) -> None:
     litellm_params = dict(deployment.litellm_params)
 
-    # Inject credential reference and api_base if not already specified
-    if credential and "litellm_credential_name" not in litellm_params and "api_key" not in litellm_params:
-        # Ensure credential exists in LiteLLM before referencing it
-        if not credential.litellm_synced:
-            try:
-                await litellm_client.create_credential(
-                    credential_name=credential.credential_name,
-                    credential_values=credential.credential_values,
-                    credential_info=credential.credential_info or {},
-                )
-                credential.litellm_synced = True
-            except litellm_client.LiteLLMError as e:
-                logger.error("credential sync failed before deployment: %s", e)
-                raise ConflictError("凭证同步失败，请检查凭证配置（API Key、API Base）是否正确")
-        litellm_params["litellm_credential_name"] = credential.credential_name
-
-        # Inject api_base from credential if not already in litellm_params
-        if "api_base" not in litellm_params:
-            cred_api_base = (credential.credential_values or {}).get("api_base") or (credential.credential_info or {}).get("api_base")
-            if cred_api_base:
-                litellm_params["api_base"] = cred_api_base
+    if credential and not credential.litellm_synced:
+        try:
+            await litellm_client.create_credential(
+                credential_name=credential.credential_name,
+                credential_values=credential.credential_values,
+                credential_info=credential.credential_info or {},
+            )
+            credential.litellm_synced = True
+        except litellm_client.LiteLLMError as e:
+            logger.error("credential sync failed before deployment: %s", e)
+            raise ConflictError("凭证同步失败，请检查凭证配置（API Key、API Base）是否正确")
+    litellm_params = _apply_credential_to_litellm_params(litellm_params, credential)
 
     # Auto-resolve prefix and normalize api_base via provider_prefix_map
     if session and credential:
@@ -834,9 +846,17 @@ async def sync_credential_routing(session: AsyncSession, credential) -> dict:
         if not model:
             continue
         routable = _deployment_routable(deployment, credential)
-        sync_params = dict(deployment.litellm_params)
-        if "litellm_credential_name" not in sync_params and "api_key" not in sync_params:
-            sync_params["litellm_credential_name"] = credential.credential_name
+        sync_params = _apply_credential_to_litellm_params(deployment.litellm_params or {}, credential)
+        prefix_info = await _resolve_prefix(session, credential, model.category)
+        if prefix_info:
+            raw_model = sync_params.get("model", "")
+            model_name_raw = raw_model.split("/")[-1] if "/" in raw_model else raw_model
+            if not model_name_raw:
+                model_name_raw = model.model_id
+            sync_params["model"] = f"{prefix_info.prefix}/{model_name_raw}"
+            if prefix_info.needs_v1 and sync_params.get("api_base"):
+                sync_params["api_base"] = _ensure_v1_suffix(sync_params["api_base"])
+        deployment.litellm_params = sync_params
         sync_params = _convert_cost_for_litellm(sync_params)
         sync_model_info = dict(deployment.model_info or {})
         sync_model_info["active"] = routable

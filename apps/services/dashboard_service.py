@@ -1,10 +1,14 @@
 """Dashboard 数据聚合 Service。"""
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+import os
+import subprocess
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from repositories import dashboard_repo
 
 from models.db import (
     AdminAuditLog,
@@ -14,6 +18,7 @@ from models.db import (
     Department,
     McpServer,
     Model,
+    ModelDeployment,
     Project,
     ResourceApplication,
     Skill,
@@ -21,197 +26,230 @@ from models.db import (
 )
 
 
-async def get_dashboard(session: AsyncSession) -> dict:
-    """聚合 Dashboard 所有板块数据。"""
-    today = date.today()
-    yesterday = today - timedelta(days=1)
+def _prev_period(start_date: date, end_date: date) -> tuple[date, date]:
+    days = (end_date - start_date).days + 1
+    prev_end = start_date - timedelta(days=1)
+    return prev_end - timedelta(days=days - 1), prev_end
 
-    pending_items = await _get_pending_items(session)
-    status = await _get_status(session, today, yesterday, pending_items)
-    hourly_trend = await _get_hourly_trend(session, today)
+
+async def get_dashboard(session: AsyncSession, start_date: date, end_date: date) -> dict:
+    """聚合 Dashboard 所有板块数据。"""
+    prev_start, prev_end = _prev_period(start_date, end_date)
+    status = await _get_status(session, start_date, end_date, prev_start, prev_end)
+    trend = await _get_request_trend(session, start_date, end_date)
     resources = await _get_resources(session)
     recent_activities = await _get_recent_activities(session)
+    pending_approvals, pending_total = await _get_latest_pending_approvals(session)
+    service_status = await _get_service_status(session)
+    last_updated_at = await _get_last_updated_at(session)
+
+    status["pendingCount"] = pending_total
+    status["pendingApprovals"] = pending_total
+    status["pendingAlerts"] = 0
 
     return {
+        "period": {
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "label": _period_label(start_date, end_date),
+        },
+        "lastUpdatedAt": last_updated_at.isoformat() if last_updated_at else None,
+        "lastUpdatedLabel": _time_ago(last_updated_at),
         "status": status,
-        "pendingItems": pending_items,
-        "hourlyTrend": hourly_trend,
+        "requestTrend": trend,
+        "hourlyTrend": trend,
         "resources": resources,
         "recentActivities": recent_activities,
+        "pendingApprovalsList": pending_approvals,
+        "pendingItems": pending_approvals,
+        "serviceStatus": service_status,
     }
+
+
+async def request_refresh() -> dict:
+    """提交共享效能数据更新任务。"""
+    from services import efficiency_service
+
+    data = await efficiency_service.request_refresh("dashboard")
+    return {
+        "status": data.get("update_status"),
+        "taskId": data.get("task_id"),
+        "reason": data.get("reason", ""),
+    }
+
+
+def get_refresh_status(task_id: str) -> dict:
+    from services import efficiency_service
+
+    status = efficiency_service.get_refresh_status(task_id)
+    return {"status": status["state"], "taskId": task_id, **status}
 
 
 async def _get_status(
     session: AsyncSession,
-    today: date,
-    yesterday: date,
-    pending_items: list[dict],
+    start_date: date,
+    end_date: date,
+    prev_start: date,
+    prev_end: date,
 ) -> dict:
-    """今日核心指标 + 昨日对比值。"""
-    today_result = await session.execute(
-        select(
-            func.count(func.distinct(CostSummaryDaily.user_id)).label("active_users"),
-            func.coalesce(func.sum(CostSummaryDaily.total_requests), 0).label("requests"),
-            func.coalesce(func.sum(CostSummaryDaily.internal_cost), 0).label("cost"),
-        ).where(
-            CostSummaryDaily.summary_date == today,
-            CostSummaryDaily.user_id.isnot(None),
-        )
-    )
-    today_row = today_result.one()
-
-    yesterday_result = await session.execute(
-        select(
-            func.count(func.distinct(CostSummaryDaily.user_id)).label("active_users"),
-            func.coalesce(func.sum(CostSummaryDaily.internal_cost), 0).label("cost"),
-        ).where(
-            CostSummaryDaily.summary_date == yesterday,
-            CostSummaryDaily.user_id.isnot(None),
-        )
-    )
-    yesterday_row = yesterday_result.one()
-
-    llm_result = await session.execute(
-        select(
-            func.coalesce(func.sum(CostSummaryDaily.total_requests), 0),
-        ).where(
-            CostSummaryDaily.summary_date == today,
-            CostSummaryDaily.cost_type == "llm",
-        )
-    )
-    llm_requests = int(llm_result.scalar() or 0)
-
-    mcp_result = await session.execute(
-        select(
-            func.coalesce(func.sum(CostSummaryDaily.total_requests), 0),
-        ).where(
-            CostSummaryDaily.summary_date == today,
-            CostSummaryDaily.cost_type == "mcp",
-        )
-    )
-    mcp_requests = int(mcp_result.scalar() or 0)
-
-    cost_today = float(today_row.cost)
-    cost_yesterday = float(yesterday_row.cost)
-    cost_change_percent = (
-        round((cost_today - cost_yesterday) / cost_yesterday * 100)
-        if cost_yesterday > 0
-        else 0
-    )
-
-    pending_approvals = sum(1 for i in pending_items if i["type"] == "approval")
-    pending_alerts = sum(1 for i in pending_items if i["type"] == "budget_alert")
+    current = await _range_status(session, start_date, end_date)
+    previous = await _range_status(session, prev_start, prev_end)
+    cost_change_percent = _calc_change(current["internalCost"], previous["internalCost"])
 
     return {
-        "activeUsers": int(today_row.active_users),
-        "activeUsersChange": int(today_row.active_users) - int(yesterday_row.active_users),
-        "todayRequests": int(today_row.requests),
-        "llmRequests": llm_requests,
-        "mcpRequests": mcp_requests,
-        "todayCost": cost_today,
+        "activeUsers": current["activeUsers"],
+        "activeUsersChange": current["activeUsers"] - previous["activeUsers"],
+        "todayRequests": current["totalRequests"],
+        "totalRequests": current["totalRequests"],
+        "llmRequests": current["llmRequests"],
+        "mcpRequests": current["mcpRequests"],
+        "todayCost": current["internalCost"],
+        "internalCost": current["internalCost"],
+        "externalCost": current["externalCost"],
+        "costDiff": round(current["internalCost"] - current["externalCost"], 2),
         "costChangePercent": cost_change_percent,
-        "pendingCount": len(pending_items),
-        "pendingApprovals": pending_approvals,
-        "pendingAlerts": pending_alerts,
+        "pendingCount": 0,
+        "pendingApprovals": 0,
+        "pendingAlerts": 0,
     }
 
 
-async def _get_pending_items(session: AsyncSession) -> list[dict]:
-    """待处理事项：待审批 + 预算预警。"""
-    items: list[dict] = []
+async def _range_status(session: AsyncSession, start_date: date, end_date: date) -> dict:
+    return await dashboard_repo.get_range_status(session, start_date, end_date)
 
-    applications = await session.execute(
+async def _get_request_trend(session: AsyncSession, start_date: date, end_date: date) -> list[dict]:
+    return await dashboard_repo.get_request_trend(session, start_date, end_date)
+
+async def _get_latest_pending_approvals(session: AsyncSession) -> tuple[list[dict], int]:
+    total_result = await session.execute(
+        select(func.count(ResourceApplication.id)).where(ResourceApplication.status == "pending")
+    )
+    total = int(total_result.scalar() or 0)
+    result = await session.execute(
         select(ResourceApplication)
         .where(ResourceApplication.status == "pending")
         .order_by(ResourceApplication.created_at.desc())
-        .limit(20)
+        .limit(5)
     )
-    for app in applications.scalars().all():
-        user_display = (
-            app.user.display_name or app.user.username if app.user else "未知用户"
-        )
-        resource_name = _build_resource_title(app.resource_type, app.reason)
-        type_label = _resource_type_label(app.resource_type)
-        description = f"{user_display} 申请使用「{resource_name}」{type_label}"
-        items.append({
+    rows = []
+    for app in result.scalars().all():
+        applicant = app.user.display_name or app.user.username if app.user else "未知用户"
+        rows.append({
+            "id": app.id,
             "type": "approval",
-            "description": description,
+            "applicant": applicant,
+            "resourceType": app.resource_type,
+            "resourceTypeLabel": _resource_type_label(app.resource_type),
+            "resourceName": _build_resource_title(app.resource_type, app.reason),
+            "reason": app.reason or "",
+            "createdAt": app.created_at.isoformat() if app.created_at else None,
             "timeAgo": _time_ago(app.created_at),
-            "linkUrl": "/resource-approval",
+            "linkUrl": f"/resource-approval?status=pending&keyword={app.id}",
         })
+    return rows, total
 
-    budget_alerts = await session.execute(
-        select(AiKey).where(
-            AiKey.budget_limit.isnot(None),
-            AiKey.budget_limit > 0,
-            AiKey.is_active.is_(True),
-            (AiKey.budget_used / AiKey.budget_limit) > Decimal("0.9"),
-        ).limit(10)
+
+async def _get_service_status(session: AsyncSession) -> list[dict]:
+    mcp_total = await _count(session, McpServer, McpServer.is_published.is_(True))
+    mcp_healthy = await _count(
+        session,
+        McpServer,
+        McpServer.is_published.is_(True),
+        McpServer.status.in_(["healthy", "success", "online", "ok"]),
     )
-    for key in budget_alerts.scalars().all():
-        usage_rate = (
-            int(key.budget_used / key.budget_limit * 100) if key.budget_limit else 0
-        )
-        description = f"「{key.name}」预算执行率 {usage_rate}%"
-        items.append({
-            "type": "budget_alert",
-            "description": description,
-            "timeAgo": _time_ago(key.updated_at),
-            "linkUrl": "/ai-identity",
-        })
+    model_health = await _get_model_health_summary(session)
+    model_total = model_health["total"]
+    model_healthy = model_health["healthy"]
+    latest = await _get_last_updated_at(session)
+    update_minutes = _minutes_since(latest)
+    update_healthy = latest is not None and update_minutes <= 30
 
-    return items
+    docker_status = await _get_docker_status()
+    return [
+        {
+            "key": "mcp",
+            "label": "MCP上游健康",
+            "healthy": mcp_healthy,
+            "total": mcp_total,
+            "state": _health_state(mcp_healthy, mcp_total),
+            "description": f"可用 {mcp_healthy} / 共 {mcp_total}",
+        },
+        {
+            "key": "model",
+            "label": "模型健康",
+            "healthy": model_healthy,
+            "total": model_total,
+            "state": _health_state(model_healthy, model_total),
+            "description": f"启用部署 {model_healthy} / 共 {model_total}",
+        },
+        {
+            "key": "docker",
+            "label": "Docker环境",
+            "healthy": docker_status["healthy"],
+            "total": docker_status["total"],
+            "state": docker_status["state"],
+            "description": docker_status["description"],
+        },
+        {
+            "key": "efficiency",
+            "label": "效能数据更新",
+            "healthy": 1 if update_healthy else 0,
+            "total": 1,
+            "state": "healthy" if update_healthy else "warning",
+            "description": f"最后更新时间：{_time_ago(latest)}",
+        },
+    ]
 
 
-async def _get_hourly_trend(session: AsyncSession, today: date) -> list[dict]:
-    """今日逐小时调用量（LLM + MCP 合并）。"""
-    llm_sql = text("""
-        SELECT EXTRACT(HOUR FROM started_at)::int AS hour,
-               COUNT(*) AS cnt
-        FROM aihelms.llm_call_logs
-        WHERE started_at::date = :today
-        GROUP BY 1
-    """)
-    mcp_sql = text("""
-        SELECT EXTRACT(HOUR FROM called_at)::int AS hour,
-               COUNT(*) AS cnt
-        FROM aihelms.mcp_call_logs
-        WHERE called_at::date = :today
-        GROUP BY 1
-    """)
+async def _get_model_health_summary(session: AsyncSession) -> dict:
+    return await dashboard_repo.get_model_health_summary(session)
 
-    llm_result = await session.execute(llm_sql, {"today": today})
-    mcp_result = await session.execute(mcp_sql, {"today": today})
+async def _get_docker_status() -> dict:
+    checks = [
+        os.path.exists("/.dockerenv"),
+        os.path.exists("/var/run/docker.sock"),
+    ]
+    total = len(checks)
+    healthy = sum(1 for item in checks if item)
+    if checks[1]:
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ["docker", "version", "--format", "{{.Server.Version}}"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+            total += 1
+            if proc.stdout.strip():
+                healthy += 1
+        except Exception:
+            total += 1
+    return {
+        "healthy": healthy,
+        "total": total,
+        "state": _health_state(healthy, total),
+        "description": f"检测通过 {healthy} / 共 {total}",
+    }
 
-    hourly: dict[int, int] = {h: 0 for h in range(24)}
-    for row in llm_result.fetchall():
-        hourly[int(row[0])] += int(row[1])
-    for row in mcp_result.fetchall():
-        hourly[int(row[0])] += int(row[1])
 
-    return [{"hour": h, "requests": c} for h, c in sorted(hourly.items())]
-
+async def _get_last_updated_at(session: AsyncSession) -> datetime | None:
+    return await dashboard_repo.get_last_updated_at(session)
 
 async def _get_resources(session: AsyncSession) -> list[dict]:
-    """平台资源数量汇总，返回前端期望的数组格式。"""
     models_total = await _count(session, Model)
     models_published = await _count(session, Model, Model.is_published.is_(True))
-
     mcp_total = await _count(session, McpServer)
     mcp_published = await _count(session, McpServer, McpServer.is_published.is_(True))
-
     skills_total = await _count(session, Skill)
     skills_published = await _count(session, Skill, Skill.is_published.is_(True))
-
     agents_total = await _count(session, Agent)
     agents_published = await _count(session, Agent, Agent.is_published.is_(True))
-
     ai_keys_total = await _count(session, AiKey)
     ai_keys_active = await _count(session, AiKey, AiKey.is_active.is_(True))
-
     users_total = await _count(session, User)
     users_active = await _count(session, User, User.is_active.is_(True))
-
     departments_total = await _count(session, Department)
     projects_total = await _count(session, Project)
 
@@ -220,76 +258,81 @@ async def _get_resources(session: AsyncSession) -> list[dict]:
         {"name": "MCP", "icon": "mcp", "total": mcp_total, "active": mcp_published, "activeLabel": "已发布", "linkPath": "/mcp"},
         {"name": "Skill", "icon": "skill", "total": skills_total, "active": skills_published, "activeLabel": "已发布", "linkPath": "/skills"},
         {"name": "智能体", "icon": "agent", "total": agents_total, "active": agents_published, "activeLabel": "已发布", "linkPath": "/agents"},
-        {"name": "AI Key", "icon": "ai_key", "total": ai_keys_total, "active": ai_keys_active, "activeLabel": "启用", "linkPath": "/ai-identity"},
-        {"name": "用户", "icon": "user", "total": users_total, "active": users_active, "activeLabel": "活跃", "linkPath": "/users"},
+        {"name": "AI Key", "icon": "ai_key", "total": ai_keys_total, "active": ai_keys_active, "activeLabel": "启用", "linkPath": "/ai-keys"},
+        {"name": "用户", "icon": "user", "total": users_total, "active": users_active, "activeLabel": "启用", "linkPath": "/users"},
         {"name": "部门", "icon": "department", "total": departments_total, "active": None, "activeLabel": "", "linkPath": "/departments"},
         {"name": "项目", "icon": "project", "total": projects_total, "active": None, "activeLabel": "", "linkPath": "/projects"},
     ]
 
 
 async def _get_recent_activities(session: AsyncSession) -> list[dict]:
-    """最新 5 条管理员操作日志。"""
-    result = await session.execute(
-        select(AdminAuditLog)
-        .order_by(AdminAuditLog.created_at.desc())
-        .limit(5)
-    )
-    logs = result.scalars().all()
+    result = await session.execute(select(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()).limit(5))
     return [
-        {
-            "actor": log.username or "系统",
-            "action": log.action or log.path,
-            "timeAgo": _time_ago(log.created_at),
-        }
-        for log in logs
+        {"actor": log.username or "系统", "action": log.action or log.path, "timeAgo": _time_ago(log.created_at)}
+        for log in result.scalars().all()
     ]
 
 
 async def _count(session: AsyncSession, model: type, *filters) -> int:
-    """通用计数辅助。"""
     stmt = select(func.count()).select_from(model)
     for f in filters:
         stmt = stmt.where(f)
     result = await session.execute(stmt)
-    return result.scalar() or 0
+    return int(result.scalar() or 0)
 
 
-def _time_ago(dt: datetime | None) -> str:
-    """将时间转为相对描述（如 '5分钟前'）。"""
+def _calc_change(current: float, previous: float) -> float:
+    if previous == 0:
+        return 0
+    return round((current - previous) / previous * 100, 1)
+
+
+def _minutes_since(dt: datetime | None) -> int:
     if not dt:
-        return ""
+        return 10**9
     now = datetime.now(timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    diff = now - dt
-    seconds = int(diff.total_seconds())
+    return max(int((now - dt).total_seconds() // 60), 0)
+
+
+def _time_ago(dt: datetime | None) -> str:
+    if not dt:
+        return "暂无更新"
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    seconds = max(int((now - dt).total_seconds()), 0)
     if seconds < 60:
         return "刚刚"
     minutes = seconds // 60
     if minutes < 60:
         return f"{minutes}分钟前"
-    hours = minutes // 60
-    if hours < 24:
-        return f"{hours}小时前"
-    days = hours // 24
-    if days < 30:
-        return f"{days}天前"
-    return dt.strftime("%m-%d")
+    return dt.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def _health_state(healthy: int, total: int) -> str:
+    if total == 0:
+        return "empty"
+    if healthy == total:
+        return "healthy"
+    if healthy == 0:
+        return "danger"
+    return "warning"
 
 
 def _resource_type_label(resource_type: str) -> str:
-    """资源类型中文标签。"""
-    labels = {
-        "model": "模型",
-        "mcp": "MCP",
-        "skill": "Skill",
-        "agent": "智能体",
-    }
+    labels = {"model": "模型", "mcp": "MCP", "skill": "Skill", "agent": "智能体"}
     return labels.get(resource_type, resource_type)
 
 
 def _build_resource_title(resource_type: str, reason: str) -> str:
-    """从申请信息中提取资源名称。"""
     if reason:
-        return reason[:20]
+        return reason[:30]
     return _resource_type_label(resource_type)
+
+
+def _period_label(start_date: date, end_date: date) -> str:
+    if start_date == end_date:
+        return start_date.isoformat()
+    return f"{start_date.isoformat()} 至 {end_date.isoformat()}"

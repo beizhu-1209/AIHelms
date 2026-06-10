@@ -8,6 +8,7 @@ export interface UsageLogUser {
 export interface UsageLogAiKey {
   id: number
   name: string
+  key_token?: string
 }
 
 export interface UsageLogMcpServer {
@@ -116,6 +117,7 @@ export interface LlmLogFilters {
 export interface McpLogFilters {
   users: UsageLogUser[]
   servers: UsageLogMcpServer[]
+  ai_keys: UsageLogAiKey[]
   tool_names: string[]
 }
 

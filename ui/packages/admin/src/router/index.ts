@@ -135,10 +135,22 @@ const router = createRouter({
           meta: { permission: 'usage_log:read' },
         },
         {
+          path: 'export-tasks',
+          name: 'ExportTasksManage',
+          component: () => import('../views/audit/ExportTasksManage.vue'),
+          meta: { permission: 'usage_log:read' },
+        },
+        {
           path: 'business-scenarios',
           name: 'BusinessScenarioManage',
           component: () => import('../views/business-scenarios/BusinessScenarioManage.vue'),
           meta: { permission: 'user:read' },
+        },
+        {
+          path: 'ai-health',
+          name: 'AIHealth',
+          component: () => import('../views/efficiency/HealthView.vue'),
+          meta: { permission: 'efficiency:read' },
         },
         {
           path: 'efficiency',
@@ -164,6 +176,10 @@ const router = createRouter({
               path: 'budget',
               name: 'EfficiencyBudget',
               component: () => import('../views/efficiency/BudgetView.vue'),
+            },
+            {
+              path: 'health',
+              redirect: '/ai-health',
             },
             {
               path: 'reports',

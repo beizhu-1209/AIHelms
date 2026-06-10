@@ -16,6 +16,7 @@ export interface AiKey {
   skills: number[]
   agents: number[]
   budget_limit: string | null
+  budget_used?: string | number | null
   budget_hard_limit: boolean
   budget_duration: string | null
   budget_scope: BudgetScope

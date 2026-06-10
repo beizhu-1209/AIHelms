@@ -459,6 +459,9 @@ class ResourceApplication(Base):
     reason: Mapped[str] = mapped_column(Text, default="")
     request_config: Mapped[dict] = mapped_column(JSONB, default=dict)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    celery_task_id: Mapped[str] = mapped_column(String(100), default="")
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    retry_of_task_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.users.id"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     review_notes: Mapped[str] = mapped_column(Text, default="")
@@ -696,6 +699,34 @@ class AdminAuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+
+
+class ExportTask(Base):
+    __tablename__ = "export_tasks"
+    __table_args__ = {"schema": "aihelms"}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    export_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    celery_task_id: Mapped[str] = mapped_column(String(100), default="")
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    retry_of_task_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    params: Mapped[dict] = mapped_column(JSONB, default=dict)
+    file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    row_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    created_by_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_by_name: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
     __table_args__ = {"schema": "aihelms"}
@@ -771,6 +802,9 @@ class EfficiencySuggestion(Base):
     priority: Mapped[str] = mapped_column(String(20), nullable=False)
     expected_impact: Mapped[str] = mapped_column(String(500), default="")
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    celery_task_id: Mapped[str] = mapped_column(String(100), default="")
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    retry_of_task_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     status_note: Mapped[str] = mapped_column(Text, default="")
     status_updated_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.users.id"), nullable=True)
     status_updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
