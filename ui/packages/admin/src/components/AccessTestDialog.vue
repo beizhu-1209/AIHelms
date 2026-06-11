@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { testModelAccessStream } from '@aihelms/shared'
+import type { AccessTestErrorDetail } from '@aihelms/shared'
 
 interface Props {
   visible: boolean
@@ -21,12 +22,16 @@ const streamEnabled = ref(true)
 const outputContent = ref('')
 const isStreaming = ref(false)
 const errorMsg = ref('')
+const errorDetail = ref<AccessTestErrorDetail | null>(null)
+const showTechnicalDetail = ref(false)
 
 watch(() => props.visible, (val) => {
   if (val) {
     modelInput.value = props.defaultModel || ''
     outputContent.value = ''
     errorMsg.value = ''
+    errorDetail.value = null
+    showTechnicalDetail.value = false
     isStreaming.value = false
   }
 })
@@ -40,6 +45,8 @@ async function handleSend(): Promise<void> {
 
   outputContent.value = ''
   errorMsg.value = ''
+  errorDetail.value = null
+  showTechnicalDetail.value = false
   isStreaming.value = true
 
   try {
@@ -62,7 +69,7 @@ async function handleSend(): Promise<void> {
     if (!contentType.includes('text/event-stream')) {
       const json = await response.json()
       if (json.data?.success === false) {
-        errorMsg.value = json.data.error || '测试失败'
+        setAccessError(json.data.error_detail, json.data.error || '测试失败')
       } else if (json.data?.dimensions !== undefined) {
         outputContent.value = `测试成功\n维度: ${json.data.dimensions}\n模型: ${json.data.model}\nTokens: ${json.data.usage?.prompt_tokens || 0}`
       } else if (json.data?.results) {
@@ -102,7 +109,7 @@ async function handleSend(): Promise<void> {
           return
         }
         if (data.startsWith('[ERROR]')) {
-          errorMsg.value = data.slice(8)
+          setAccessErrorFromStream(data.slice(8).trim())
           isStreaming.value = false
           return
         }
@@ -118,6 +125,24 @@ async function handleSend(): Promise<void> {
 
 function handleClose(): void {
   emit('close')
+}
+
+function setAccessError(detail: AccessTestErrorDetail | undefined, fallback: string): void {
+  if (detail) {
+    errorDetail.value = detail
+    errorMsg.value = detail.title || fallback
+    return
+  }
+  errorMsg.value = fallback
+}
+
+function setAccessErrorFromStream(payload: string): void {
+  try {
+    const parsed = JSON.parse(payload) as AccessTestErrorDetail
+    setAccessError(parsed, parsed.title || '测试失败')
+  } catch {
+    errorMsg.value = payload || '测试失败'
+  }
 }
 </script>
 
@@ -214,7 +239,22 @@ function handleClose(): void {
         <!-- Output area -->
         <div v-if="outputContent || errorMsg" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <label class="mb-2 block text-xs font-medium text-slate-500">测试结果</label>
-          <div v-if="errorMsg" class="text-sm text-red-600">{{ errorMsg }}</div>
+          <div v-if="errorMsg" class="space-y-2">
+            <div class="text-sm font-medium text-red-600">{{ errorDetail?.title || errorMsg }}</div>
+            <div v-if="errorDetail?.message" class="text-sm leading-6 text-slate-600">{{ errorDetail.message }}</div>
+            <button
+              v-if="errorDetail?.technical_detail"
+              type="button"
+              class="text-xs font-medium text-slate-500 hover:text-slate-700"
+              @click="showTechnicalDetail = !showTechnicalDetail"
+            >
+              {{ showTechnicalDetail ? '收起技术详情' : '查看技术详情' }}
+            </button>
+            <pre
+              v-if="showTechnicalDetail && errorDetail?.technical_detail"
+              class="max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-500"
+            >{{ errorDetail.technical_detail }}</pre>
+          </div>
           <div v-else class="whitespace-pre-wrap text-sm text-slate-800">{{ outputContent }}<span v-if="isStreaming" class="inline-block h-4 w-1.5 animate-pulse bg-slate-400" /></div>
         </div>
       </div>

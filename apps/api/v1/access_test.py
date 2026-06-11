@@ -1,15 +1,21 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db, require_permission
-from models.db import AiKey
+from models.db import Model
 from repositories import model_repo
 from services import access_test_service
+from services.access_test_error_mapper import build_failure
+from services.access_test_precheck import precheck_access_test
 
 router = APIRouter(prefix="/access-test", tags=["access-test"])
+
+STREAM_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+}
 
 
 class TestAccessRequest(BaseModel):
@@ -46,38 +52,48 @@ async def test_access(
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_permission("user:read")),
 ):
-    # 获取当前用户的 LiteLLM key
-    user_api_key: str | None = None
-    result = await session.execute(
-        select(AiKey.litellm_key_id).where(
-            AiKey.owner_type == "user",
-            AiKey.owner_id == current_user["id"],
-            AiKey.key_type == "personal_main",
-            AiKey.is_active == True,
-        ).limit(1)
-    )
-    key_id = result.scalar_one_or_none()
-    if key_id:
-        user_api_key = key_id
-
     # 自动判断模型类型
     model_id = req.model
     model_obj = await model_repo.find_by_model_id(session, model_id)
     if not model_obj and "/" in model_id:
         model_obj = await model_repo.find_by_model_id(session, model_id.split("/")[-1])
     category = model_obj.category if model_obj else "chat"
-    test_model = model_obj.model_id if model_obj else model_id
+    test_model = model_obj.model_id if model_obj and model_obj.model_id else model_id
+    user_key, error_detail = await precheck_access_test(
+        session,
+        current_user["id"],
+        model_obj,
+        test_model,
+    )
+    if error_detail:
+        return _build_error_response(error_detail, category, req.stream)
+    user_api_key = user_key.litellm_key_id if user_key else ""
 
     if category == "embedding":
-        text = req.messages[0].get("content", "你好世界") if req.messages else "你好世界"
-        result = await access_test_service.test_embedding(model=test_model, text=text, api_key=user_api_key)
+        text = (
+            req.messages[0].get("content", "你好世界") if req.messages else "你好世界"
+        )
+        result = await access_test_service.test_embedding(
+            model=test_model,
+            text=text,
+            api_key=user_api_key,
+        )
         return {"code": 200, "message": "Embedding 测试完成", "data": result}
 
     if category == "rerank":
-        query = req.messages[0].get("content", "什么是人工智能？") if req.messages else "什么是人工智能？"
+        query = (
+            req.messages[0].get("content", "什么是人工智能？")
+            if req.messages
+            else "什么是人工智能？"
+        )
         result = await access_test_service.test_rerank(
-            model=test_model, query=query,
-            documents=["人工智能是计算机科学的一个分支", "今天天气很好", "机器学习是AI的核心技术"],
+            model=test_model,
+            query=query,
+            documents=[
+                "人工智能是计算机科学的一个分支",
+                "今天天气很好",
+                "机器学习是AI的核心技术",
+            ],
             api_key=user_api_key,
         )
         return {"code": 200, "message": "Rerank 测试完成", "data": result}
@@ -91,10 +107,7 @@ async def test_access(
                 api_key=user_api_key,
             ),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
+            headers=STREAM_HEADERS,
         )
     result = await access_test_service.test_model_sync(
         model=test_model,
@@ -105,14 +118,57 @@ async def test_access(
     return {"code": 200, "message": "模型测试完成", "data": result}
 
 
+def _build_error_response(
+    error_detail: dict[str, object],
+    category: str,
+    stream: bool,
+) -> dict[str, object] | StreamingResponse:
+    if category == "chat" and stream:
+        return StreamingResponse(
+            access_test_service.test_error_stream(error_detail),
+            media_type="text/event-stream",
+            headers=STREAM_HEADERS,
+        )
+    return {
+        "code": 200,
+        "message": "模型测试完成",
+        "data": build_failure(error_detail),
+    }
+
+
+async def _resolve_model(
+    session: AsyncSession, model_id: str
+) -> tuple[Model | None, str]:
+    model_obj = await model_repo.find_by_model_id(session, model_id)
+    if not model_obj and "/" in model_id:
+        model_obj = await model_repo.find_by_model_id(session, model_id.split("/")[-1])
+    test_model = model_obj.model_id if model_obj and model_obj.model_id else model_id
+    return model_obj, test_model
+
+
 @router.post("/test-embedding", summary="Embedding 测试")
 async def test_embedding(
     req: TestEmbeddingRequest,
-    _: dict = Depends(require_permission("user:read")),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_permission("user:read")),
 ):
+    model_obj, test_model = await _resolve_model(session, req.model)
+    user_key, error_detail = await precheck_access_test(
+        session,
+        current_user["id"],
+        model_obj,
+        test_model,
+    )
+    if error_detail:
+        return {
+            "code": 200,
+            "message": "Embedding 测试完成",
+            "data": build_failure(error_detail),
+        }
     result = await access_test_service.test_embedding(
-        model=req.model,
+        model=test_model,
         text=req.text,
+        api_key=user_key.litellm_key_id if user_key else "",
     )
     return {"code": 200, "message": "Embedding 测试完成", "data": result}
 
@@ -120,11 +176,26 @@ async def test_embedding(
 @router.post("/test-rerank", summary="Rerank 测试")
 async def test_rerank(
     req: TestRerankRequest,
-    _: dict = Depends(require_permission("user:read")),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_permission("user:read")),
 ):
+    model_obj, test_model = await _resolve_model(session, req.model)
+    user_key, error_detail = await precheck_access_test(
+        session,
+        current_user["id"],
+        model_obj,
+        test_model,
+    )
+    if error_detail:
+        return {
+            "code": 200,
+            "message": "Rerank 测试完成",
+            "data": build_failure(error_detail),
+        }
     result = await access_test_service.test_rerank(
-        model=req.model,
+        model=test_model,
         query=req.query,
         documents=req.documents,
+        api_key=user_key.litellm_key_id if user_key else "",
     )
     return {"code": 200, "message": "Rerank 测试完成", "data": result}

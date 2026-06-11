@@ -5,11 +5,20 @@ export interface TestAccessParams {
   max_tokens?: number
 }
 
+export interface AccessTestErrorDetail {
+  category: string
+  title: string
+  message: string
+  technical_detail: string
+  status_code?: number
+}
+
 export interface TestAccessResult {
   success: boolean
   content: string
   model?: string
   error?: string
+  error_detail?: AccessTestErrorDetail
   usage?: {
     prompt_tokens: number
     completion_tokens: number
@@ -27,6 +36,7 @@ export interface TestEmbeddingResult {
   dimensions?: number
   model?: string
   error?: string
+  error_detail?: AccessTestErrorDetail
   usage?: {
     prompt_tokens: number
     total_tokens: number
@@ -44,4 +54,5 @@ export interface TestRerankResult {
   results?: { index: number; relevance_score: number }[]
   model?: string
   error?: string
+  error_detail?: AccessTestErrorDetail
 }

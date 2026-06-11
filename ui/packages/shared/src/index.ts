@@ -25,7 +25,7 @@ export { getProviders, getProviderById, createProvider, updateProvider, deletePr
 export { getCredentials, getCredentialById, createCredential, updateCredential, deleteCredential, getProviderFields, getCredentialModels, getProviderModels } from './api/credential'
 export { getModels, getModelById, getActiveModels, createModel, updateModel, deleteModel, createDeployment, updateDeployment, deleteDeployment, getAccessGroups, createAccessGroup, updateAccessGroup, deleteAccessGroup, getRouterSettings, updateRouterSettings, getModelVisibility, updateModelPublish } from './api/model'
 export { testModelAccessStream, testModelAccessSync, testEmbedding, testRerank } from './api/accessTest'
-export type { TestAccessParams, TestAccessResult, TestEmbeddingParams, TestEmbeddingResult, TestRerankParams, TestRerankResult } from './types/accessTest'
+export type { AccessTestErrorDetail, TestAccessParams, TestAccessResult, TestEmbeddingParams, TestEmbeddingResult, TestRerankParams, TestRerankResult } from './types/accessTest'
 export type { McpServer, McpTool, McpCategory, McpServerListResult, CreateMcpServerParams, UpdateMcpServerParams, UpdateToolBillingParams, CreateMcpCategoryParams } from './types/mcp'
 export { getMcpServers, getMcpServerById, createMcpServer, updateMcpServer, deleteMcpServer, getMcpTools, refreshMcpTools, updateToolBilling, healthCheckMcpServer, getMcpCategories, createMcpCategory, deleteMcpCategory } from './api/mcp'
 export type { Skill, SkillCategory, SkillListResult, CreateSkillCategoryParams } from './types/skill'
