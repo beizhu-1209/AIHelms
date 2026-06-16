@@ -15,7 +15,7 @@ import {
   type Credential,
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
-import { Eye, EyeOff } from 'lucide-vue-next'
+import { Eye, EyeOff, ChevronRight } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import AccessTestDialog from '../../components/AccessTestDialog.vue'
 import ProviderIcon from '../../components/ProviderIcon.vue'
@@ -646,9 +646,12 @@ onMounted(() => {
             <label class="mb-1.5 block text-sm font-medium text-slate-700">API Base <span class="text-red-400">*</span></label>
             <input
               v-model="credFormApiBase"
-              placeholder="如 https://api.openai.com/v1"
+              placeholder="如 https://api.deepseek.com 或 https://api.openai.com"
               class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
             />
+            <p class="mt-1.5 text-xs leading-5 text-slate-500">
+              示例：https://api.deepseek.com 或 https://api.openai.com。请填写服务基础地址，不要填写 /v1/chat、/v1/chat/completions 等接口路径。
+            </p>
           </div>
           <div v-if="selectedFormatNeedsKey" class="mb-3">
             <label class="mb-1.5 block text-sm font-medium text-slate-700">API Key <span v-if="!isEditingCred" class="text-red-400">*</span></label>
@@ -677,7 +680,7 @@ onMounted(() => {
               class="flex w-full items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
               @click="showCredAdvanced = !showCredAdvanced"
             >
-              <span class="text-xs transition-transform" :class="showCredAdvanced ? 'rotate-90' : ''">▶</span>
+              <ChevronRight class="h-3.5 w-3.5 transition-transform" :class="showCredAdvanced ? 'rotate-90' : ''" />
               高级设置
               <span class="text-xs text-slate-400">（计费、限流）</span>
             </button>
