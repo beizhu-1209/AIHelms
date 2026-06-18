@@ -287,6 +287,7 @@ async def update_router_settings(settings: dict) -> dict:
 async def create_mcp_server(
     server_name: str,
     url: str,
+    server_id: str | None = None,
     transport: str = "sse",
     auth_type: str | None = None,
     credentials: dict | None = None,
@@ -301,6 +302,8 @@ async def create_mcp_server(
         "url": url,
         "transport": transport,
     }
+    if server_id:
+        data["server_id"] = server_id
     if auth_type:
         data["auth_type"] = auth_type
     if credentials:
@@ -390,7 +393,10 @@ async def test_mcp_connection(
 
 
 async def list_mcp_tools_from_server(
-    url: str, transport: str = "sse", auth_type: str | None = None, credentials: dict | None = None
+    url: str,
+    transport: str = "sse",
+    auth_type: str | None = None,
+    credentials: dict | None = None,
 ) -> list[dict]:
     data: dict = {"url": url, "transport": transport}
     if auth_type:
