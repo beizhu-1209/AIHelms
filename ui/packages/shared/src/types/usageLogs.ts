@@ -45,6 +45,14 @@ export interface LlmLog {
   total_tokens: number
   cache_read_tokens: number
   cache_creation_tokens: number
+  internal_input_cost: string
+  internal_output_cost: string
+  internal_cache_read_cost: string
+  internal_cache_creation_cost: string
+  external_input_cost: string
+  external_output_cost: string
+  external_cache_read_cost: string
+  external_cache_creation_cost: string
   external_cost: string
   internal_cost: string
   duration_ms: number | null
@@ -110,7 +118,7 @@ export interface LogListResult<T> {
 export interface LlmLogFilters {
   users: UsageLogUser[]
   ai_keys: UsageLogAiKey[]
-  models: string[]
+  models: { value: string; active: boolean }[]
   providers: string[]
 }
 

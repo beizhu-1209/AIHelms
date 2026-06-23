@@ -1317,19 +1317,19 @@ onMounted(() => {
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输入</label>
-                    <input v-model="deployInputCostPerToken" type="number" step="0.01" placeholder="如 15" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployInputCostPerToken" type="number" step="0.000001" placeholder="如 15" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输出</label>
-                    <input v-model="deployOutputCostPerToken" type="number" step="0.01" placeholder="如 60" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployOutputCostPerToken" type="number" step="0.000001" placeholder="如 60" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">缓存读取</label>
-                    <input v-model="deployCacheReadCostPerToken" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployCacheReadCostPerToken" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">缓存写入</label>
-                    <input v-model="deployCacheCreationCostPerToken" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployCacheCreationCostPerToken" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                 </div>
               </div>
@@ -1339,7 +1339,7 @@ onMounted(() => {
                 <h4 class="mb-2 text-xs font-medium text-slate-500">外部单次定价</h4>
                 <div>
                   <label class="mb-1 block text-xs text-slate-500">单次费用 (¥)</label>
-                  <input v-model="deployCostPerCall" type="number" step="0.01" placeholder="每次调用费用" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                  <input v-model="deployCostPerCall" type="number" step="0.000001" placeholder="每次调用费用" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                 </div>
               </div>
 
@@ -1349,19 +1349,19 @@ onMounted(() => {
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输入</label>
-                    <input v-model="deployInternalInputCost" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployInternalInputCost" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输出</label>
-                    <input v-model="deployInternalOutputCost" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployInternalOutputCost" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">缓存读取</label>
-                    <input v-model="deployInternalCacheReadCost" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployInternalCacheReadCost" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">缓存写入</label>
-                    <input v-model="deployInternalCacheCreationCost" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="deployInternalCacheCreationCost" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                 </div>
               </div>
@@ -1371,7 +1371,7 @@ onMounted(() => {
                 <h4 class="mb-2 text-xs font-medium text-slate-500">内部结算定价</h4>
                 <div>
                   <label class="mb-1 block text-xs text-slate-500">内部单次费用 (¥)</label>
-                  <input v-model="deployInternalCostPerCall" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                  <input v-model="deployInternalCostPerCall" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                 </div>
               </div>
 

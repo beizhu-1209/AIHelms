@@ -767,6 +767,8 @@ CREATE TABLE IF NOT EXISTS aihelms.cost_summary_daily (
     input_tokens BIGINT DEFAULT 0,
     output_tokens BIGINT DEFAULT 0,
     cache_tokens BIGINT DEFAULT 0,
+    cache_read_tokens BIGINT DEFAULT 0,
+    cache_creation_tokens BIGINT DEFAULT 0,
     external_cost NUMERIC(14,6) DEFAULT 0,
     internal_cost NUMERIC(14,6) DEFAULT 0,
     total_duration_ms BIGINT DEFAULT 0,

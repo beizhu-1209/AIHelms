@@ -31,6 +31,17 @@ def _ids(params: dict[str, object], *keys: str) -> list[int]:
     return []
 
 
+def _strings(params: dict[str, object], key: str) -> list[str] | None:
+    value = params.get(key)
+    if value in (None, ""):
+        return None
+    if isinstance(value, (list, tuple, set)):
+        items = [str(item).strip() for item in value]
+    else:
+        items = [item.strip() for item in str(value).split(',')]
+    return [item for item in items if item] or None
+
+
 def _datetime(params: dict[str, object], key: str) -> datetime | None:
     value = params.get(key)
     if value in (None, ""):
@@ -93,16 +104,20 @@ async def _build_usage_log_rows(
         "user_id": _int(params, "user_id"),
     }
     if export_type == "llm":
+        selected_models = _strings(params, "models")
         result = await usage_log_service.list_llm_logs(
             session,
             **common,
             ai_key_id=_int(params, "ai_key_id"),
-            model=_text(params, "model"),
+            model=None if selected_models else _text(params, "model"),
+            models=selected_models,
             provider=_text(params, "provider"),
             status=_text(params, "status"),
         )
-        return ["时间", "用户", "部门", "Key", "模型", "Provider", "状态", "输入Token", "输出Token", "总Token", "外部成本(元)", "内部成本(元)", "错误"], [
-            [item["started_at"], _flatten_name(item.get("user")), (item.get("user") or {}).get("department_name", "") if isinstance(item.get("user"), dict) else "", _key_name(item.get("ai_key")), item["model"], item["provider"], item["status"], item["prompt_tokens"], item["completion_tokens"], item["total_tokens"], item["external_cost"], item["internal_cost"], item["error_message"] or ""]
+        filters = await usage_log_service.llm_filters(session)
+        model_active = {item["value"]: item["active"] for item in filters["models"]}
+        return ['时间', '用户', '部门', 'Key', '模型', '模型是否在用', 'Provider', '状态', '输入Token', '输出Token', '缓存读Token', '缓存写Token', '总Token', '外部输入成本(元)', '外部输出成本(元)', '外部缓存命中成本(元)', '外部缓存创建成本(元)', '外部成本(元)', '内部输入成本(元)', '内部输出成本(元)', '内部缓存命中成本(元)', '内部缓存创建成本(元)', '内部成本(元)', '错误'], [
+            [item["started_at"], _flatten_name(item.get("user")), (item.get("user") or {}).get("department_name", "") if isinstance(item.get("user"), dict) else "", _key_name(item.get("ai_key")), item["model"], "是" if model_active.get(item["model"], False) else "否", item["provider"], item["status"], item["prompt_tokens"], item["completion_tokens"], item["cache_read_tokens"], item["cache_creation_tokens"], item["total_tokens"], item["external_input_cost"], item["external_output_cost"], item["external_cache_read_cost"], item["external_cache_creation_cost"], item["external_cost"], item["internal_input_cost"], item["internal_output_cost"], item["internal_cache_read_cost"], item["internal_cache_creation_cost"], item["internal_cost"], item["error_message"] or ""]
             for item in result["items"]
         ]
     if export_type == "mcp":
@@ -185,12 +200,12 @@ async def _build_efficiency_rows(
             session, start, end, tab, resource_type, department_id, dimension, project_id
         )
         if tab == "model":
-            header = ["平台模型", "模型ID", "层级", "凭证", "供应商", "路由模型", "请求数", "Token数", "内部成本(元)", "外部成本(元)", "差额(元)", "占比(%)", "均次成本(元)"]
+            header = ["平台模型", "模型ID", "层级", "凭证", "供应商", "路由模型", "请求数", "Token数", "缓存读Token", "缓存写Token", "内部成本(元)", "外部成本(元)", "差额(元)", "占比(%)", "均次成本(元)"]
             rows: list[list[object]] = []
             for row in detail.get("model", []):
-                rows.append([row["model"], row["model_id"], "模型汇总", "", "", "", row["requests"], row["tokens"], row["internal_cost"], row["external_cost"], row["cost_diff"], round(row["ratio"] * 100, 1), row["avg_cost"]])
+                rows.append([row["model"], row["model_id"], "模型汇总", "", "", "", row["requests"], row["tokens"], row["cache_read_tokens"], row["cache_creation_tokens"], row["internal_cost"], row["external_cost"], row["cost_diff"], round(row["ratio"] * 100, 1), row["avg_cost"]])
                 for credential in row.get("credentials", []):
-                    rows.append([row["model"], row["model_id"], "凭证", credential.get("credential_name", ""), credential.get("provider_name", ""), credential.get("route_model", ""), credential["requests"], credential["tokens"], credential["internal_cost"], credential["external_cost"], credential["cost_diff"], "", credential["avg_cost"]])
+                    rows.append([row["model"], row["model_id"], "凭证", credential.get("credential_name", ""), credential.get("provider_name", ""), credential.get("route_model", ""), credential["requests"], credential["tokens"], credential["cache_read_tokens"], credential["cache_creation_tokens"], credential["internal_cost"], credential["external_cost"], credential["cost_diff"], "", credential["avg_cost"]])
             return header, rows
         if tab == "mcp":
             header = ["MCP服务", "Server Name", "层级", "Tool", "调用数", "Tool数", "内部成本(元)", "外部成本(元)", "差额(元)", "占比(%)", "均次成本(元)"]
@@ -203,7 +218,7 @@ async def _build_efficiency_rows(
         if tab == "date":
             return ["日期", "LLM内部成本(元)", "MCP内部成本(元)", "内部总成本(元)", "外部总成本(元)", "差额(元)", "请求数", "活跃用户"], [[row["date"], row["llm_cost"], row["mcp_cost"], row["total_cost"], row["external_cost"], row["cost_diff"], row["requests"], row["active_users"]] for row in detail.get("date", [])]
         if tab == "attribution":
-            return ["日期", "资源类型", "成本对象", "使用人", "AI Key", "归属", "调用数", "输入Token", "输出Token", "内部成本(元)", "外部成本(元)", "差额(元)"], [[row["date"], row["resource_type"], row["cost_object"], row["user_name"], row["key_name"], row["scope_name"], row["requests"], row["input_tokens"], row["output_tokens"], row["internal_cost"], row["external_cost"], row["cost_diff"]] for row in detail.get("attribution", [])]
+            return ["日期", "资源类型", "成本对象", "使用人", "AI Key", "归属", "调用数", "输入Token", "输出Token", "缓存读Token", "缓存写Token", "内部输入成本(元)", "内部输出成本(元)", "内部缓存命中成本(元)", "内部缓存创建成本(元)", "内部成本(元)", "外部输入成本(元)", "外部输出成本(元)", "外部缓存命中成本(元)", "外部缓存创建成本(元)", "外部成本(元)", "差额(元)"], [[row["date"], row["resource_type"], row["cost_object"], row["user_name"], row["key_name"], row["scope_name"], row["requests"], row["input_tokens"], row["output_tokens"], row["cache_read_tokens"], row["cache_creation_tokens"], row["internal_input_cost"], row["internal_output_cost"], row["internal_cache_read_cost"], row["internal_cache_creation_cost"], row["internal_cost"], row["external_input_cost"], row["external_output_cost"], row["external_cache_read_cost"], row["external_cache_creation_cost"], row["external_cost"], row["cost_diff"]] for row in detail.get("attribution", [])]
         scope_key = "department"
         return ["归属", "LLM内部成本(元)", "MCP内部成本(元)", "内部总成本(元)", "外部总成本(元)", "差额(元)", "请求数", "人均成本(元)", "活跃人均成本(元)", "内部总成本环比(%)"], [[row.get("scope_name") or row.get("department"), row["llm_cost"], row["mcp_cost"], row["total_cost"], row["external_cost"], row["cost_diff"], row["requests"], row["per_capita_cost"], row["active_per_capita_cost"], row["cost_change"] if row["cost_change"] is not None else ""] for row in detail.get(scope_key, [])]
     if export_type.startswith("budget_"):

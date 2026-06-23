@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import delete, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from celery_app import celery_app
 from core.config import settings
@@ -47,6 +48,54 @@ def cleanup_llm_logs() -> None:
     _run_async(_cleanup())
 
 
+@celery_app.task(name="llm_log.recalc_cost")
+def recalc_llm_cost(batch_size: int = 1000) -> dict[str, int]:
+    return _run_async(_recalc_cost(batch_size))
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_cache_tokens(metadata: dict) -> tuple[int, int]:
+    usage_obj = metadata.get("usage_object") or {}
+    if not isinstance(usage_obj, dict):
+        return 0, 0
+
+    details = usage_obj.get("prompt_tokens_details") or {}
+    cache_read = 0
+    if isinstance(details, dict):
+        cache_read = _safe_int(details.get("cached_tokens"))
+    if cache_read == 0:
+        cache_read = _safe_int(usage_obj.get("cache_read_input_tokens"))
+    cache_creation = _safe_int(usage_obj.get("cache_creation_input_tokens"))
+    return cache_read, cache_creation
+
+
+def _billable_prompt_tokens(
+    prompt_tokens: int, cache_read: int, cache_creation: int
+) -> int:
+    return max(prompt_tokens - cache_read - cache_creation, 0)
+
+
+async def _spend_logs_has_column(session: AsyncSession, column_name: str) -> bool:
+    result = await session.execute(
+        text(
+            "SELECT 1 "
+            "FROM information_schema.columns "
+            "WHERE table_schema = 'public' "
+            "  AND table_name = 'LiteLLM_SpendLogs' "
+            "  AND column_name = :column_name "
+            "LIMIT 1"
+        ),
+        {"column_name": column_name},
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def _sync() -> None:
     """从 LiteLLM SpendLogs 增量拉取 LLM 调用记录。"""
     try:
@@ -63,19 +112,30 @@ async def _sync() -> None:
 
             start_time = sync_state.last_sync_at - timedelta(minutes=1)
             # SpendLogs.startTime 是 UTC naive，去掉 tzinfo 用于比较
-            start_time_naive = start_time.replace(tzinfo=None) if start_time.tzinfo else start_time
+            start_time_naive = (
+                start_time.replace(tzinfo=None) if start_time.tzinfo else start_time
+            )
 
+            has_spend_log_model_id = await _spend_logs_has_column(session, "model_id")
+            spend_log_model_id_select = (
+                "model_id AS spend_log_model_id"
+                if has_spend_log_model_id
+                else "NULL AS spend_log_model_id"
+            )
             result = await session.execute(
                 text(
                     'SELECT request_id, api_key, "user", model, custom_llm_provider, '
                     "call_type, spend, total_tokens, prompt_tokens, completion_tokens, "
                     '"startTime", "endTime", "completionStartTime", '
                     "session_id, status, metadata, mcp_namespaced_tool_name, "
-                    "messages, response "
+                    f"messages, response, {spend_log_model_id_select} "
                     'FROM public."LiteLLM_SpendLogs" '
                     'WHERE "startTime" >= :start_time '
                     "  AND (mcp_namespaced_tool_name IS NULL "
                     "       OR mcp_namespaced_tool_name = '') "
+                    "  AND COALESCE(call_type, '') NOT IN ("
+                    "       'list_mcp_tools', 'list_mcp_tool', "
+                    "       'mcp_list_tools', 'mcp_list_tool') "
                     'ORDER BY "startTime" ASC '
                     "LIMIT 1000"
                 ),
@@ -109,7 +169,6 @@ async def _sync() -> None:
                 model_name = row[3] or ""
                 provider = row[4] or ""
                 call_type = row[5] or ""
-                spend = float(row[6] or 0)
                 total_tokens = int(row[7] or 0)
                 prompt_tokens = int(row[8] or 0)
                 completion_tokens = int(row[9] or 0)
@@ -139,15 +198,12 @@ async def _sync() -> None:
 
                 messages_raw = row[17]
                 response_raw = row[18]
+                spend_log_model_id = str(row[19]) if row[19] else ""
 
-                cache_read = 0
-                cache_creation = 0
-                usage_obj = metadata.get("usage_object") or {}
-                if isinstance(usage_obj, dict):
-                    cache_read = int(usage_obj.get("cache_read_input_tokens") or 0)
-                    cache_creation = int(
-                        usage_obj.get("cache_creation_input_tokens") or 0
-                    )
+                cache_read, cache_creation = _parse_cache_tokens(metadata)
+                billable_prompt_tokens = _billable_prompt_tokens(
+                    prompt_tokens, cache_read, cache_creation
+                )
 
                 # 反查 ai_key
                 ai_key_id: int | None = None
@@ -192,7 +248,7 @@ async def _sync() -> None:
                 deployment_id: int | None = None
                 internal_cost = Decimal("0")
                 external_cost = Decimal("0")
-                litellm_model_id = metadata.get("model_id") or ""
+                litellm_model_id = spend_log_model_id or metadata.get("model_id") or ""
                 dep_cache_key = litellm_model_id or model_name
                 if dep_cache_key and dep_cache_key not in deployment_cache:
                     pair = None
@@ -235,14 +291,14 @@ async def _sync() -> None:
                     deployment_id = deployment.id
                     internal_cost = _calc_internal_cost(
                         deployment,
-                        prompt_tokens,
+                        billable_prompt_tokens,
                         completion_tokens,
                         cache_read,
                         cache_creation,
                     )
                     external_cost = _calc_external_cost(
                         deployment,
-                        prompt_tokens,
+                        billable_prompt_tokens,
                         completion_tokens,
                         cache_read,
                         cache_creation,
@@ -293,8 +349,12 @@ async def _sync() -> None:
                     ended_at=end,
                     session_id=session_id,
                     error_message=error_message,
-                    messages=messages_raw if isinstance(messages_raw, (dict, list)) else None,
-                    response=response_raw if isinstance(response_raw, (dict, list)) else None,
+                    messages=(
+                        messages_raw if isinstance(messages_raw, (dict, list)) else None
+                    ),
+                    response=(
+                        response_raw if isinstance(response_raw, (dict, list)) else None
+                    ),
                     metadata_=metadata,
                 )
                 session.add(log)
@@ -367,6 +427,61 @@ def _calc_external_cost(
         + cache_creation_price * cache_creation / million
     )
     return cost.quantize(Decimal("0.000001"))
+
+
+async def _recalc_cost(batch_size: int) -> dict[str, int]:
+    processed = 0
+    updated = 0
+    last_id = 0
+    async with get_worker_session_factory()() as session:
+        while True:
+            result = await session.execute(
+                select(LlmCallLog, ModelDeployment)
+                .outerjoin(
+                    ModelDeployment, ModelDeployment.id == LlmCallLog.deployment_id
+                )
+                .where(LlmCallLog.id > last_id)
+                .order_by(LlmCallLog.id)
+                .limit(batch_size)
+            )
+            rows = result.all()
+            if not rows:
+                break
+
+            for log, deployment in rows:
+                last_id = log.id
+                cache_read, cache_creation = _parse_cache_tokens(log.metadata_ or {})
+                billable_prompt_tokens = _billable_prompt_tokens(
+                    log.prompt_tokens, cache_read, cache_creation
+                )
+                internal_cost = Decimal("0")
+                external_cost = Decimal("0")
+                if deployment:
+                    internal_cost = _calc_internal_cost(
+                        deployment,
+                        billable_prompt_tokens,
+                        log.completion_tokens,
+                        cache_read,
+                        cache_creation,
+                    )
+                    external_cost = _calc_external_cost(
+                        deployment,
+                        billable_prompt_tokens,
+                        log.completion_tokens,
+                        cache_read,
+                        cache_creation,
+                    )
+
+                log.cache_read_tokens = cache_read
+                log.cache_creation_tokens = cache_creation
+                log.internal_cost = internal_cost
+                log.external_cost = external_cost
+                processed += 1
+                updated += 1
+
+            await session.commit()
+    logger.info("recalculated %d llm costs", updated)
+    return {"processed": processed, "updated": updated}
 
 
 async def _cleanup() -> None:

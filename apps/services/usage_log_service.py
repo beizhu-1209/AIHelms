@@ -4,6 +4,7 @@
 """
 
 from datetime import datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,8 +47,9 @@ async def list_llm_logs(
     )
     users = await usage_log_repo.load_users(session, [log.user_id for log in logs])
     keys = await usage_log_repo.load_ai_keys(session, [log.ai_key_id for log in logs])
+    deployments = await usage_log_repo.load_deployments(session, [log.deployment_id for log in logs])
     return {
-        "items": [_serialize_llm(log, users, keys) for log in logs],
+        "items": [_serialize_llm(log, users, keys, deployments.get(log.deployment_id) if log.deployment_id else None) for log in logs],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -61,10 +63,9 @@ async def get_llm_log(session: AsyncSession, log_id: int) -> dict:
     users = await usage_log_repo.load_users(session, [log.user_id])
     keys = await usage_log_repo.load_ai_keys(session, [log.ai_key_id])
     deployments = await usage_log_repo.load_deployments(session, [log.deployment_id])
-    item = _serialize_llm(log, users, keys)
-    item["deployment"] = (
-        deployments.get(log.deployment_id) if log.deployment_id else None
-    )
+    deployment = deployments.get(log.deployment_id) if log.deployment_id else None
+    item = _serialize_llm(log, users, keys, deployment)
+    item["deployment"] = deployment
     item["metadata"] = log.metadata_
     item["messages"] = log.messages
     item["response"] = log.response
@@ -92,7 +93,53 @@ def _fmt_time(dt: datetime | None) -> str | None:
     return dt.astimezone(_LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _serialize_llm(log: LlmCallLog, users: dict, keys: dict) -> dict:
+def _decimal(value: object) -> Decimal:
+    return Decimal(str(value or 0))
+
+
+def _format_cost(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.000001")))
+
+
+def _llm_cost_breakdown(log: LlmCallLog, deployment: dict | None) -> dict[str, str]:
+    zero = _format_cost(Decimal("0"))
+    keys = [
+        "internal_input_cost",
+        "internal_output_cost",
+        "internal_cache_read_cost",
+        "internal_cache_creation_cost",
+        "external_input_cost",
+        "external_output_cost",
+        "external_cache_read_cost",
+        "external_cache_creation_cost",
+    ]
+    empty = {key: zero for key in keys}
+    if not deployment or deployment.get("billing_type") != "token":
+        return empty
+
+    model_info = deployment.get("model_info") or {}
+    if not isinstance(model_info, dict):
+        return empty
+
+    million = Decimal("1000000")
+    cache_read = log.cache_read_tokens or 0
+    cache_creation = log.cache_creation_tokens or 0
+    input_tokens = max((log.prompt_tokens or 0) - cache_read - cache_creation, 0)
+    output_tokens = log.completion_tokens or 0
+    components = {
+        "internal_input_cost": _decimal(model_info.get("internal_input_cost")) * input_tokens / million,
+        "internal_output_cost": _decimal(model_info.get("internal_output_cost")) * output_tokens / million,
+        "internal_cache_read_cost": _decimal(model_info.get("internal_cache_read_cost")) * cache_read / million,
+        "internal_cache_creation_cost": _decimal(model_info.get("internal_cache_creation_cost")) * cache_creation / million,
+        "external_input_cost": _decimal(model_info.get("input_cost")) * input_tokens / million,
+        "external_output_cost": _decimal(model_info.get("output_cost")) * output_tokens / million,
+        "external_cache_read_cost": _decimal(model_info.get("cache_read_cost")) * cache_read / million,
+        "external_cache_creation_cost": _decimal(model_info.get("cache_creation_cost")) * cache_creation / million,
+    }
+    return {key: _format_cost(value) for key, value in components.items()}
+
+
+def _serialize_llm(log: LlmCallLog, users: dict, keys: dict, deployment: dict | None = None) -> dict:
     user = users.get(log.user_id) if log.user_id else None
     key = keys.get(log.ai_key_id) if log.ai_key_id else None
     return {
@@ -109,6 +156,7 @@ def _serialize_llm(log: LlmCallLog, users: dict, keys: dict) -> dict:
         "total_tokens": log.total_tokens,
         "cache_read_tokens": log.cache_read_tokens,
         "cache_creation_tokens": log.cache_creation_tokens,
+        **_llm_cost_breakdown(log, deployment),
         "external_cost": str(log.external_cost),
         "internal_cost": str(log.internal_cost),
         "duration_ms": log.duration_ms,

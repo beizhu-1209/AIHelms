@@ -766,6 +766,8 @@ class CostSummaryDaily(Base):
     input_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     output_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     cache_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    cache_creation_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     external_cost: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0)
     internal_cost: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0)
     total_duration_ms: Mapped[int] = mapped_column(BigInteger, default=0)
