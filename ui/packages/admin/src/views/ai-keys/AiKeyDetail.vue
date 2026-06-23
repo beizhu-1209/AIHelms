@@ -158,7 +158,7 @@ async function handleSave() {
       skills: form.skills,
       agents: form.agents,
       budget_limit: budgetLimit,
-      budget_hard_limit: form.budget_hard_limit,
+      budget_hard_limit: false,
       budget_duration: form.budget_duration,
       budget_scope: form.budget_scope,
       budget_models_total: budgetModelsTotal,
@@ -337,7 +337,6 @@ onMounted(loadData)
           :budget-mcps-per="form.budget_mcps_per"
           :model-budgets="modelBudgets"
           :mcp-budgets="mcpBudgets"
-          :budget-hard-limit="form.budget_hard_limit"
           :model-search="modelSearch"
           :mcp-search="mcpSearch"
           :skill-search="skillSearch"
@@ -353,7 +352,6 @@ onMounted(loadData)
           @update:budget-mcps-total="form.budget_mcps_total = $event"
           @update:budget-models-per="form.budget_models_per = $event"
           @update:budget-mcps-per="form.budget_mcps_per = $event"
-          @update:budget-hard-limit="form.budget_hard_limit = $event"
           @update:model-search="modelSearch = $event"
           @update:mcp-search="mcpSearch = $event"
           @update:skill-search="skillSearch = $event"

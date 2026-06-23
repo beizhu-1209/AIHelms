@@ -15,7 +15,7 @@ import {
   type Credential,
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
-import { Eye, EyeOff, ChevronRight } from 'lucide-vue-next'
+import { Eye, EyeOff } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import AccessTestDialog from '../../components/AccessTestDialog.vue'
 import ProviderIcon from '../../components/ProviderIcon.vue'
@@ -56,17 +56,6 @@ const credFormApiBase = ref('')
 const credFormApiKey = ref('')
 const showApiKey = ref(false)
 const maskedApiKey = ref('')
-// 高级设置
-const credFormBillingType = ref('token')
-const credFormInputCost = ref('')
-const credFormOutputCost = ref('')
-const credFormCacheReadCost = ref('')
-const credFormCostPerCall = ref('')
-const credFormMonthlyQuota = ref('')
-const credFormRpm = ref('')
-const credFormTpm = ref('')
-const credFormMaxParallel = ref('')
-const showCredAdvanced = ref(false)
 
 // 按模型定价（已移除，模型关联统一在模型管理操作）
 
@@ -257,16 +246,6 @@ function handleCreateCred(): void {
   credFormApiKey.value = ''
   showApiKey.value = false
   maskedApiKey.value = ''
-  credFormBillingType.value = 'token'
-  credFormInputCost.value = ''
-  credFormOutputCost.value = ''
-  credFormCacheReadCost.value = ''
-  credFormCostPerCall.value = ''
-  credFormMonthlyQuota.value = ''
-  credFormRpm.value = ''
-  credFormTpm.value = ''
-  credFormMaxParallel.value = ''
-  showCredAdvanced.value = false
   credError.value = ''
   showCredForm.value = true
 }
@@ -280,17 +259,6 @@ function handleEditCred(cred: Credential): void {
   credFormApiKey.value = cred.credential_values?.api_key || ''
   showApiKey.value = false
   maskedApiKey.value = cred.credential_values?.api_key || ''
-  const info = cred.credential_info || {}
-  credFormBillingType.value = (info.billing_type as string) || 'token'
-  credFormInputCost.value = info.input_cost_per_million_tokens ? String(info.input_cost_per_million_tokens) : ''
-  credFormOutputCost.value = info.output_cost_per_million_tokens ? String(info.output_cost_per_million_tokens) : ''
-  credFormCacheReadCost.value = info.cache_read_cost_per_million_tokens ? String(info.cache_read_cost_per_million_tokens) : ''
-  credFormCostPerCall.value = info.cost_per_call ? String(info.cost_per_call) : ''
-  credFormMonthlyQuota.value = info.monthly_call_quota ? String(info.monthly_call_quota) : ''
-  credFormRpm.value = info.rpm ? String(info.rpm) : ''
-  credFormTpm.value = info.tpm ? String(info.tpm) : ''
-  credFormMaxParallel.value = info.max_parallel_requests ? String(info.max_parallel_requests) : ''
-  showCredAdvanced.value = !!(credFormRpm.value || credFormTpm.value || credFormInputCost.value || credFormCostPerCall.value)
   credError.value = ''
   showCredForm.value = true
 }
@@ -325,20 +293,7 @@ async function handleSubmitCred(): Promise<void> {
     custom_llm_provider: getLitellmProvider(credFormFormat.value),
     format: credFormFormat.value,
     api_base: credFormApiBase.value,
-    billing_type: credFormBillingType.value,
   }
-  if (credFormBillingType.value === 'token') {
-    if (credFormInputCost.value) credInfo.input_cost_per_million_tokens = Number(credFormInputCost.value)
-    if (credFormOutputCost.value) credInfo.output_cost_per_million_tokens = Number(credFormOutputCost.value)
-    if (credFormCacheReadCost.value) credInfo.cache_read_cost_per_million_tokens = Number(credFormCacheReadCost.value)
-  } else if (credFormBillingType.value === 'per_call') {
-    if (credFormCostPerCall.value) credInfo.cost_per_call = Number(credFormCostPerCall.value)
-  } else if (credFormBillingType.value === 'monthly_quota') {
-    if (credFormMonthlyQuota.value) credInfo.monthly_call_quota = Number(credFormMonthlyQuota.value)
-  }
-  if (credFormRpm.value) credInfo.rpm = Number(credFormRpm.value)
-  if (credFormTpm.value) credInfo.tpm = Number(credFormTpm.value)
-  if (credFormMaxParallel.value) credInfo.max_parallel_requests = Number(credFormMaxParallel.value)
 
   try {
     if (isEditingCred.value && editingCredId.value) {
@@ -670,80 +625,6 @@ onMounted(() => {
                 <EyeOff v-if="showApiKey" class="h-4 w-4" />
                 <Eye v-else class="h-4 w-4" />
               </button>
-            </div>
-          </div>
-
-          <!-- 高级设置 -->
-          <div class="mb-4">
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
-              @click="showCredAdvanced = !showCredAdvanced"
-            >
-              <ChevronRight class="h-3.5 w-3.5 transition-transform" :class="showCredAdvanced ? 'rotate-90' : ''" />
-              高级设置
-              <span class="text-xs text-slate-400">（计费、限流）</span>
-            </button>
-
-            <div v-if="showCredAdvanced" class="mt-3 space-y-4 rounded-lg border border-slate-100 p-4">
-              <!-- 计费方式 -->
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-slate-700">计费方式</label>
-                <select v-model="credFormBillingType" class="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20">
-                  <option value="token">Token 计费</option>
-                  <option value="per_call">按次计费</option>
-                  <option value="monthly_quota">包月次数</option>
-                </select>
-              </div>
-
-              <!-- Token 计费定价 -->
-              <div v-if="credFormBillingType === 'token'">
-                <div class="grid grid-cols-3 gap-3">
-                  <div>
-                    <label class="mb-1 block text-xs text-slate-500">输入 (¥/百万tokens)</label>
-                    <input v-model="credFormInputCost" type="number" step="0.000001" placeholder="如 36.00" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  </div>
-                  <div>
-                    <label class="mb-1 block text-xs text-slate-500">输出 (¥/百万tokens)</label>
-                    <input v-model="credFormOutputCost" type="number" step="0.000001" placeholder="如 180.00" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  </div>
-                  <div>
-                    <label class="mb-1 block text-xs text-slate-500">缓存读取 (¥/百万tokens)</label>
-                    <input v-model="credFormCacheReadCost" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- 按次计费 -->
-              <div v-if="credFormBillingType === 'per_call'">
-                <label class="mb-1 block text-xs text-slate-500">单次费用 (¥)</label>
-                <input v-model="credFormCostPerCall" type="number" step="0.000001" placeholder="每次调用费用" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-              </div>
-
-              <!-- 包月次数 -->
-              <div v-if="credFormBillingType === 'monthly_quota'">
-                <label class="mb-1 block text-xs text-slate-500">月调用次数上限</label>
-                <input v-model="credFormMonthlyQuota" type="number" placeholder="每月可用次数" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-              </div>
-
-              <!-- 限流 -->
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-slate-700">限流</label>
-                <div class="grid grid-cols-3 gap-3">
-                  <div>
-                    <label class="mb-1 block text-xs text-slate-500">RPM</label>
-                    <input v-model="credFormRpm" type="number" min="0" placeholder="每分钟请求" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  </div>
-                  <div>
-                    <label class="mb-1 block text-xs text-slate-500">TPM</label>
-                    <input v-model="credFormTpm" type="number" min="0" placeholder="每分钟Token" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  </div>
-                  <div>
-                    <label class="mb-1 block text-xs text-slate-500">最大并发</label>
-                    <input v-model="credFormMaxParallel" type="number" min="0" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 

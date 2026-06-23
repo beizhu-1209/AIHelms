@@ -142,7 +142,6 @@ async def update_key(
     models: list[str] | None = None,
     max_budget: float | None = None,
     metadata: dict | None = None,
-    model_max_budget: dict[str, float] | None = None,
     allowed_mcp_servers: list[str] | None = None,
 ) -> dict:
     data: dict = {"key": key_id}
@@ -152,8 +151,6 @@ async def update_key(
         data["max_budget"] = max_budget
     if metadata is not None:
         data["metadata"] = metadata
-    if model_max_budget is not None:
-        data["model_max_budget"] = model_max_budget
     if allowed_mcp_servers is not None:
         data["allowed_mcp_servers"] = allowed_mcp_servers
     return await _request("POST", "/key/update", json_data=data)
