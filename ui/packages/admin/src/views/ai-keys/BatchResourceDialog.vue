@@ -53,7 +53,6 @@ const budgetModelsTotal = ref<number | null>(null)
 const budgetMcpsTotal = ref<number | null>(null)
 const budgetModelsPer = ref<BudgetSubScope>('unified')
 const budgetMcpsPer = ref<BudgetSubScope>('unified')
-const budgetHardLimit = ref(false)
 const modelBudgets = ref<Record<string, number | null>>({})
 const mcpBudgets = ref<Record<string, number | null>>({})
 const modelSearch = ref('')
@@ -85,7 +84,6 @@ function resetResourceState(): void {
   budgetMcpsTotal.value = null
   budgetModelsPer.value = 'unified'
   budgetMcpsPer.value = 'unified'
-  budgetHardLimit.value = false
   modelBudgets.value = {}
   mcpBudgets.value = {}
 }
@@ -180,7 +178,7 @@ async function handleSubmit(): Promise<void> {
       skills: selectedSkills.value,
       agents: selectedAgents.value,
       budget_limit: budgetLimit.value,
-      budget_hard_limit: budgetHardLimit.value,
+      budget_hard_limit: false,
       budget_duration: budgetDuration.value,
       budget_scope: budgetScope.value,
       budget_models_total: budgetModelsTotal.value,
@@ -308,7 +306,6 @@ async function handleSubmit(): Promise<void> {
             :budget-mcps-per="budgetMcpsPer"
             :model-budgets="modelBudgets"
             :mcp-budgets="mcpBudgets"
-            :budget-hard-limit="budgetHardLimit"
             :model-search="modelSearch"
             :mcp-search="mcpSearch"
             :skill-search="skillSearch"
@@ -324,7 +321,6 @@ async function handleSubmit(): Promise<void> {
             @update:budget-mcps-total="budgetMcpsTotal = $event"
             @update:budget-models-per="budgetModelsPer = $event"
             @update:budget-mcps-per="budgetMcpsPer = $event"
-            @update:budget-hard-limit="budgetHardLimit = $event"
             @update:model-search="modelSearch = $event"
             @update:mcp-search="mcpSearch = $event"
             @update:skill-search="skillSearch = $event"

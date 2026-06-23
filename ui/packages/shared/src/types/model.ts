@@ -149,3 +149,9 @@ export interface UpdateModelPublishParams {
   department_ids?: number[]
   requires_approval?: boolean
 }
+
+export interface ResyncAnthropicResult {
+  deployments_synced: number
+  deployment_errors: number
+  keys_updated: number
+}

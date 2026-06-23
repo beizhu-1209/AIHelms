@@ -131,10 +131,9 @@ async def create_key(
     ai_key = await ai_key_repo.create(session, ai_key)
 
     # Sync to LiteLLM
-    max_budget = float(budget_limit) if budget_limit and budget_hard_limit else None
     litellm_duration = budget_duration if budget_duration and budget_limit else duration
-    litellm_models, litellm_model_budgets = await _expand_models_with_anthropic(
-        session, models or [], model_budgets
+    litellm_models, _ = await _expand_models_with_anthropic(
+        session, models or [], None
     )
     mcp_server_names = await _resolve_mcp_server_names(session, mcps or [])
     result = await litellm_client.create_key(
@@ -142,20 +141,12 @@ async def create_key(
         user_id=litellm_user_id,
         team_id=team_id,
         models=litellm_models,
-        max_budget=max_budget,
         metadata={"aihelms_key_id": ai_key.id, "key_type": key_type},
         duration=litellm_duration,
         allowed_mcp_servers=mcp_server_names if mcp_server_names else None,
     )
     ai_key.litellm_key_id = result.get("key")
     ai_key.litellm_key_alias = key_alias
-
-    # Sync model_max_budget if set
-    if litellm_model_budgets and ai_key.litellm_key_id:
-        await litellm_client.update_key(
-            key_id=ai_key.litellm_key_id,
-            model_max_budget=litellm_model_budgets,
-        )
 
     await session.commit()
     await session.refresh(ai_key)
@@ -330,18 +321,14 @@ async def _sync_key_to_litellm(
 ) -> None:
     if not key.litellm_key_id:
         return
-    if not (models_changed or mcps_changed or budget_changed or model_budgets_changed):
+    if not (models_changed or mcps_changed or budget_changed):
         return
-
-    effective_hard = key.budget_hard_limit
-    effective_budget = float(key.budget_limit) if key.budget_limit and effective_hard else None
 
     # Expand models with (Anthropic) variants
     litellm_models = key.models
-    litellm_model_budgets = key.model_budgets if model_budgets_changed else None
-    if session and (models_changed or model_budgets_changed):
-        litellm_models, litellm_model_budgets = await _expand_models_with_anthropic(
-            session, key.models, key.model_budgets if model_budgets_changed else None
+    if session and models_changed:
+        litellm_models, _ = await _expand_models_with_anthropic(
+            session, key.models, None
         )
 
     # Resolve MCP server names from IDs
@@ -349,13 +336,17 @@ async def _sync_key_to_litellm(
     if mcps_changed and session:
         mcp_server_names = await _resolve_mcp_server_names(session, key.mcps or [])
 
-    await litellm_client.update_key(
-        key_id=key.litellm_key_id,
-        models=litellm_models if models_changed else None,
-        max_budget=effective_budget,
-        model_max_budget=litellm_model_budgets,
-        allowed_mcp_servers=mcp_server_names,
-    )
+    if models_changed or mcps_changed:
+        await litellm_client.update_key(
+            key_id=key.litellm_key_id,
+            models=litellm_models if models_changed else None,
+            allowed_mcp_servers=mcp_server_names,
+        )
+
+    if budget_changed:
+        # Budgets are tracked by AIHelms. LiteLLM max_budget is kept clear
+        # except when explicitly disabling a key.
+        await litellm_client.update_key_budget(key.litellm_key_id, None)
 
 
 async def toggle_key(session: AsyncSession, key_id: int) -> dict:
@@ -368,7 +359,7 @@ async def toggle_key(session: AsyncSession, key_id: int) -> dict:
     # Sync budget: active + hard_limit → set budget; inactive → set budget to 0 to block
     if key.litellm_key_id:
         if key.is_active:
-            max_budget = float(key.budget_limit) if key.budget_limit and key.budget_hard_limit else None
+            max_budget = None
         else:
             max_budget = 0.0
         await litellm_client.update_key_budget(key.litellm_key_id, max_budget)
@@ -392,7 +383,7 @@ async def sync_user_keys_active(session: AsyncSession, user_id: int, active: boo
         if not key.litellm_key_id:
             continue
         if active:
-            max_budget = float(key.budget_limit) if key.budget_limit and key.budget_hard_limit else None
+            max_budget = None
         else:
             max_budget = 0.0
         try:

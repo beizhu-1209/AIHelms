@@ -20,7 +20,6 @@ interface Props {
   budgetMcpsPer: BudgetSubScope
   modelBudgets: Record<string, number | null>
   mcpBudgets: Record<string, number | null>
-  budgetHardLimit: boolean
   modelSearch: string
   mcpSearch: string
   skillSearch: string
@@ -40,7 +39,6 @@ const emit = defineEmits<{
   'update:budgetMcpsTotal': [v: number | null]
   'update:budgetModelsPer': [v: BudgetSubScope]
   'update:budgetMcpsPer': [v: BudgetSubScope]
-  'update:budgetHardLimit': [v: boolean]
   'update:modelSearch': [v: string]
   'update:mcpSearch': [v: string]
   'update:skillSearch': [v: string]
@@ -505,16 +503,6 @@ watch(
             />
           </div>
         </div>
-
-        <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            :checked="budgetHardLimit"
-            class="rounded text-purple-600"
-            @change="emit('update:budgetHardLimit', ($event.target as HTMLInputElement).checked)"
-          />
-          超出预算立刻禁止使用
-        </label>
       </div>
     </div>
   </div>

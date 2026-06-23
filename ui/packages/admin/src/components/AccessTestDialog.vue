@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { testModelAccessStream } from '@aihelms/shared'
+import { resyncAnthropicDeployments, testModelAccessStream, toast, usePermission } from '@aihelms/shared'
 import type { AccessTestErrorDetail } from '@aihelms/shared'
 
 interface Props {
@@ -14,6 +14,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
 }>()
+const { hasPermission } = usePermission()
 
 const modelInput = ref('')
 const messageInput = ref('你好，请简单介绍一下你自己。')
@@ -24,6 +25,7 @@ const isStreaming = ref(false)
 const errorMsg = ref('')
 const errorDetail = ref<AccessTestErrorDetail | null>(null)
 const showTechnicalDetail = ref(false)
+const isResyncingAnthropic = ref(false)
 
 watch(() => props.visible, (val) => {
   if (val) {
@@ -33,11 +35,16 @@ watch(() => props.visible, (val) => {
     errorDetail.value = null
     showTechnicalDetail.value = false
     isStreaming.value = false
+    isResyncingAnthropic.value = false
   }
 })
 
 const canSend = computed(() => {
   return modelInput.value.trim() && messageInput.value.trim() && !isStreaming.value
+})
+
+const canResyncAnthropicAccess = computed(() => {
+  return errorDetail.value?.category === 'upstream_permission_denied' && hasPermission('user:update')
 })
 
 async function handleSend(): Promise<void> {
@@ -125,6 +132,19 @@ async function handleSend(): Promise<void> {
 
 function handleClose(): void {
   emit('close')
+}
+
+async function handleResyncAnthropicAccess(): Promise<void> {
+  if (isResyncingAnthropic.value) return
+  isResyncingAnthropic.value = true
+  try {
+    const result = await resyncAnthropicDeployments()
+    toast.success(`同步完成，请重新测试（更新 Key：${result.keys_updated}）`)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '同步失败')
+  } finally {
+    isResyncingAnthropic.value = false
+  }
 }
 
 function setAccessError(detail: AccessTestErrorDetail | undefined, fallback: string): void {
@@ -242,6 +262,22 @@ function setAccessErrorFromStream(payload: string): void {
           <div v-if="errorMsg" class="space-y-2">
             <div class="text-sm font-medium text-red-600">{{ errorDetail?.title || errorMsg }}</div>
             <div v-if="errorDetail?.message" class="text-sm leading-6 text-slate-600">{{ errorDetail.message }}</div>
+            <div
+              v-if="canResyncAnthropicAccess"
+              class="rounded-lg border border-amber-200 bg-amber-50 p-3"
+            >
+              <p class="mb-2 text-xs leading-5 text-amber-700">
+                若已确认上游供应商已开通该模型仍测试失败，可能是平台与 LiteLLM 的授权未同步，点击重新同步后重试。
+              </p>
+              <button
+                type="button"
+                :disabled="isResyncingAnthropic"
+                class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+                @click="handleResyncAnthropicAccess"
+              >
+                {{ isResyncingAnthropic ? '同步中...' : '重新同步模型授权' }}
+              </button>
+            </div>
             <button
               v-if="errorDetail?.technical_detail"
               type="button"

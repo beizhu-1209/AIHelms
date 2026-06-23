@@ -6,6 +6,7 @@ from exceptions import NotFoundError, ConflictError
 from models.db import Credential
 from repositories import credential_repo
 from services import litellm_client
+from services.litellm_credential_payload import build_litellm_credential_values
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +53,17 @@ async def create_credential(
     )
     credential = await credential_repo.create(session, credential)
 
-    # Sync to LiteLLM
+    # Sync to LiteLLM. Some compatible providers need LiteLLM-only auth headers;
+    # do not persist those generated values back to platform credential_values.
+    litellm_credential_values = await build_litellm_credential_values(
+        session=session,
+        credential_values=credential_values,
+        credential_info=credential_info or {},
+        provider_id=provider_id,
+    )
     await litellm_client.create_credential(
         credential_name=credential_name,
-        credential_values=credential_values,
+        credential_values=litellm_credential_values,
         credential_info=credential_info or {},
     )
     credential.litellm_synced = True
@@ -79,6 +87,7 @@ async def update_credential(
 
     values_changed = credential_values is not None
     info_changed = credential_info is not None
+    provider_changed = provider_id is not None and provider_id != credential.provider_id
     if values_changed:
         merged_values = dict(credential.credential_values or {})
         merged_values.update(credential_values or {})
@@ -92,14 +101,20 @@ async def update_credential(
         credential.is_active = is_active
         active_changed = True
 
-    credential_payload_changed = values_changed or info_changed
+    credential_payload_changed = values_changed or info_changed or provider_changed
 
     # Sync the full effective credential payload to LiteLLM. LiteLLM PATCH does
     # not behave as a partial update for credentials.
     if credential_payload_changed:
+        litellm_credential_values = await build_litellm_credential_values(
+            session=session,
+            credential_values=credential.credential_values or {},
+            credential_info=credential.credential_info or {},
+            provider_id=credential.provider_id,
+        )
         await litellm_client.update_credential(
             credential_name=credential.credential_name,
-            credential_values=credential.credential_values or {},
+            credential_values=litellm_credential_values,
             credential_info=credential.credential_info or {},
         )
         credential.litellm_synced = True

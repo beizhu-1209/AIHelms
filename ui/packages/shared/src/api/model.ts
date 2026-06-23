@@ -15,6 +15,7 @@ import type {
   UpdateRouterSettingsParams,
   ModelVisibility,
   UpdateModelPublishParams,
+  ResyncAnthropicResult,
 } from '../types/model'
 
 export function getModels(page: number = 1, pageSize: number = 50, category?: string): Promise<ModelListResult> {
@@ -91,4 +92,11 @@ export function getModelVisibility(modelId: number): Promise<ModelVisibility> {
 
 export function updateModelPublish(modelId: number, params: UpdateModelPublishParams): Promise<ModelVisibility> {
   return request<ModelVisibility>(`/api/v1/models/${modelId}/publish`, { method: 'PUT', body: params })
+}
+
+export function resyncAnthropicDeployments(): Promise<ResyncAnthropicResult> {
+  return request<ResyncAnthropicResult>('/api/v1/models/resync-anthropic', {
+    method: 'POST',
+    silent: true,
+  })
 }
