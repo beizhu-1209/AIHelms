@@ -4,8 +4,8 @@ import { refreshEfficiencyData } from '@aihelms/shared'
 
 export function formatCost(val: number): string {
   if (val === 0) return '¥0'
-  if (Math.abs(val) >= 10000) return `¥${(val / 10000).toFixed(2)}万`
-  if (Math.abs(val) >= 1) return `¥${val.toFixed(2)}`
+  if (Math.abs(val) >= 10000) return `¥${(val / 10000).toFixed(4)}万`
+  if (Math.abs(val) >= 1) return `¥${val.toFixed(4)}`
   return `¥${val.toFixed(4)}`
 }
 

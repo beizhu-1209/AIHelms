@@ -5,6 +5,7 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 def _normalize_ids(value) -> list[int]:
     if not value:
         return []
@@ -23,6 +24,18 @@ def _append_id_filter(filters: str, params: dict, column: str, name: str, value)
         params[key] = item
         keys.append(f":{key}")
     return f"{filters} AND {column} IN ({', '.join(keys)})"
+
+
+def _price_expr(key: str) -> str:
+    return f"COALESCE(NULLIF(md.model_info->>'{key}', '')::numeric, 0)"
+
+
+def _llm_cost_component_expr(price_key: str, tokens_expr: str) -> str:
+    return (
+        "CASE WHEN c.cost_type = 'llm'"
+        " AND COALESCE(md.billing_type, 'token') = 'token'"
+        f" THEN {_price_expr(price_key)} * {tokens_expr} / 1000000 ELSE 0 END"
+    )
 
 
 def _build_cost_filters(
@@ -303,7 +316,9 @@ async def get_cost_detail_by_model(
         f" COALESCE(SUM(c.external_cost), 0) AS external_cost,"
         f" COALESCE(SUM(c.total_requests), 0) AS requests,"
         f" COALESCE(SUM(c.input_tokens), 0) AS input_tokens,"
-        f" COALESCE(SUM(c.output_tokens), 0) AS output_tokens"
+        f" COALESCE(SUM(c.output_tokens), 0) AS output_tokens,"
+        f" COALESCE(SUM(c.cache_read_tokens), 0) AS cache_read_tokens,"
+        f" COALESCE(SUM(c.cache_creation_tokens), 0) AS cache_creation_tokens"
         f" FROM aihelms.cost_summary_daily c"
         f" LEFT JOIN aihelms.credentials cr ON cr.id = c.provider_id"
         f" LEFT JOIN aihelms.providers p ON p.id = cr.provider_id"
@@ -345,6 +360,8 @@ async def get_cost_detail_by_model(
             "requests": int(r[12]),
             "input_tokens": int(r[13]),
             "output_tokens": int(r[14]),
+            "cache_read_tokens": int(r[15]),
+            "cache_creation_tokens": int(r[16]),
         }
         for r in result.fetchall()
     ]
@@ -460,10 +477,34 @@ async def get_cost_attribution_detail(
             "LEFT JOIN aihelms.departments d ON d.id = ud_dim.department_id"
         )
         scope_expr = "d.name"
+    billable_input = (
+        "GREATEST(COALESCE(c.input_tokens, 0) - COALESCE(c.cache_read_tokens, 0)"
+        " - COALESCE(c.cache_creation_tokens, 0), 0)"
+    )
+    output_tokens = "COALESCE(c.output_tokens, 0)"
+    cache_read = "COALESCE(c.cache_read_tokens, 0)"
+    cache_creation = "COALESCE(c.cache_creation_tokens, 0)"
+    internal_input = _llm_cost_component_expr("internal_input_cost", billable_input)
+    internal_output = _llm_cost_component_expr("internal_output_cost", output_tokens)
+    internal_cache_read = _llm_cost_component_expr("internal_cache_read_cost", cache_read)
+    internal_cache_creation = _llm_cost_component_expr("internal_cache_creation_cost", cache_creation)
+    external_input = _llm_cost_component_expr("input_cost", billable_input)
+    external_output = _llm_cost_component_expr("output_cost", output_tokens)
+    external_cache_read = _llm_cost_component_expr("cache_read_cost", cache_read)
+    external_cache_creation = _llm_cost_component_expr("cache_creation_cost", cache_creation)
     sql = text(
         f"SELECT c.summary_date::date, c.cost_type, COALESCE(c.model, ms.name, ''),"
         f" COALESCE(u.display_name, u.username, ''), COALESCE(k.name, ''), COALESCE({scope_expr}, ''),"
         f" COALESCE(SUM(c.total_requests),0), COALESCE(SUM(c.input_tokens),0), COALESCE(SUM(c.output_tokens),0),"
+        f" COALESCE(SUM(c.cache_read_tokens),0), COALESCE(SUM(c.cache_creation_tokens),0),"
+        f" COALESCE(SUM({internal_input}),0) AS internal_input_cost,"
+        f" COALESCE(SUM({internal_output}),0) AS internal_output_cost,"
+        f" COALESCE(SUM({internal_cache_read}),0) AS internal_cache_read_cost,"
+        f" COALESCE(SUM({internal_cache_creation}),0) AS internal_cache_creation_cost,"
+        f" COALESCE(SUM({external_input}),0) AS external_input_cost,"
+        f" COALESCE(SUM({external_output}),0) AS external_output_cost,"
+        f" COALESCE(SUM({external_cache_read}),0) AS external_cache_read_cost,"
+        f" COALESCE(SUM({external_cache_creation}),0) AS external_cache_creation_cost,"
         f" COALESCE(SUM(c.internal_cost),0) AS internal_cost, COALESCE(SUM(c.external_cost),0) AS external_cost,"
         f" c.user_id, c.ai_key_id, c.model, c.server_id"
         f" FROM aihelms.cost_summary_daily c"
@@ -471,6 +512,20 @@ async def get_cost_attribution_detail(
         f" LEFT JOIN aihelms.ai_keys k ON k.id = c.ai_key_id"
         f" LEFT JOIN aihelms.mcp_servers ms ON ms.id = c.server_id"
         f" {scope_join}"
+        f" LEFT JOIN LATERAL ("
+        f"   SELECT d.model_info, d.billing_type"
+        f"   FROM aihelms.model_deployments d"
+        f"   LEFT JOIN aihelms.models dm ON dm.id = d.model_id"
+        f"   WHERE c.cost_type = 'llm' AND d.credential_id = c.provider_id"
+        f"     AND (d.litellm_params->>'model' = c.model"
+        f"       OR d.litellm_model_id = c.model"
+        f"       OR d.deploy_name = c.model"
+        f"       OR dm.model_id = c.model"
+        f"       OR split_part(c.model, '/', 2) = dm.model_id"
+        f"       OR dm.name = c.model)"
+        f"   ORDER BY d.is_active DESC, d.id DESC"
+        f"   LIMIT 1"
+        f" ) md ON TRUE"
         f" {filters}"
         f" GROUP BY c.summary_date::date, c.cost_type, c.model, ms.name, u.display_name, u.username, k.name, {scope_expr}, c.user_id, c.ai_key_id, c.server_id"
         f" ORDER BY internal_cost DESC LIMIT 500"
@@ -481,11 +536,14 @@ async def get_cost_attribution_detail(
             "date": str(r[0]), "resource_type": r[1], "cost_object": r[2] or r[1],
             "user_name": r[3] or "--", "key_name": r[4] or "--", "scope_name": r[5] or "--",
             "requests": int(r[6] or 0), "input_tokens": int(r[7] or 0), "output_tokens": int(r[8] or 0),
-            "internal_cost": float(r[9] or 0), "external_cost": float(r[10] or 0),
-            "cost_diff": round(float(r[9] or 0) - float(r[10] or 0), 2),
-            "user_id": r[11], "ai_key_id": r[12], "model": r[13] or "", "server_id": r[14],
+            "cache_read_tokens": int(r[9] or 0), "cache_creation_tokens": int(r[10] or 0),
+            "internal_input_cost": float(r[11] or 0), "internal_output_cost": float(r[12] or 0),
+            "internal_cache_read_cost": float(r[13] or 0), "internal_cache_creation_cost": float(r[14] or 0),
+            "external_input_cost": float(r[15] or 0), "external_output_cost": float(r[16] or 0),
+            "external_cache_read_cost": float(r[17] or 0), "external_cache_creation_cost": float(r[18] or 0),
+            "internal_cost": float(r[19] or 0), "external_cost": float(r[20] or 0),
+            "cost_diff": round(float(r[19] or 0) - float(r[20] or 0), 4),
+            "user_id": r[21], "ai_key_id": r[22], "model": r[23] or "", "server_id": r[24],
         }
         for r in result.fetchall()
     ]
-
-

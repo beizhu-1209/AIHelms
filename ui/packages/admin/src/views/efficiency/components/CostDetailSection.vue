@@ -146,12 +146,14 @@ function toggleMcpExpanded(row: McpDetailRow) {
               </tbody>
             </table>
 
-            <table v-else-if="activeDetailTab === 'model'" class="min-w-[980px] w-full text-sm">
+            <table v-else-if="activeDetailTab === 'model'" class="min-w-[1120px] w-full text-sm">
               <thead class="sticky top-0 z-10 bg-white">
                 <tr class="border-b border-slate-200 text-left text-xs text-slate-400">
                   <th class="py-2.5 font-medium">模型</th>
                   <th class="py-2.5 text-right font-medium">请求数</th>
                   <th class="py-2.5 text-right font-medium">Token数</th>
+                  <th class="py-2.5 text-right font-medium">缓存读</th>
+                  <th class="py-2.5 text-right font-medium">缓存写</th>
                   <th class="py-2.5 text-right font-medium">内部成本</th>
                   <th class="py-2.5 text-right font-medium">外部成本</th>
                   <th class="py-2.5 text-right font-medium">差额</th>
@@ -177,6 +179,8 @@ function toggleMcpExpanded(row: McpDetailRow) {
                     </td>
                     <td class="py-3 text-right text-slate-700">{{ formatNumber(row.requests) }}</td>
                     <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.tokens) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.cache_read_tokens) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.cache_creation_tokens) }}</td>
                     <td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.internal_cost) }}</td>
                     <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cost) }}</td>
                     <td class="py-3 text-right" :class="row.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(row.cost_diff) }}</td>
@@ -185,7 +189,7 @@ function toggleMcpExpanded(row: McpDetailRow) {
                     <td class="py-3 text-right"><button class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50" @click="openModelLogs(row)">日志</button></td>
                   </tr>
                   <tr v-if="isModelExpanded(row)" class="border-b border-slate-100 bg-slate-50/60">
-                    <td colspan="9" class="px-4 py-3">
+                    <td colspan="11" class="px-4 py-3">
                       <table class="w-full text-xs">
                         <thead class="text-slate-400">
                           <tr class="text-left">
@@ -193,6 +197,8 @@ function toggleMcpExpanded(row: McpDetailRow) {
                             <th class="py-1.5 font-medium">路由模型</th>
                             <th class="py-1.5 text-right font-medium">请求数</th>
                             <th class="py-1.5 text-right font-medium">Token数</th>
+                            <th class="py-1.5 text-right font-medium">缓存读</th>
+                            <th class="py-1.5 text-right font-medium">缓存写</th>
                             <th class="py-1.5 text-right font-medium">内部成本</th>
                             <th class="py-1.5 text-right font-medium">外部成本</th>
                             <th class="py-1.5 text-right font-medium">差额</th>
@@ -209,6 +215,8 @@ function toggleMcpExpanded(row: McpDetailRow) {
                             <td class="py-2 text-slate-600">{{ credential.route_model }}</td>
                             <td class="py-2 text-right text-slate-600">{{ formatNumber(credential.requests) }}</td>
                             <td class="py-2 text-right text-slate-600">{{ formatTokenCount(credential.tokens) }}</td>
+                            <td class="py-2 text-right text-slate-600">{{ formatTokenCount(credential.cache_read_tokens) }}</td>
+                            <td class="py-2 text-right text-slate-600">{{ formatTokenCount(credential.cache_creation_tokens) }}</td>
                             <td class="py-2 text-right font-medium text-slate-800">{{ formatCost(credential.internal_cost) }}</td>
                             <td class="py-2 text-right text-slate-600">{{ formatCost(credential.external_cost) }}</td>
                             <td class="py-2 text-right" :class="credential.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(credential.cost_diff) }}</td>
@@ -220,7 +228,7 @@ function toggleMcpExpanded(row: McpDetailRow) {
                     </td>
                   </tr>
                 </template>
-                <tr v-if="modelDetail.length === 0"><td colspan="9" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
+                <tr v-if="modelDetail.length === 0"><td colspan="11" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
               </tbody>
             </table>
 
@@ -296,19 +304,61 @@ function toggleMcpExpanded(row: McpDetailRow) {
               </tbody>
             </table>
 
-            <table v-else-if="activeDetailTab === 'attribution'" class="min-w-[1320px] w-full text-sm">
+            <table v-else-if="activeDetailTab === 'attribution'" class="min-w-[2320px] w-full text-sm">
               <thead class="sticky top-0 z-10 bg-white">
                 <tr class="border-b border-slate-200 text-left text-xs text-slate-400">
-                  <th class="py-2.5 font-medium">日期</th><th class="py-2.5 font-medium">资源类型</th><th class="py-2.5 font-medium">成本对象</th><th class="py-2.5 font-medium">使用人</th><th class="py-2.5 font-medium">AI Key</th><th class="py-2.5 font-medium">归属{{ dimensionLabel }}</th><th class="py-2.5 text-right font-medium">调用数</th><th class="py-2.5 text-right font-medium">输入Token</th><th class="py-2.5 text-right font-medium">输出Token</th><th class="py-2.5 text-right font-medium">内部成本</th><th class="py-2.5 text-right font-medium">外部成本</th><th class="py-2.5 text-right font-medium">差额</th>
+                  <th class="py-2.5 font-medium">日期</th>
+                  <th class="py-2.5 font-medium">资源类型</th>
+                  <th class="py-2.5 font-medium">成本对象</th>
+                  <th class="py-2.5 font-medium">使用人</th>
+                  <th class="py-2.5 font-medium">AI Key</th>
+                  <th class="py-2.5 font-medium">归属{{ dimensionLabel }}</th>
+                  <th class="py-2.5 text-right font-medium">调用数</th>
+                  <th class="py-2.5 text-right font-medium">输入Token</th>
+                  <th class="py-2.5 text-right font-medium">输出Token</th>
+                  <th class="py-2.5 text-right font-medium">缓存命中Token</th>
+                  <th class="py-2.5 text-right font-medium">缓存创建Token</th>
+                  <th class="py-2.5 text-right font-medium">内部输入</th>
+                  <th class="py-2.5 text-right font-medium">内部输出</th>
+                  <th class="py-2.5 text-right font-medium">内部缓存命中</th>
+                  <th class="py-2.5 text-right font-medium">内部缓存创建</th>
+                  <th class="py-2.5 text-right font-medium">内部成本</th>
+                  <th class="py-2.5 text-right font-medium">外部输入</th>
+                  <th class="py-2.5 text-right font-medium">外部输出</th>
+                  <th class="py-2.5 text-right font-medium">外部缓存命中</th>
+                  <th class="py-2.5 text-right font-medium">外部缓存创建</th>
+                  <th class="py-2.5 text-right font-medium">外部成本</th>
+                  <th class="py-2.5 text-right font-medium">差额</th>
                   <th class="py-2.5 text-right font-medium">操作</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="row in pagedAttributionDetail" :key="`${row.date}-${row.resource_type}-${row.cost_object}-${row.user_name}-${row.key_name}`" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/40">
-                  <td class="py-3 text-slate-700">{{ row.date }}</td><td class="py-3 text-slate-700">{{ formatResourceName(row.resource_type) }}</td><td class="py-3 font-medium text-slate-800">{{ row.cost_object }}</td><td class="py-3 text-slate-700">{{ row.user_name }}</td><td class="py-3 text-slate-700">{{ row.key_name }}</td><td class="py-3 text-slate-700">{{ row.scope_name }}</td><td class="py-3 text-right text-slate-700">{{ formatNumber(row.requests) }}</td><td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.input_tokens) }}</td><td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.output_tokens) }}</td><td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.internal_cost) }}</td><td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cost) }}</td><td class="py-3 text-right" :class="row.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(row.cost_diff) }}</td>
+                  <td class="py-3 text-slate-700">{{ row.date }}</td>
+                  <td class="py-3 text-slate-700">{{ formatResourceName(row.resource_type) }}</td>
+                  <td class="py-3 font-medium text-slate-800">{{ row.cost_object }}</td>
+                  <td class="py-3 text-slate-700">{{ row.user_name }}</td>
+                  <td class="py-3 text-slate-700">{{ row.key_name }}</td>
+                  <td class="py-3 text-slate-700">{{ row.scope_name }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatNumber(row.requests) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.input_tokens) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.output_tokens) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.cache_read_tokens) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatTokenCount(row.cache_creation_tokens) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.internal_input_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.internal_output_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.internal_cache_read_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.internal_cache_creation_cost) }}</td>
+                  <td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.internal_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_input_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_output_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cache_read_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cache_creation_cost) }}</td>
+                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cost) }}</td>
+                  <td class="py-3 text-right" :class="row.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(row.cost_diff) }}</td>
                   <td class="py-3 text-right"><button class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50" @click="openAttributionLogs(row)">日志</button></td>
                 </tr>
-                <tr v-if="attributionDetail.length === 0"><td colspan="13" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
+                <tr v-if="attributionDetail.length === 0"><td colspan="23" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
               </tbody>
             </table>
 

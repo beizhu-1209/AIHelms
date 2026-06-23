@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { Download } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import {
@@ -30,12 +30,24 @@ const filterEndTime = ref('')
 const filterUserId = ref<number | ''>('')
 const filterAiKeyId = ref<number | ''>('')
 const filterModel = ref('')
+const filterOnlyActive = ref(false)
 const routeModels = ref<string[]>([])
 const filterProvider = ref('')
 const filterStatus = ref<string>('')
 
 const drawerOpen = ref(false)
 const detail = ref<LlmLogDetail | null>(null)
+
+const visibleModelOptions = computed(() => {
+  if (!filterOnlyActive.value) return filters.value.models
+  return filters.value.models.filter((m) => m.active)
+})
+
+watch(visibleModelOptions, (options) => {
+  if (filterModel.value && !options.some((m) => m.value === filterModel.value)) {
+    filterModel.value = ''
+  }
+})
 
 async function loadLogs(): Promise<void> {
   loading.value = true
@@ -91,6 +103,7 @@ function handleReset(): void {
   filterUserId.value = ''
   filterAiKeyId.value = ''
   filterModel.value = ''
+  filterOnlyActive.value = false
   routeModels.value = []
   filterProvider.value = ''
   filterStatus.value = ''
@@ -197,12 +210,22 @@ onMounted(() => {
         <option value="">全部 Key</option>
         <option v-for="k in filters.ai_keys" :key="k.id" :value="k.id">{{ k.name }}</option>
       </select>
+      <label class="inline-flex items-center gap-1.5 text-sm text-slate-600">
+        <input
+          v-model="filterOnlyActive"
+          type="checkbox"
+          class="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+        />
+        仅看在用
+      </label>
       <select
         v-model="filterModel"
         class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
       >
         <option value="">全部模型</option>
-        <option v-for="m in filters.models" :key="m" :value="m">{{ m }}</option>
+        <option v-for="m in visibleModelOptions" :key="m.value" :value="m.value">
+          {{ m.value }}
+        </option>
       </select>
       <select
         v-model="filterProvider"
@@ -288,6 +311,8 @@ onMounted(() => {
             <td class="px-4 py-2.5 text-xs text-slate-600">
               <div>输入：{{ log.prompt_tokens }}</div>
               <div>输出：{{ log.completion_tokens }}</div>
+              <div>缓存读：{{ log.cache_read_tokens }}</div>
+              <div>缓存写：{{ log.cache_creation_tokens }}</div>
             </td>
             <td class="px-4 py-2.5 text-xs text-slate-600">¥{{ log.external_cost }}</td>
             <td class="px-4 py-2.5 text-xs text-slate-600">¥{{ log.internal_cost }}</td>
@@ -324,8 +349,12 @@ onMounted(() => {
         { label: 'Provider', value: detail.provider },
         { label: 'Call Type', value: detail.call_type },
         { label: 'Tokens', value: `输入 ${detail.prompt_tokens} / 输出 ${detail.completion_tokens} / 合计 ${detail.total_tokens}` },
+        { label: '缓存读', value: detail.cache_read_tokens },
+        { label: '缓存写', value: detail.cache_creation_tokens },
         { label: '外部成本', value: '¥' + detail.external_cost },
+        { label: '外部成本细项', value: `输入 ¥${detail.external_input_cost} / 输出 ¥${detail.external_output_cost} / 缓存命中 ¥${detail.external_cache_read_cost} / 缓存创建 ¥${detail.external_cache_creation_cost}` },
         { label: '内部成本', value: '¥' + detail.internal_cost },
+        { label: '内部成本细项', value: `输入 ¥${detail.internal_input_cost} / 输出 ¥${detail.internal_output_cost} / 缓存命中 ¥${detail.internal_cache_read_cost} / 缓存创建 ¥${detail.internal_cache_creation_cost}` },
         { label: '耗时', value: detail.duration_ms !== null ? detail.duration_ms + ' ms' : '—' },
         { label: '首 Token', value: detail.ttft_ms !== null ? detail.ttft_ms + ' ms' : '—' },
         { label: 'Session ID', value: detail.session_id, mono: true },

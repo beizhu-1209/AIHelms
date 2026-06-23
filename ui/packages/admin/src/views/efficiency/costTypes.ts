@@ -69,6 +69,8 @@ export interface ModelCredentialRow {
   route_model: string
   requests: number
   tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
   internal_cost: number
   external_cost: number
   cost_diff: number
@@ -80,6 +82,8 @@ export interface ModelDetailRow {
   model_id: string
   requests: number
   tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
   cost: number
   internal_cost: number
   external_cost: number
@@ -135,7 +139,17 @@ export interface AttributionRow {
   requests: number
   input_tokens: number
   output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
+  internal_input_cost: number
+  internal_output_cost: number
+  internal_cache_read_cost: number
+  internal_cache_creation_cost: number
   internal_cost: number
+  external_input_cost: number
+  external_output_cost: number
+  external_cache_read_cost: number
+  external_cache_creation_cost: number
   external_cost: number
   cost_diff: number
   user_id?: number | null

@@ -79,6 +79,7 @@ async def _aggregate() -> None:
                         summary_date, user_id, ai_key_id, model, provider_id,
                         cost_type, key_type, total_requests, successful_requests,
                         failed_requests, input_tokens, output_tokens, cache_tokens,
+                        cache_read_tokens, cache_creation_tokens,
                         external_cost, internal_cost, total_duration_ms,
                         last_aggregated_at
                     )
@@ -95,7 +96,9 @@ async def _aggregate() -> None:
                         COUNT(*) FILTER (WHERE l.status != 'success'),
                         COALESCE(SUM(l.prompt_tokens), 0),
                         COALESCE(SUM(l.completion_tokens), 0),
+                        COALESCE(SUM(l.cache_read_tokens + l.cache_creation_tokens), 0),
                         COALESCE(SUM(l.cache_read_tokens), 0),
+                        COALESCE(SUM(l.cache_creation_tokens), 0),
                         COALESCE(SUM(l.external_cost), 0),
                         COALESCE(SUM(l.internal_cost), 0),
                         COALESCE(SUM(l.duration_ms), 0),

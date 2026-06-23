@@ -83,10 +83,10 @@ async def get_cost(
 
     return {
         "kpi": {
-            "total_cost": round(total_cost, 2),
-            "external_cost": round(external_cost, 2),
-            "cost_diff": round(total_cost - external_cost, 2),
-            "daily_avg_cost": round(total_cost / days, 2) if days > 0 else 0,
+            "total_cost": round(total_cost, 4),
+            "external_cost": round(external_cost, 4),
+            "cost_diff": round(total_cost - external_cost, 4),
+            "daily_avg_cost": round(total_cost / days, 4) if days > 0 else 0,
             "cost_change": _calc_change(total_cost, prev_total),
         },
         "trend": sorted(date_map.values(), key=lambda x: x["date"]),
@@ -122,6 +122,8 @@ async def get_cost_detail(
                     "model_id": item["platform_model_id"],
                     "requests": 0,
                     "tokens": 0,
+                    "cache_read_tokens": 0,
+                    "cache_creation_tokens": 0,
                     "cost": 0.0,
                     "internal_cost": 0.0,
                     "external_cost": 0.0,
@@ -134,6 +136,8 @@ async def get_cost_detail(
             tokens = item["input_tokens"] + item["output_tokens"]
             row["requests"] += item["requests"]
             row["tokens"] += tokens
+            row["cache_read_tokens"] += item["cache_read_tokens"]
+            row["cache_creation_tokens"] += item["cache_creation_tokens"]
             row["cost"] += item["internal_cost"]
             row["internal_cost"] += item["internal_cost"]
             row["external_cost"] += item["external_cost"]
@@ -148,9 +152,11 @@ async def get_cost_detail(
                     "route_model": item["route_model"],
                     "requests": item["requests"],
                     "tokens": tokens,
+                    "cache_read_tokens": item["cache_read_tokens"],
+                    "cache_creation_tokens": item["cache_creation_tokens"],
                     "internal_cost": item["internal_cost"],
                     "external_cost": item["external_cost"],
-                    "cost_diff": round(item["internal_cost"] - item["external_cost"], 2),
+                    "cost_diff": round(item["internal_cost"] - item["external_cost"], 4),
                     "avg_cost": (
                         round(item["internal_cost"] / item["requests"], 4)
                         if item["requests"] > 0
@@ -164,7 +170,7 @@ async def get_cost_detail(
             item["internal_cost"] = round(item["internal_cost"], 6)
             item["external_cost"] = round(item["external_cost"], 6)
             item["cost"] = item["internal_cost"]
-            item["cost_diff"] = round(item["internal_cost"] - item["external_cost"], 2)
+            item["cost_diff"] = round(item["internal_cost"] - item["external_cost"], 4)
             item["ratio"] = round(item["internal_cost"] / total_cost, 4) if total_cost > 0 else 0
             item["avg_cost"] = (
                 round(item["internal_cost"] / item["requests"], 4)
@@ -209,7 +215,7 @@ async def get_cost_detail(
                     "requests": item["requests"],
                     "internal_cost": item["internal_cost"],
                     "external_cost": item["external_cost"],
-                    "cost_diff": round(item["internal_cost"] - item["external_cost"], 2),
+                    "cost_diff": round(item["internal_cost"] - item["external_cost"], 4),
                     "avg_cost": (
                         round(item["internal_cost"] / item["requests"], 4)
                         if item["requests"] > 0
@@ -224,7 +230,7 @@ async def get_cost_detail(
             item["internal_cost"] = round(item["internal_cost"], 6)
             item["external_cost"] = round(item["external_cost"], 6)
             item["cost"] = item["internal_cost"]
-            item["cost_diff"] = round(item["internal_cost"] - item["external_cost"], 2)
+            item["cost_diff"] = round(item["internal_cost"] - item["external_cost"], 4)
             item["ratio"] = round(item["internal_cost"] / total_cost, 4) if total_cost > 0 else 0
             item["avg_cost"] = (
                 round(item["internal_cost"] / item["requests"], 4)
@@ -245,7 +251,7 @@ async def get_cost_detail(
                 "mcp_cost": item["mcp_cost"],
                 "total_cost": item["internal_cost"],
                 "external_cost": item["external_cost"],
-                "cost_diff": round(item["internal_cost"] - item["external_cost"], 2),
+                "cost_diff": round(item["internal_cost"] - item["external_cost"], 4),
                 "requests": item["requests"],
                 "active_users": item["users"],
             }
@@ -274,7 +280,7 @@ async def get_cost_detail(
             "mcp_cost": item["mcp_cost"],
             "total_cost": item["internal_cost"],
             "external_cost": item["external_cost"],
-            "cost_diff": round(item["internal_cost"] - item["external_cost"], 2),
+            "cost_diff": round(item["internal_cost"] - item["external_cost"], 4),
             "requests": item["requests"],
             "per_capita_cost": item["per_capita"],
             "active_per_capita_cost": item["active_per_capita"],
@@ -283,5 +289,4 @@ async def get_cost_detail(
         for item in raw
     ]
     return {"department": items}
-
 

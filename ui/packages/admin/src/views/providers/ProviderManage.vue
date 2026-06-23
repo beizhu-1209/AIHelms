@@ -701,15 +701,15 @@ onMounted(() => {
                 <div class="grid grid-cols-3 gap-3">
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输入 (¥/百万tokens)</label>
-                    <input v-model="credFormInputCost" type="number" step="0.01" placeholder="如 36.00" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="credFormInputCost" type="number" step="0.000001" placeholder="如 36.00" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">输出 (¥/百万tokens)</label>
-                    <input v-model="credFormOutputCost" type="number" step="0.01" placeholder="如 180.00" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="credFormOutputCost" type="number" step="0.000001" placeholder="如 180.00" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-slate-500">缓存读取 (¥/百万tokens)</label>
-                    <input v-model="credFormCacheReadCost" type="number" step="0.01" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    <input v-model="credFormCacheReadCost" type="number" step="0.000001" placeholder="可选" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
                   </div>
                 </div>
               </div>
@@ -717,7 +717,7 @@ onMounted(() => {
               <!-- 按次计费 -->
               <div v-if="credFormBillingType === 'per_call'">
                 <label class="mb-1 block text-xs text-slate-500">单次费用 (¥)</label>
-                <input v-model="credFormCostPerCall" type="number" step="0.01" placeholder="每次调用费用" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                <input v-model="credFormCostPerCall" type="number" step="0.000001" placeholder="每次调用费用" class="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
               </div>
 
               <!-- 包月次数 -->

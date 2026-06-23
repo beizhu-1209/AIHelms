@@ -39,6 +39,8 @@ export interface AnalysisItem {
   requests: number
   input_tokens: number
   output_tokens: number
+  cache_read_tokens?: number
+  cache_creation_tokens?: number
 }
 
 export interface BudgetOverview {

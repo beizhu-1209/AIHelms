@@ -5,17 +5,19 @@
 
 from datetime import datetime
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.db import (
     Agent,
     AgentUsageLog,
     AiKey,
+    Credential,
     Department,
     LlmCallLog,
     McpCallLog,
     McpServer,
+    Model,
     ModelDeployment,
     Skill,
     SkillUsageLog,
@@ -24,6 +26,69 @@ from models.db import (
 )
 
 # ────────────── LLM ──────────────
+
+_ANTHROPIC_MODEL_SUFFIX = "(Anthropic)"
+
+
+def _llm_model_lookup_names(model_name: str) -> set[str]:
+    names = {model_name}
+    if model_name.endswith(_ANTHROPIC_MODEL_SUFFIX):
+        names.add(model_name[: -len(_ANTHROPIC_MODEL_SUFFIX)])
+    for name in list(names):
+        if "/" in name:
+            names.add(name.split("/", 1)[1])
+    return {name for name in names if name}
+
+
+def _normalized_llm_model_names(model_names: set[str]) -> set[str]:
+    names: set[str] = set()
+    for model_name in model_names:
+        lookup_names = _llm_model_lookup_names(str(model_name).strip())
+        names.update(name.lower() for name in lookup_names)
+    return names
+
+
+def _is_current_llm_model(model_name: str, current_model_names: set[str]) -> bool:
+    return bool(
+        _normalized_llm_model_names({model_name})
+        & _normalized_llm_model_names(current_model_names)
+    )
+
+
+def _routable_deployment_condition():
+    return (
+        Model.is_active.is_(True),
+        ModelDeployment.is_active.is_(True),
+        or_(
+            ModelDeployment.credential_id.is_(None),
+            Credential.is_active.is_(True),
+        ),
+    )
+
+
+def _current_llm_model_names(
+    model_rows: list[tuple[str | None, str | None, dict | None]],
+) -> set[str]:
+    names: set[str] = set()
+    for model_id, model_name, litellm_params in model_rows:
+        if model_id:
+            names.add(model_id)
+        if model_name:
+            names.add(model_name)
+        if isinstance(litellm_params, dict):
+            litellm_model = litellm_params.get("model")
+            if litellm_model:
+                names.add(str(litellm_model))
+    return names
+
+
+def _is_active_llm_model_option(
+    model_name: str, id_active_model_names: set[str], current_model_names: set[str]
+) -> bool:
+    if model_name in id_active_model_names:
+        return True
+    return _is_current_llm_model(model_name, current_model_names)
+
 
 def _apply_llm_filters(
     stmt,
@@ -119,10 +184,34 @@ async def llm_log_filters(session: AsyncSession) -> dict:
         .where(LlmCallLog.provider.isnot(None))
         .order_by(LlmCallLog.provider)
     )).scalars().all()
+    routable_conditions = _routable_deployment_condition()
+    id_active_model_names = set((await session.execute(
+        select(distinct(LlmCallLog.model))
+        .join(ModelDeployment, LlmCallLog.deployment_id == ModelDeployment.id)
+        .join(Model, Model.id == ModelDeployment.model_id)
+        .outerjoin(Credential, Credential.id == ModelDeployment.credential_id)
+        .where(*routable_conditions)
+    )).scalars().all())
+    current_model_rows = (await session.execute(
+        select(Model.model_id, Model.name, ModelDeployment.litellm_params)
+        .join(ModelDeployment, ModelDeployment.model_id == Model.id)
+        .outerjoin(Credential, Credential.id == ModelDeployment.credential_id)
+        .where(*routable_conditions)
+    )).all()
+    current_model_names = _current_llm_model_names(current_model_rows)
     return {
         "user_ids": [u for u in actors if u],
         "ai_key_ids": [k for k in keys if k],
-        "models": [m for m in models if m],
+        "models": [
+            {
+                "value": m,
+                "active": _is_active_llm_model_option(
+                    m, id_active_model_names, current_model_names
+                ),
+            }
+            for m in models
+            if m
+        ],
         "providers": [p for p in providers if p],
     }
 
@@ -446,6 +535,12 @@ async def load_deployments(
         select(ModelDeployment).where(ModelDeployment.id.in_(ids))
     )
     return {
-        d.id: {"id": d.id, "deploy_name": d.deploy_name}
+        d.id: {
+            "id": d.id,
+            "deploy_name": d.deploy_name,
+            "billing_type": d.billing_type,
+            "cost_per_call": str(d.cost_per_call) if d.cost_per_call is not None else None,
+            "model_info": d.model_info or {},
+        }
         for d in result.scalars().all()
     }
