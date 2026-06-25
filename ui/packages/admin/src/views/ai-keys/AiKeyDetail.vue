@@ -10,7 +10,6 @@ import {
   getSkills,
   getAgents,
   getAllKeyScenarios,
-  setModelLimits,
   getModelLimits,
   toast,
 } from '@aihelms/shared'
@@ -22,7 +21,7 @@ import type {
   Agent,
   KeyScenario,
   RateLimitItem,
-  SetModelLimitItem,
+  AiKeyRateLimitMode,
   BudgetScope,
   BudgetSubScope,
 } from '@aihelms/shared'
@@ -67,9 +66,17 @@ const agentSearch = ref('')
 const modelBudgets = reactive<Record<string, number | null>>({})
 const mcpBudgets = reactive<Record<string, number | null>>({})
 
-interface RateLimitEntry { tpm: number | null; rpm: number | null; max_tokens: number | null }
-const rateLimitEnabled = ref(false)
+interface RateLimitEntry { tpm: number | null; rpm: number | null }
+const rateLimitMode = ref<AiKeyRateLimitMode>('none')
+const totalTpmLimit = ref<number | null>(null)
+const totalRpmLimit = ref<number | null>(null)
+const totalParallelLimit = ref<number | null>(null)
 const rateLimits = reactive<Record<string, RateLimitEntry>>({})
+const rateLimitOptions: { value: AiKeyRateLimitMode; label: string }[] = [
+  { value: 'none', label: '不限流' },
+  { value: 'total', label: '总限流' },
+  { value: 'per_model', label: '分模型限流' },
+]
 
 const keyTypeLabels: Record<string, string> = {
   personal_main: '个人主 Key',
@@ -99,20 +106,20 @@ function handleMcpBudgetUpdate(mcpId: number, value: number | null) {
 watch(() => form.models, (ids) => {
   for (const id of ids) {
     if (!rateLimits[id]) {
-      rateLimits[id] = { tpm: null, rpm: null, max_tokens: null }
+      rateLimits[id] = { tpm: null, rpm: null }
     }
   }
 }, { immediate: true, deep: true })
 
 function buildRateLimits(): RateLimitItem[] | null {
-  if (!rateLimitEnabled.value) return null
+  if (rateLimitMode.value !== 'per_model') return null
   const items: RateLimitItem[] = []
   for (const mid of form.models) {
     const dbId = getModelDbId(mid)
     if (!dbId) continue
     const entry = rateLimits[mid]
-    if (entry && (entry.tpm || entry.rpm || entry.max_tokens)) {
-      items.push({ model_id: dbId, tpm: entry.tpm, rpm: entry.rpm, max_tokens: entry.max_tokens })
+    if (entry && (entry.tpm || entry.rpm)) {
+      items.push({ model_id: dbId, tpm: entry.tpm, rpm: entry.rpm })
     }
   }
   return items.length > 0 ? items : null
@@ -168,21 +175,13 @@ async function handleSave() {
       model_budgets: mBudgets,
       mcp_budgets: mcpBgts,
       scenario_id: form.scenario_id,
+      rate_limit_mode: rateLimitMode.value,
+      tpm_limit: totalTpmLimit.value,
+      rpm_limit: totalRpmLimit.value,
+      max_parallel_requests: totalParallelLimit.value,
       rate_limits: rLimits,
     })
 
-    if (rateLimitEnabled.value) {
-      const limitItems: SetModelLimitItem[] = []
-      for (const mid of form.models) {
-        const dbId = getModelDbId(mid)
-        if (!dbId) continue
-        const entry = rateLimits[mid]
-        if (entry) {
-          limitItems.push({ model_id: dbId, tpm: entry.tpm, rpm: entry.rpm, max_tokens: entry.max_tokens })
-        }
-      }
-      if (limitItems.length) await setModelLimits(keyId.value, limitItems)
-    }
 
     toast.success('保存成功')
     router.push('/ai-keys')
@@ -228,14 +227,17 @@ async function loadData() {
     form.budget_models_per = key.budget_models_per ?? 'unified'
     form.budget_mcps_per = key.budget_mcps_per ?? 'unified'
     form.budget_hard_limit = key.budget_hard_limit
+    rateLimitMode.value = key.rate_limit_mode ?? 'none'
+    totalTpmLimit.value = key.tpm_limit
+    totalRpmLimit.value = key.rpm_limit
+    totalParallelLimit.value = key.max_parallel_requests
     if (key.model_budgets) Object.assign(modelBudgets, key.model_budgets)
     if (key.mcp_budgets) Object.assign(mcpBudgets, key.mcp_budgets)
 
     const limits = await getModelLimits(key.id)
-    if (limits.length > 0) {
-      rateLimitEnabled.value = true
+    if (key.rate_limit_mode === 'per_model' && limits.length > 0) {
       for (const l of limits) {
-        rateLimits[l.model_model_id] = { tpm: l.tpm, rpm: l.rpm, max_tokens: l.max_tokens }
+        rateLimits[l.model_model_id] = { tpm: l.tpm, rpm: l.rpm }
       }
     }
   } catch (e) {
@@ -363,24 +365,36 @@ onMounted(loadData)
 
       <!-- Rate Limiting -->
       <div class="mb-5 rounded-2xl border border-slate-200/60 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
-        <div class="mb-3 flex items-center gap-3">
-          <h2 class="text-sm font-semibold text-slate-900">速率限制</h2>
+        <h2 class="mb-3 text-sm font-semibold text-slate-900">AI 身份限流</h2>
+        <div class="mb-3 grid grid-cols-3 gap-2">
           <button
+            v-for="option in rateLimitOptions"
+            :key="option.value"
             type="button"
-            :class="[rateLimitEnabled ? 'bg-purple-600' : 'bg-slate-300', 'relative h-5 w-9 rounded-full transition']"
-            @click="rateLimitEnabled = !rateLimitEnabled"
+            :class="[rateLimitMode === option.value ? 'border-purple-400 bg-purple-50 text-purple-700' : 'border-slate-200/60 bg-white text-slate-600', 'rounded-lg border px-3 py-2 text-sm transition']"
+            @click="rateLimitMode = option.value"
           >
-            <span :class="[rateLimitEnabled ? 'translate-x-4' : 'translate-x-0.5', 'absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform']" />
+            {{ option.label }}
           </button>
         </div>
-        <div v-if="rateLimitEnabled && form.models.length" class="overflow-x-auto rounded-lg border border-slate-200/60 bg-white/80 p-3">
+        <div v-if="rateLimitMode === 'total'" class="mb-3 grid grid-cols-3 gap-3">
+          <label class="text-xs text-slate-500">TPM
+            <input v-model.number="totalTpmLimit" type="number" min="1" class="mt-1 w-full rounded border border-slate-200/60 px-2 py-1 text-sm" />
+          </label>
+          <label class="text-xs text-slate-500">RPM
+            <input v-model.number="totalRpmLimit" type="number" min="1" class="mt-1 w-full rounded border border-slate-200/60 px-2 py-1 text-sm" />
+          </label>
+          <label class="text-xs text-slate-500">最大并发
+            <input v-model.number="totalParallelLimit" type="number" min="1" class="mt-1 w-full rounded border border-slate-200/60 px-2 py-1 text-sm" />
+          </label>
+        </div>
+        <div v-if="rateLimitMode === 'per_model' && form.models.length" class="overflow-x-auto rounded-lg border border-slate-200/60 bg-white/80 p-3">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-slate-500">
                 <th class="pb-2">模型</th>
                 <th class="pb-2 px-3">TPM</th>
                 <th class="pb-2 px-3">RPM</th>
-                <th class="pb-2 px-3">MaxTokens</th>
               </tr>
             </thead>
             <tbody>
@@ -388,12 +402,11 @@ onMounted(loadData)
                 <td class="max-w-[200px] truncate py-1.5 text-slate-700">{{ getModelName(mid) }}</td>
                 <td class="px-3 py-1.5"><input v-model.number="rateLimits[mid].tpm" type="number" min="0" class="w-28 rounded border border-slate-200/60 px-2 py-1 text-sm" /></td>
                 <td class="px-3 py-1.5"><input v-model.number="rateLimits[mid].rpm" type="number" min="0" class="w-28 rounded border border-slate-200/60 px-2 py-1 text-sm" /></td>
-                <td class="px-3 py-1.5"><input v-model.number="rateLimits[mid].max_tokens" type="number" min="0" class="w-28 rounded border border-slate-200/60 px-2 py-1 text-sm" /></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p v-else-if="rateLimitEnabled" class="text-sm text-slate-400">请先选择模型</p>
+        <p v-else-if="rateLimitMode === 'per_model'" class="text-sm text-slate-400">请先选择模型</p>
       </div>
     </template>
   </div>

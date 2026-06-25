@@ -11,5 +11,9 @@ echo "Frontend dist copied successfully."
 mkdir -p /app/data/celerybeat /app/data/skills /app/data/uploads /app/data/exports
 mkdir -p /logs
 
+# Run database migrations before starting application processes
+cd /app/apps
+python -m core.migrate
+
 # Start supervisord
 exec supervisord -c /etc/supervisor/supervisord.conf

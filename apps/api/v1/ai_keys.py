@@ -17,7 +17,7 @@ router = APIRouter(prefix="/ai-keys", tags=["ai-keys"])
 
 class CreateKeyRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
-    key_type: str = Field(..., pattern=r"^(personal_main|personal_scene|dept_main|dept_scene|project_main|project_scene)$")
+    key_type: str = Field(..., pattern=r"^(personal_scene|dept_scene|project_scene)$")
     owner_type: str = Field(..., pattern=r"^(user|department|project)$")
     owner_id: int
     description: str = Field("", max_length=500)
@@ -38,6 +38,10 @@ class CreateKeyRequest(BaseModel):
     mcp_budgets: dict[str, float] | None = None
     scenario_id: int | None = None
     duration: str | None = None
+    rate_limit_mode: str = Field("none", pattern=r"^(none|total|per_model)$")
+    tpm_limit: int | None = Field(None, ge=1)
+    rpm_limit: int | None = Field(None, ge=1)
+    max_parallel_requests: int | None = Field(None, ge=1)
     rate_limits: list[dict] | None = None
 
 
@@ -60,6 +64,10 @@ class UpdateKeyRequest(BaseModel):
     model_budgets: dict[str, float] | None = None
     mcp_budgets: dict[str, float] | None = None
     scenario_id: int | None = None
+    rate_limit_mode: str | None = Field(None, pattern=r"^(none|total|per_model)$")
+    tpm_limit: int | None = Field(None, ge=1)
+    rpm_limit: int | None = Field(None, ge=1)
+    max_parallel_requests: int | None = Field(None, ge=1)
     rate_limits: list[dict] | None = None
 
 
@@ -80,11 +88,17 @@ class BatchUpdateRequest(BaseModel):
     budget_mcps_per: str | None = Field(None, pattern=r"^(unified|each)$")
     model_budgets: dict[str, float] | None = None
     mcp_budgets: dict[str, float] | None = None
+    update_rate_limit: bool = False
+    rate_limit_mode: str | None = Field(None, pattern=r"^(none|total|per_model)$")
+    tpm_limit: int | None = Field(None, ge=1)
+    rpm_limit: int | None = Field(None, ge=1)
+    max_parallel_requests: int | None = Field(None, ge=1)
+    rate_limits: list[dict] | None = None
 
 
 class BatchCreateRequest(BaseModel):
     user_ids: list[int] = Field(..., min_length=1)
-    key_type: str = Field(..., pattern=r"^(personal_main|personal_scene)$")
+    key_type: str = Field("personal_scene", pattern=r"^personal_scene$")
     name_template: str = Field(..., min_length=1, max_length=128)
     description: str = Field("", max_length=500)
     models: list[str] = Field(default_factory=list)
@@ -102,6 +116,10 @@ class BatchCreateRequest(BaseModel):
     model_budgets: dict[str, float] | None = None
     mcp_budgets: dict[str, float] | None = None
     scenario_id: int | None = None
+    rate_limit_mode: str = Field("none", pattern=r"^(none|total|per_model)$")
+    tpm_limit: int | None = Field(None, ge=1)
+    rpm_limit: int | None = Field(None, ge=1)
+    max_parallel_requests: int | None = Field(None, ge=1)
     rate_limits: list[dict] | None = None
 
 
@@ -163,12 +181,18 @@ async def create_key(
             mcp_budgets=req.mcp_budgets,
             scenario_id=req.scenario_id,
             duration=req.duration,
+            rate_limit_mode=req.rate_limit_mode,
+            tpm_limit=req.tpm_limit,
+            rpm_limit=req.rpm_limit,
+            max_parallel_requests=req.max_parallel_requests,
             rate_limits=req.rate_limits,
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"code": 200, "message": "AI Key 创建成功", "data": key}
 
 
@@ -202,6 +226,10 @@ async def batch_create_keys(
             model_budgets=req.model_budgets,
             mcp_budgets=req.mcp_budgets,
             scenario_id=req.scenario_id,
+            rate_limit_mode=req.rate_limit_mode,
+            tpm_limit=req.tpm_limit,
+            rpm_limit=req.rpm_limit,
+            max_parallel_requests=req.max_parallel_requests,
             rate_limits=req.rate_limits,
         )
     except VE as e:
@@ -332,12 +360,19 @@ async def batch_update_keys(
                 budget_mcps_per=req.budget_mcps_per,
                 model_budgets=req.model_budgets,
                 mcp_budgets=req.mcp_budgets,
+                update_rate_limit=req.update_rate_limit,
+                rate_limit_mode=req.rate_limit_mode,
+                tpm_limit=req.tpm_limit,
+                rpm_limit=req.rpm_limit,
+                max_parallel_requests=req.max_parallel_requests,
+                rate_limits=req.rate_limits,
             )
             successes.append(key_id)
         except NotFoundError:
             failures.append({"key_id": key_id, "error": "Key 不存在"})
-        except Exception as e:
-            failures.append({"key_id": key_id, "error": str(e)})
+        except Exception:
+            logger.exception("batch update ai key failed", extra={"key_id": key_id})
+            failures.append({"key_id": key_id, "error": "更新失败，请稍后重试"})
     return {
         "code": 200,
         "message": f"批量更新完成，成功 {len(successes)}/{len(key_ids)}",
@@ -373,10 +408,16 @@ async def update_key(
             model_budgets=req.model_budgets,
             mcp_budgets=req.mcp_budgets,
             scenario_id=req.scenario_id,
+            rate_limit_mode=req.rate_limit_mode,
+            tpm_limit=req.tpm_limit,
+            rpm_limit=req.rpm_limit,
+            max_parallel_requests=req.max_parallel_requests,
             rate_limits=req.rate_limits,
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Key 不存在")
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"code": 200, "message": "AI Key 更新成功", "data": key}
 
 

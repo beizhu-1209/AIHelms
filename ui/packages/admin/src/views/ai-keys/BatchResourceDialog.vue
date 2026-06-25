@@ -13,10 +13,13 @@ import {
   type McpServer,
   type Skill,
   type Agent,
+  type AiKeyRateLimitMode,
   type BudgetScope,
   type BudgetSubScope,
+  type RateLimitItem,
 } from '@aihelms/shared'
 import KeyResourceBudget from './KeyResourceBudget.vue'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 interface Props {
   visible: boolean
@@ -36,6 +39,7 @@ const userTotal = ref(0)
 const userItems = ref<IdentityUserItem[]>([])
 const selectedUserIds = ref<Set<number>>(new Set())
 const isLoadingUsers = ref(false)
+const showRateLimitConfirm = ref(false)
 
 // Resource & budget state
 const activeModels = ref<ActiveModel[]>([])
@@ -59,8 +63,19 @@ const modelSearch = ref('')
 const mcpSearch = ref('')
 const skillSearch = ref('')
 const agentSearch = ref('')
+const updateRateLimit = ref(false)
+const rateLimitMode = ref<AiKeyRateLimitMode>('none')
+const totalTpmLimit = ref<number | null>(null)
+const totalRpmLimit = ref<number | null>(null)
+const totalParallelLimit = ref<number | null>(null)
+const modelRateLimits = ref<Record<string, { tpm: number | null; rpm: number | null }>>({})
 
 const selectedCount = computed(() => selectedUserIds.value.size)
+const rateLimitOptions: { value: AiKeyRateLimitMode; label: string }[] = [
+  { value: 'none', label: '不限流' },
+  { value: 'total', label: '总限流' },
+  { value: 'per_model', label: '分模型限流' },
+]
 
 watch(() => props.visible, (v) => {
   if (v) {
@@ -86,6 +101,12 @@ function resetResourceState(): void {
   budgetMcpsPer.value = 'unified'
   modelBudgets.value = {}
   mcpBudgets.value = {}
+  updateRateLimit.value = false
+  rateLimitMode.value = 'none'
+  totalTpmLimit.value = null
+  totalRpmLimit.value = null
+  totalParallelLimit.value = null
+  modelRateLimits.value = {}
 }
 
 async function fetchUsers(): Promise<void> {
@@ -143,6 +164,51 @@ function handleUpdateMcpBudget(mcpId: number, value: number | null): void {
   mcpBudgets.value = { ...mcpBudgets.value, [String(mcpId)]: value }
 }
 
+function getModelName(modelId: string): string {
+  return activeModels.value.find((model) => model.model_id === modelId)?.name ?? modelId
+}
+
+function getModelDbId(modelId: string): number | undefined {
+  return activeModels.value.find((model) => model.model_id === modelId)?.id
+}
+
+function ensureModelRateLimit(modelId: string): { tpm: number | null; rpm: number | null } {
+  const existing = modelRateLimits.value[modelId]
+  if (existing) return existing
+  const next = { tpm: null, rpm: null }
+  modelRateLimits.value = { ...modelRateLimits.value, [modelId]: next }
+  return next
+}
+
+function updateModelRateLimit(
+  modelId: string,
+  field: 'tpm' | 'rpm',
+  event: Event,
+): void {
+  const value = (event.target as HTMLInputElement).value
+  const current = ensureModelRateLimit(modelId)
+  modelRateLimits.value = {
+    ...modelRateLimits.value,
+    [modelId]: {
+      ...current,
+      [field]: value ? Number(value) : null,
+    },
+  }
+}
+
+function buildRateLimits(): RateLimitItem[] | null {
+  if (!updateRateLimit.value || rateLimitMode.value !== 'per_model') return null
+  const items: RateLimitItem[] = []
+  for (const modelId of selectedModels.value) {
+    const dbId = getModelDbId(modelId)
+    const limit = modelRateLimits.value[modelId]
+    if (dbId && limit && (limit.tpm || limit.rpm)) {
+      items.push({ model_id: dbId, tpm: limit.tpm, rpm: limit.rpm })
+    }
+  }
+  return items.length ? items : null
+}
+
 function hasResources(item: IdentityUserItem): boolean {
   const k = item.main_key
   if (!k) return false
@@ -158,6 +224,23 @@ function hasBudget(item: IdentityUserItem): boolean {
   const hasPerResource = Object.keys(k.model_budgets || {}).length > 0 || Object.keys(k.mcp_budgets || {}).length > 0
   const hasHardLimit = k.budget_hard_limit === true
   return hasLimit || hasModelsTotal || hasMcpsTotal || hasPerResource || hasHardLimit
+}
+
+function hasRateLimit(item: IdentityUserItem): boolean {
+  return item.main_key?.rate_limit_mode !== undefined && item.main_key.rate_limit_mode !== 'none'
+}
+
+function handleSubmitClick(): void {
+  if (updateRateLimit.value) {
+    showRateLimitConfirm.value = true
+    return
+  }
+  handleSubmit()
+}
+
+async function handleConfirmRateLimitSubmit(): Promise<void> {
+  showRateLimitConfirm.value = false
+  await handleSubmit()
 }
 
 async function handleSubmit(): Promise<void> {
@@ -187,6 +270,12 @@ async function handleSubmit(): Promise<void> {
       budget_mcps_per: budgetMcpsPer.value,
       model_budgets: Object.keys(mBudgets).length ? mBudgets : null,
       mcp_budgets: Object.keys(mcBudgets).length ? mcBudgets : null,
+      update_rate_limit: updateRateLimit.value,
+      rate_limit_mode: updateRateLimit.value ? rateLimitMode.value : null,
+      tpm_limit: updateRateLimit.value ? totalTpmLimit.value : null,
+      rpm_limit: updateRateLimit.value ? totalRpmLimit.value : null,
+      max_parallel_requests: updateRateLimit.value ? totalParallelLimit.value : null,
+      rate_limits: buildRateLimits(),
     })
     const failCount = result.failures.length
     if (failCount > 0) {
@@ -210,7 +299,7 @@ async function handleSubmit(): Promise<void> {
       <!-- Header -->
       <div class="flex items-center justify-between border-b border-slate-200/60 px-6 py-4">
         <div class="flex items-center gap-3">
-          <h3 class="text-lg font-semibold text-slate-800">批量设置资源和预算</h3>
+          <h3 class="text-lg font-semibold text-slate-800">批量设置资源、预算和限流</h3>
           <div class="flex rounded-lg bg-slate-100 p-0.5">
             <span :class="['rounded-md px-3 py-1 text-xs font-medium transition', step === 1 ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500']">1. 选择用户</span>
             <span :class="['rounded-md px-3 py-1 text-xs font-medium transition', step === 2 ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500']">2. 配置资源</span>
@@ -264,7 +353,8 @@ async function handleSubmit(): Promise<void> {
                     <div v-if="item.main_key" class="flex flex-wrap gap-1">
                       <span v-if="hasResources(item)" class="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">资源</span>
                       <span v-if="hasBudget(item)" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-600">预算</span>
-                      <span v-if="!hasResources(item) && !hasBudget(item)" class="text-xs text-slate-400">未设置</span>
+                      <span v-if="hasRateLimit(item)" class="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">限流</span>
+                      <span v-if="!hasResources(item) && !hasBudget(item) && !hasRateLimit(item)" class="text-xs text-slate-400">未设置</span>
                     </div>
                     <span v-else class="text-xs text-slate-400">-</span>
                   </td>
@@ -328,6 +418,55 @@ async function handleSubmit(): Promise<void> {
             @update-model-budget="handleUpdateModelBudget"
             @update-mcp-budget="handleUpdateMcpBudget"
           />
+          <div class="mt-5 rounded-xl border border-slate-200/60 bg-white/80 p-4">
+            <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input v-model="updateRateLimit" type="checkbox" class="rounded text-purple-600" />
+              修改 AI 身份限流
+            </label>
+            <div v-if="updateRateLimit" class="mt-3 space-y-3">
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="option in rateLimitOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="[rateLimitMode === option.value ? 'border-purple-400 bg-purple-50 text-purple-700' : 'border-slate-200/60 bg-white text-slate-600', 'rounded-lg border px-3 py-2 text-sm transition']"
+                  @click="rateLimitMode = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+              <div v-if="rateLimitMode === 'total'" class="grid grid-cols-3 gap-3">
+                <label class="text-xs text-slate-500">TPM
+                  <input v-model.number="totalTpmLimit" type="number" min="1" class="mt-1 w-full rounded border border-slate-200/60 px-2 py-1 text-sm" />
+                </label>
+                <label class="text-xs text-slate-500">RPM
+                  <input v-model.number="totalRpmLimit" type="number" min="1" class="mt-1 w-full rounded border border-slate-200/60 px-2 py-1 text-sm" />
+                </label>
+                <label class="text-xs text-slate-500">最大并发
+                  <input v-model.number="totalParallelLimit" type="number" min="1" class="mt-1 w-full rounded border border-slate-200/60 px-2 py-1 text-sm" />
+                </label>
+              </div>
+              <div v-if="rateLimitMode === 'per_model' && selectedModels.length" class="overflow-x-auto rounded-lg border border-slate-200/60">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="bg-slate-50 text-left text-slate-500">
+                      <th class="px-3 py-2 font-medium">模型</th>
+                      <th class="px-3 py-2 font-medium">TPM</th>
+                      <th class="px-3 py-2 font-medium">RPM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="modelId in selectedModels" :key="modelId" class="border-t border-slate-100">
+                      <td class="px-3 py-2 text-slate-700">{{ getModelName(modelId) }}</td>
+                      <td class="px-3 py-2"><input :value="ensureModelRateLimit(modelId).tpm ?? ''" type="number" min="1" class="w-28 rounded border border-slate-200/60 px-2 py-1 text-sm" @input="updateModelRateLimit(modelId, 'tpm', $event)" /></td>
+                      <td class="px-3 py-2"><input :value="ensureModelRateLimit(modelId).rpm ?? ''" type="number" min="1" class="w-28 rounded border border-slate-200/60 px-2 py-1 text-sm" @input="updateModelRateLimit(modelId, 'rpm', $event)" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else-if="rateLimitMode === 'per_model'" class="text-sm text-slate-400">请先选择模型</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -338,11 +477,21 @@ async function handleSubmit(): Promise<void> {
         <div class="flex items-center gap-3">
           <button class="rounded-xl border border-slate-200/60 bg-white/70 px-5 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white/90" @click="emit('close')">取消</button>
           <button v-if="step === 1" :disabled="selectedCount === 0" class="rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:from-purple-600 hover:to-purple-700 disabled:opacity-40" @click="step = 2">下一步 ({{ selectedCount }} 人)</button>
-          <button v-else :disabled="isSubmitting" class="rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:from-purple-600 hover:to-purple-700 disabled:opacity-40" @click="handleSubmit">
+          <button v-else :disabled="isSubmitting" class="rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:from-purple-600 hover:to-purple-700 disabled:opacity-40" @click="handleSubmitClick">
             {{ isSubmitting ? '提交中...' : '确认提交' }}
           </button>
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :visible="showRateLimitConfirm"
+      title="确认批量修改限流"
+      :message="`将修改 ${selectedCount} 个 AI 身份的限流配置，可能影响其生产 API 调用。`"
+      confirm-text="确认修改"
+      cancel-text="取消"
+      @confirm="handleConfirmRateLimitSubmit"
+      @cancel="showRateLimitConfirm = false"
+    />
   </div>
 </template>

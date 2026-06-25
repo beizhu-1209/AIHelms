@@ -1,6 +1,7 @@
 import { request } from './request'
 import type {
   AiKey,
+  AiKeyRateLimitMode,
   AiKeyListResult,
   CreateAiKeyParams,
   UpdateAiKeyParams,
@@ -131,6 +132,12 @@ export interface BatchUpdateResourcesParams {
   budget_mcps_per?: string
   model_budgets?: Record<string, number> | null
   mcp_budgets?: Record<string, number> | null
+  update_rate_limit?: boolean
+  rate_limit_mode?: AiKeyRateLimitMode | null
+  tpm_limit?: number | null
+  rpm_limit?: number | null
+  max_parallel_requests?: number | null
+  rate_limits?: SetModelLimitItem[] | null
 }
 
 export interface BatchUpdateResult {

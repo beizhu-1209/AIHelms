@@ -45,6 +45,7 @@ RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sou
 
 # Copy backend source
 COPY apps/ ./apps/
+COPY docker/db/migrations/ ./docker/db/migrations/
 
 # Copy built frontend from stage 1
 COPY --from=frontend /ui/packages/web/dist ./ui/packages/web/dist/

@@ -1,5 +1,6 @@
 export type BudgetScope = 'unified' | 'per_type' | 'per_resource'
 export type BudgetSubScope = 'unified' | 'each'
+export type AiKeyRateLimitMode = 'none' | 'total' | 'per_model'
 
 export interface AiKey {
   id: number
@@ -26,6 +27,10 @@ export interface AiKey {
   budget_mcps_per: BudgetSubScope
   model_budgets: Record<string, number>
   mcp_budgets: Record<string, number>
+  rate_limit_mode: AiKeyRateLimitMode
+  tpm_limit: number | null
+  rpm_limit: number | null
+  max_parallel_requests: number | null
   scenario_id: number | null
   is_active: boolean
   created_by: number | null
@@ -59,6 +64,10 @@ export interface CreateAiKeyParams {
   mcp_budgets?: Record<string, number> | null
   scenario_id?: number | null
   duration?: string | null
+  rate_limit_mode?: AiKeyRateLimitMode
+  tpm_limit?: number | null
+  rpm_limit?: number | null
+  max_parallel_requests?: number | null
   rate_limits?: RateLimitItem[] | null
 }
 
@@ -81,12 +90,16 @@ export interface UpdateAiKeyParams {
   model_budgets?: Record<string, number> | null
   mcp_budgets?: Record<string, number> | null
   scenario_id?: number | null
+  rate_limit_mode?: AiKeyRateLimitMode
+  tpm_limit?: number | null
+  rpm_limit?: number | null
+  max_parallel_requests?: number | null
   rate_limits?: RateLimitItem[] | null
 }
 
 export interface BatchCreateAiKeyParams {
   user_ids: number[]
-  key_type: 'personal_main' | 'personal_scene'
+  key_type: 'personal_scene'
   name_template: string
   description?: string
   models?: string[]
@@ -104,6 +117,10 @@ export interface BatchCreateAiKeyParams {
   model_budgets?: Record<string, number> | null
   mcp_budgets?: Record<string, number> | null
   scenario_id?: number | null
+  rate_limit_mode?: AiKeyRateLimitMode
+  tpm_limit?: number | null
+  rpm_limit?: number | null
+  max_parallel_requests?: number | null
   rate_limits?: RateLimitItem[] | null
 }
 
@@ -118,8 +135,6 @@ export interface RateLimitItem {
   model_id: number
   tpm?: number | null
   rpm?: number | null
-  max_tokens?: number | null
-  max_calls?: number | null
 }
 
 export interface AiKeyListResult {
@@ -185,6 +200,4 @@ export interface SetModelLimitItem {
   model_id: number
   tpm?: number | null
   rpm?: number | null
-  max_tokens?: number | null
-  max_calls?: number | null
 }
