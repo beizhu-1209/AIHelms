@@ -13,6 +13,7 @@ import dashscopeIcon from '../assets/providers/dashscope.png'
 import zhipuIcon from '../assets/providers/zhipu.svg'
 import moonshotIcon from '../assets/providers/moonshot.svg'
 import minimaxIcon from '../assets/providers/minimax.svg'
+import xiaomiMimoIcon from '../assets/providers/xiaomi_mimo.png'
 import vllmIcon from '../assets/providers/vllm.png'
 import sglangIcon from '../assets/providers/sglang.svg'
 import ollamaIcon from '../assets/providers/ollama.svg'
@@ -40,6 +41,7 @@ const iconMap: Record<string, string> = {
   zhipu: zhipuIcon,
   moonshot: moonshotIcon,
   minimax: minimaxIcon,
+  xiaomi_mimo: xiaomiMimoIcon,
   vllm: vllmIcon,
   sglang: sglangIcon,
   ollama: ollamaIcon,

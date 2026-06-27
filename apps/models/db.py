@@ -247,6 +247,7 @@ class Model(Base):
     category: Mapped[str] = mapped_column(String(50), default="chat")
     capabilities: Mapped[list] = mapped_column(JSONB, default=list)
     description: Mapped[str] = mapped_column(Text, default="")
+    logo_provider_type: Mapped[str] = mapped_column(String(50), default="")
     business_scenario_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("aihelms.business_scenarios.id", ondelete="SET NULL"), nullable=True
     )

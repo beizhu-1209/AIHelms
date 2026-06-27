@@ -14,28 +14,13 @@ interface ModelItem {
   category: string
   capabilities: string[]
   description: string
+  logo_provider_type: string
   is_published: boolean
   requires_approval: boolean
   deployment_count: number
   has_anthropic_deployment: boolean
 }
 
-function getProviderType(modelId: string): string {
-  if (!modelId) return ''
-  if (modelId.includes('/')) return modelId.split('/')[0]
-  const lower = modelId.toLowerCase()
-  if (lower.startsWith('gpt') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) return 'openai'
-  if (lower.startsWith('claude')) return 'anthropic'
-  if (lower.startsWith('gemini') || lower.startsWith('gemma')) return 'google'
-  if (lower.startsWith('deepseek')) return 'deepseek'
-  if (lower.startsWith('qwen') || lower.startsWith('qwq')) return 'dashscope'
-  if (lower.startsWith('glm') || lower.startsWith('chatglm')) return 'zhipu'
-  if (lower.startsWith('moonshot') || lower.startsWith('kimi')) return 'moonshot'
-  if (lower.startsWith('abab') || lower.startsWith('minimax')) return 'minimax'
-  if (lower.includes('doubao') || lower.startsWith('ep-')) return 'volcengine'
-  if (lower.startsWith('bge') || lower.startsWith('text-embedding')) return 'dashscope'
-  return ''
-}
 
 const models = ref<ModelItem[]>([])
 const myModels = ref<string[]>([])
@@ -193,7 +178,7 @@ onMounted(async () => {
         <!-- 头部 -->
         <div class="flex items-center gap-3">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50">
-            <ProviderIcon v-if="getProviderType(model.model_id)" :type="getProviderType(model.model_id)" :size="22" />
+            <ProviderIcon v-if="model.logo_provider_type" :type="model.logo_provider_type" :size="22" />
             <MessageSquare v-else-if="model.category === 'chat'" class="h-5 w-5 text-purple-600" />
             <Box v-else-if="model.category === 'embedding'" class="h-5 w-5 text-blue-600" />
             <Cpu v-else class="h-5 w-5 text-slate-600" />
@@ -236,7 +221,7 @@ onMounted(async () => {
       <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-slate-200/60 bg-white shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div class="flex items-center gap-3">
-            <ProviderIcon v-if="getProviderType(activeModel.model_id)" :type="getProviderType(activeModel.model_id)" :size="24" />
+            <ProviderIcon v-if="activeModel.logo_provider_type" :type="activeModel.logo_provider_type" :size="24" />
             <h3 class="text-base font-semibold text-slate-900">{{ activeModel.name }}</h3>
           </div>
           <button @click="showAccessDialog = false" class="rounded-lg p-1 hover:bg-slate-100"><X class="h-4 w-4 text-slate-400" /></button>

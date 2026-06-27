@@ -288,6 +288,9 @@ INSERT INTO aihelms.provider_prefix_map (provider_type, format, category, prefix
     ('ollama', 'ollama', 'chat', 'ollama', false),
     ('ollama', 'ollama', 'embedding', 'ollama', false),
     ('lmstudio', 'openai', 'chat', 'openai', true),
+    -- 小米 MiMo
+    ('xiaomi_mimo', 'openai', 'chat', 'xiaomi_mimo', false),
+    ('xiaomi_mimo', 'anthropic', 'chat', 'anthropic', false),
     -- 其他
     ('other', 'openai', 'chat', 'openai', true),
     ('other', 'openai', 'embedding', 'openai', true),
@@ -316,6 +319,7 @@ CREATE TABLE IF NOT EXISTS aihelms.models (
     category VARCHAR(50) DEFAULT 'chat',
     capabilities JSONB DEFAULT '[]',
     description TEXT DEFAULT '',
+    logo_provider_type VARCHAR(50) DEFAULT '',
     business_scenario_id BIGINT REFERENCES aihelms.business_scenarios(id) ON DELETE SET NULL,
     is_active BOOLEAN DEFAULT true,
     is_published BOOLEAN DEFAULT false,       -- 是否发布到用户端

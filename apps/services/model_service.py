@@ -54,6 +54,7 @@ async def get_all_active_models(session: AsyncSession) -> list[dict]:
             "category": m.category,
             "capabilities": m.capabilities,
             "description": m.description,
+            "logo_provider_type": m.logo_provider_type,
             "is_active": m.is_active,
             "is_published": m.is_published,
             "requires_approval": m.requires_approval,
@@ -79,6 +80,7 @@ async def create_model(
     category: str = "chat",
     capabilities: list[str] | None = None,
     description: str = "",
+    logo_provider_type: str | None = None,
 ) -> dict:
     effective_model_id = model_id.strip() or None
     if effective_model_id:
@@ -92,6 +94,7 @@ async def create_model(
         category=category,
         capabilities=capabilities or [],
         description=description,
+        logo_provider_type=logo_provider_type or "",
     )
     model = await model_repo.create(session, model)
     await session.commit()
@@ -107,6 +110,7 @@ async def update_model(
     category: str | None = None,
     capabilities: list[str] | None = None,
     description: str | None = None,
+    logo_provider_type: str | None = None,
     is_active: bool | None = None,
 ) -> dict:
     model = await model_repo.find_by_id(session, model_id)
@@ -127,6 +131,8 @@ async def update_model(
         model.capabilities = capabilities
     if description is not None:
         model.description = description
+    if logo_provider_type is not None:
+        model.logo_provider_type = logo_provider_type
     if is_active is not None:
         model.is_active = is_active
 
@@ -705,6 +711,7 @@ def _serialize_model(model: Model) -> dict:
         "category": model.category,
         "capabilities": model.capabilities,
         "description": model.description,
+        "logo_provider_type": model.logo_provider_type,
         "is_active": model.is_active,
         "is_published": model.is_published,
         "visibility_type": model.visibility_type,

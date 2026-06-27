@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useAuth, getMyKeys } from '@aihelms/shared'
+import { useAuth, getMyKeys, type ActiveModel } from '@aihelms/shared'
 import { request } from '@aihelms/shared/src/api/request'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import type { EfficiencyKpi, TrendItem } from '@aihelms/shared/src/types/efficiency'
@@ -10,22 +10,6 @@ import type { Skill } from '@aihelms/shared/src/types/skill'
 import { Copy, Check, Cpu, Server, Sparkles, Clock, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-vue-next'
 import ProviderIcon from '../components/ProviderIcon.vue'
 
-function getProviderType(modelId: string): string {
-  if (!modelId) return ''
-  if (modelId.includes('/')) return modelId.split('/')[0]
-  const lower = modelId.toLowerCase()
-  if (lower.startsWith('gpt') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) return 'openai'
-  if (lower.startsWith('claude')) return 'anthropic'
-  if (lower.startsWith('gemini') || lower.startsWith('gemma')) return 'google'
-  if (lower.startsWith('deepseek')) return 'deepseek'
-  if (lower.startsWith('qwen') || lower.startsWith('qwq')) return 'dashscope'
-  if (lower.startsWith('glm') || lower.startsWith('chatglm')) return 'zhipu'
-  if (lower.startsWith('moonshot') || lower.startsWith('kimi')) return 'moonshot'
-  if (lower.startsWith('abab') || lower.startsWith('minimax')) return 'minimax'
-  if (lower.includes('doubao') || lower.startsWith('ep-')) return 'volcengine'
-  if (lower.startsWith('bge') || lower.startsWith('text-embedding')) return 'dashscope'
-  return ''
-}
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -41,6 +25,7 @@ const trend = ref<TrendItem[]>([])
 const applications = ref<ResourceApplication[]>([])
 const mcpNames = ref<Record<number, string>>({})
 const skillNames = ref<Record<number, string>>({})
+const modelLogoProviderTypes = ref<Record<string, string>>({})
 const isLoading = ref(true)
 const copied = ref(false)
 const showFullKey = ref(false)
@@ -149,15 +134,20 @@ const typeLabel: Record<string, string> = {
   model: '模型', mcp: 'MCP', skill: 'Skill', agent: '智能体',
 }
 
+function getModelLogoProviderType(modelId: string): string {
+  return modelLogoProviderTypes.value[modelId] || ''
+}
+
 onMounted(async () => {
   try {
-    const [keysData, kpiData, trendData, appsData, mcpRes, skillRes, configData] = await Promise.all([
+    const [keysData, kpiData, trendData, appsData, mcpRes, skillRes, activeModelsData, configData] = await Promise.all([
       getMyKeys().catch(() => ({ personal: [] as AiKey[], department: [] as AiKey[], project: [] as AiKey[] })),
       request<EfficiencyKpi>('/api/v1/efficiency/overview', { params: { scope: 'self' }, silent: true }).catch(() => null),
       request<TrendItem[]>('/api/v1/efficiency/trend', { params: { scope: 'self', group_by: 'day' }, silent: true }).catch(() => []),
       request<{ items: ResourceApplication[] }>('/api/v1/resource-applications/my', { params: { page: 1, page_size: 10 }, silent: true }).catch(() => ({ items: [] as ResourceApplication[] })),
       request<{ items: McpServer[] }>('/api/v1/mcp/servers/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
       request<{ items: Skill[] }>('/api/v1/skills/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
+      request<ActiveModel[]>('/api/v1/models/active', { silent: true }).catch(() => []),
       request<{ litellm_base_url: string }>('/api/v1/config/public', { silent: true }).catch(() => ({ litellm_base_url: '' })),
     ])
     mainKey.value = keysData.personal.find(k => k.key_type === 'personal_main') ?? null
@@ -165,6 +155,9 @@ onMounted(async () => {
     trend.value = trendData
     applications.value = appsData.items
     endpointUrl.value = configData.litellm_base_url || ''
+    modelLogoProviderTypes.value = Object.fromEntries(
+      activeModelsData.map(model => [model.model_id, model.logo_provider_type || '']),
+    )
 
     for (const m of mcpRes.items) {
       mcpNames.value[m.id] = m.name
@@ -288,7 +281,7 @@ onMounted(async () => {
           <div v-if="mainKey.models.length" class="flex flex-wrap gap-2">
             <span v-for="m in mainKey.models" :key="m"
               class="flex items-center gap-1.5 rounded-md bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
-              <ProviderIcon v-if="getProviderType(m)" :type="getProviderType(m)" :size="14" />
+              <ProviderIcon v-if="getModelLogoProviderType(m)" :type="getModelLogoProviderType(m)" :size="14" />
               {{ m }}
             </span>
           </div>
