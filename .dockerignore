@@ -48,9 +48,11 @@ ui/packages/*/.nuxt/
 .DS_Store
 Thumbs.db
 
-# Docker (keep supervisor configs needed in build)
+# Docker (keep supervisor configs + db migrations needed in build)
 docker/
 !docker/supervisor/
+!docker/db/
+!docker/db/migrations/
 
 # Logs & Data
 *.log
