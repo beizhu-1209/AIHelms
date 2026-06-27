@@ -172,6 +172,10 @@ class AiKey(Base):
     budget_mcps_per: Mapped[str] = mapped_column(String(10), default="unified")
     model_budgets: Mapped[dict] = mapped_column(JSONB, default=dict)
     mcp_budgets: Mapped[dict] = mapped_column(JSONB, default=dict)
+    rate_limit_mode: Mapped[str] = mapped_column(String(20), default="none")
+    tpm_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rpm_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_parallel_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
     scenario_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.key_scenarios.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.users.id"), nullable=True)
@@ -243,6 +247,7 @@ class Model(Base):
     category: Mapped[str] = mapped_column(String(50), default="chat")
     capabilities: Mapped[list] = mapped_column(JSONB, default=list)
     description: Mapped[str] = mapped_column(Text, default="")
+    logo_provider_type: Mapped[str] = mapped_column(String(50), default="")
     business_scenario_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("aihelms.business_scenarios.id", ondelete="SET NULL"), nullable=True
     )

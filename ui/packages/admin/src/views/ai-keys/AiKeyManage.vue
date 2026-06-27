@@ -86,6 +86,7 @@
                 </td>
                 <td class="px-4 py-3">
                   <BudgetCell :key-data="item.main_key" />
+                  <RateLimitCell :key-data="item.main_key" />
                 </td>
                 <td class="px-4 py-3">
                   <button v-if="item.main_key" :class="['rounded-full px-3 py-1 text-xs font-medium transition', item.main_key.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500']" @click="handleToggle(item.main_key!)">
@@ -125,6 +126,7 @@
                 </td>
                 <td class="px-4 py-2">
                   <BudgetCell :key-data="sk" />
+                  <RateLimitCell :key-data="sk" />
                 </td>
                 <td class="px-4 py-2">
                   <button :class="['rounded-full px-3 py-1 text-xs font-medium transition', sk.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500']" @click="handleToggle(sk)">
@@ -489,6 +491,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import KeyFormDialog from './KeyFormDialog.vue'
 import ScenarioTab from './ScenarioTab.vue'
 import BudgetCell from './BudgetCell.vue'
+import RateLimitCell from './RateLimitCell.vue'
 import BatchResourceDialog from './BatchResourceDialog.vue'
 
 const { hasPermission } = usePermission()

@@ -114,6 +114,9 @@ async def create_key(
     metadata: dict | None = None,
     duration: str | None = None,
     allowed_mcp_servers: list[str] | None = None,
+    tpm_limit: int | None = None,
+    rpm_limit: int | None = None,
+    max_parallel_requests: int | None = None,
 ) -> dict:
     data: dict = {"key_alias": key_alias}
     if user_id:
@@ -130,6 +133,12 @@ async def create_key(
         data["duration"] = duration
     if allowed_mcp_servers is not None:
         data["allowed_mcp_servers"] = allowed_mcp_servers
+    if tpm_limit is not None:
+        data["tpm_limit"] = tpm_limit
+    if rpm_limit is not None:
+        data["rpm_limit"] = rpm_limit
+    if max_parallel_requests is not None:
+        data["max_parallel_requests"] = max_parallel_requests
     return await _request("POST", "/key/generate", json_data=data)
 
 
@@ -143,6 +152,10 @@ async def update_key(
     max_budget: float | None = None,
     metadata: dict | None = None,
     allowed_mcp_servers: list[str] | None = None,
+    tpm_limit: int | None = None,
+    rpm_limit: int | None = None,
+    max_parallel_requests: int | None = None,
+    sync_rate_limits: bool = False,
 ) -> dict:
     data: dict = {"key": key_id}
     if models is not None:
@@ -153,6 +166,12 @@ async def update_key(
         data["metadata"] = metadata
     if allowed_mcp_servers is not None:
         data["allowed_mcp_servers"] = allowed_mcp_servers
+    if sync_rate_limits or tpm_limit is not None:
+        data["tpm_limit"] = tpm_limit
+    if sync_rate_limits or rpm_limit is not None:
+        data["rpm_limit"] = rpm_limit
+    if sync_rate_limits or max_parallel_requests is not None:
+        data["max_parallel_requests"] = max_parallel_requests
     return await _request("POST", "/key/update", json_data=data)
 
 

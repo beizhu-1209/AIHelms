@@ -29,7 +29,20 @@ VALID_KEY_TYPES = {
     KEY_TYPE_DEPT_MAIN, KEY_TYPE_DEPT_SCENE,
     KEY_TYPE_PROJECT_MAIN, KEY_TYPE_PROJECT_SCENE,
 }
+SCENE_KEY_TYPES = {
+    KEY_TYPE_PERSONAL_SCENE,
+    KEY_TYPE_DEPT_SCENE,
+    KEY_TYPE_PROJECT_SCENE,
+}
 VALID_OWNER_TYPES = {"user", "department", "project"}
+RATE_LIMIT_MODE_NONE = "none"
+RATE_LIMIT_MODE_TOTAL = "total"
+RATE_LIMIT_MODE_PER_MODEL = "per_model"
+VALID_RATE_LIMIT_MODES = {
+    RATE_LIMIT_MODE_NONE,
+    RATE_LIMIT_MODE_TOTAL,
+    RATE_LIMIT_MODE_PER_MODEL,
+}
 
 
 async def list_keys(
@@ -82,10 +95,16 @@ async def create_key(
     mcp_budgets: dict[str, float] | None = None,
     scenario_id: int | None = None,
     duration: str | None = None,
+    rate_limit_mode: str = RATE_LIMIT_MODE_NONE,
+    tpm_limit: int | None = None,
+    rpm_limit: int | None = None,
+    max_parallel_requests: int | None = None,
     rate_limits: list[dict] | None = None,
 ) -> dict:
     if key_type not in VALID_KEY_TYPES:
         raise ConflictError(f"无效的 key 类型: {key_type}")
+    if key_type not in SCENE_KEY_TYPES:
+        raise ValidationError("只能手动创建场景 Key，主 Key 由平台自动创建")
     if owner_type not in VALID_OWNER_TYPES:
         raise ConflictError(f"无效的 owner 类型: {owner_type}")
 
@@ -124,11 +143,23 @@ async def create_key(
         budget_mcps_per=budget_mcps_per,
         model_budgets=model_budgets or {},
         mcp_budgets=mcp_budgets or {},
+        rate_limit_mode=rate_limit_mode,
+        tpm_limit=tpm_limit,
+        rpm_limit=rpm_limit,
+        max_parallel_requests=max_parallel_requests,
         scenario_id=scenario_id,
         is_active=False,
         created_by=created_by,
     )
     ai_key = await ai_key_repo.create(session, ai_key)
+    _assign_key_rate_limits(
+        ai_key,
+        rate_limit_mode,
+        tpm_limit,
+        rpm_limit,
+        max_parallel_requests,
+    )
+    await _save_rate_limits(session, ai_key.id, rate_limits or [])
 
     # Sync to LiteLLM
     litellm_duration = budget_duration if budget_duration and budget_limit else duration
@@ -141,19 +172,18 @@ async def create_key(
         user_id=litellm_user_id,
         team_id=team_id,
         models=litellm_models,
-        metadata={"aihelms_key_id": ai_key.id, "key_type": key_type},
+        metadata=await _build_key_metadata(session, ai_key),
         duration=litellm_duration,
         allowed_mcp_servers=mcp_server_names if mcp_server_names else None,
+        tpm_limit=ai_key.tpm_limit,
+        rpm_limit=ai_key.rpm_limit,
+        max_parallel_requests=ai_key.max_parallel_requests,
     )
     ai_key.litellm_key_id = result.get("key")
     ai_key.litellm_key_alias = key_alias
 
     await session.commit()
     await session.refresh(ai_key)
-
-    # Save rate limits if provided
-    if rate_limits:
-        await _save_rate_limits(session, ai_key.id, rate_limits)
 
     data = _serialize_key(ai_key)
     # Return full key value only on creation
@@ -182,6 +212,11 @@ async def update_key(
     model_budgets: dict[str, float] | None = None,
     mcp_budgets: dict[str, float] | None = None,
     scenario_id: int | None = None,
+    update_rate_limit: bool = True,
+    rate_limit_mode: str | None = None,
+    tpm_limit: int | None = None,
+    rpm_limit: int | None = None,
+    max_parallel_requests: int | None = None,
     rate_limits: list[dict] | None = None,
 ) -> dict:
     key = await ai_key_repo.find_by_id(session, key_id)
@@ -225,20 +260,35 @@ async def update_key(
     if scenario_id is not None:
         key.scenario_id = scenario_id
 
+    rate_limit_changed = update_rate_limit and _has_rate_limit_update(
+        rate_limit_mode,
+        tpm_limit,
+        rpm_limit,
+        max_parallel_requests,
+        rate_limits,
+    )
+    if rate_limit_changed:
+        _assign_key_rate_limits(
+            key,
+            rate_limit_mode or key.rate_limit_mode or RATE_LIMIT_MODE_NONE,
+            tpm_limit,
+            rpm_limit,
+            max_parallel_requests,
+        )
+        await _save_rate_limits(session, key_id, rate_limits or [])
+
     await _sync_key_to_litellm(
         key,
         models_changed=models is not None,
         mcps_changed=mcps is not None,
         budget_changed=(budget_limit is not None or budget_hard_limit is not None or budget_duration is not None),
         model_budgets_changed=model_budgets is not None,
+        rate_limits_changed=rate_limit_changed,
         session=session,
     )
 
     await session.commit()
     await session.refresh(key)
-
-    if rate_limits is not None:
-        await _save_rate_limits(session, key_id, rate_limits)
 
     return _serialize_key(key)
 
@@ -263,7 +313,15 @@ async def update_key_resources(
         key.skills = skills
     if agents is not None:
         key.agents = agents
-    await _sync_key_to_litellm(key, models is not None, mcps is not None, False, False, session=session)
+    await _sync_key_to_litellm(
+        key,
+        models is not None,
+        mcps is not None,
+        False,
+        False,
+        rate_limits_changed=key.rate_limit_mode == RATE_LIMIT_MODE_PER_MODEL,
+        session=session,
+    )
 
 
 async def _resolve_mcp_server_names(
@@ -317,11 +375,12 @@ async def _sync_key_to_litellm(
     mcps_changed: bool,
     budget_changed: bool,
     model_budgets_changed: bool,
+    rate_limits_changed: bool = False,
     session: AsyncSession | None = None,
 ) -> None:
     if not key.litellm_key_id:
         return
-    if not (models_changed or mcps_changed or budget_changed):
+    if not (models_changed or mcps_changed or budget_changed or rate_limits_changed):
         return
 
     # Expand models with (Anthropic) variants
@@ -336,11 +395,19 @@ async def _sync_key_to_litellm(
     if mcps_changed and session:
         mcp_server_names = await _resolve_mcp_server_names(session, key.mcps or [])
 
-    if models_changed or mcps_changed:
+    if models_changed or mcps_changed or rate_limits_changed:
+        metadata = None
+        if session and rate_limits_changed:
+            metadata = await _build_key_metadata(session, key)
         await litellm_client.update_key(
             key_id=key.litellm_key_id,
             models=litellm_models if models_changed else None,
+            metadata=metadata,
             allowed_mcp_servers=mcp_server_names,
+            tpm_limit=key.tpm_limit,
+            rpm_limit=key.rpm_limit,
+            max_parallel_requests=key.max_parallel_requests,
+            sync_rate_limits=rate_limits_changed,
         )
 
     if budget_changed:
@@ -428,10 +495,14 @@ async def batch_create_keys(
     model_budgets: dict[str, float] | None = None,
     mcp_budgets: dict[str, float] | None = None,
     scenario_id: int | None = None,
+    rate_limit_mode: str = RATE_LIMIT_MODE_NONE,
+    tpm_limit: int | None = None,
+    rpm_limit: int | None = None,
+    max_parallel_requests: int | None = None,
     rate_limits: list[dict] | None = None,
 ) -> list[dict]:
-    if key_type not in {KEY_TYPE_PERSONAL_MAIN, KEY_TYPE_PERSONAL_SCENE}:
-        raise ValidationError("批量创建仅支持个人主 Key 和场景 Key")
+    if key_type != KEY_TYPE_PERSONAL_SCENE:
+        raise ValidationError("批量创建仅支持个人场景 Key")
 
     results = []
     for user_id in user_ids:
@@ -442,12 +513,6 @@ async def batch_create_keys(
 
         name = name_template.replace("{username}", user.username or "")
         name = name.replace("{display_name}", user.display_name or user.username or "")
-
-        if key_type == KEY_TYPE_PERSONAL_MAIN:
-            existing = await ai_key_repo.find_personal_main(session, user_id)
-            if existing:
-                results.append({"user_id": user_id, "success": False, "error": "已有主 Key"})
-                continue
 
         try:
             key_data = await create_key(
@@ -473,6 +538,10 @@ async def batch_create_keys(
                 model_budgets=model_budgets,
                 mcp_budgets=mcp_budgets,
                 scenario_id=scenario_id,
+                rate_limit_mode=rate_limit_mode,
+                tpm_limit=tpm_limit,
+                rpm_limit=rpm_limit,
+                max_parallel_requests=max_parallel_requests,
                 rate_limits=rate_limits,
             )
             results.append({"user_id": user_id, "success": True, "key": key_data})
@@ -609,6 +678,7 @@ async def sync_public_resource_to_all_keys(
                 await _sync_key_to_litellm(
                     key, models_changed=True, mcps_changed=False,
                     budget_changed=False, model_budgets_changed=False,
+                    rate_limits_changed=key.rate_limit_mode == RATE_LIMIT_MODE_PER_MODEL,
                     session=session,
                 )
     if updated:
@@ -744,10 +814,10 @@ async def set_model_limits(
             session,
             ai_key_id=key_id,
             model_id=mid,
-            tpm=item.get("tpm"),
-            rpm=item.get("rpm"),
-            max_tokens=item.get("max_tokens"),
-            max_calls=item.get("max_calls"),
+            tpm=_clean_limit_value(item.get("tpm")),
+            rpm=_clean_limit_value(item.get("rpm")),
+            max_tokens=None,
+            max_calls=None,
         )
 
     # Delete limits for models not in the incoming list
@@ -758,6 +828,15 @@ async def set_model_limits(
                 session, key_id, existing.model_id
             )
 
+    await _sync_key_to_litellm(
+        key,
+        models_changed=False,
+        mcps_changed=False,
+        budget_changed=False,
+        model_budgets_changed=False,
+        rate_limits_changed=key.rate_limit_mode == RATE_LIMIT_MODE_PER_MODEL,
+        session=session,
+    )
     await session.commit()
     return await get_model_limits(session, key_id)
 
@@ -770,6 +849,15 @@ async def delete_model_limit(session: AsyncSession, key_id: int, model_id: int) 
     deleted = await ai_key_model_limit_repo.delete_by_key_and_model(session, key_id, model_id)
     if not deleted:
         raise NotFoundError("model_limit", f"{key_id}/{model_id}")
+    await _sync_key_to_litellm(
+        key,
+        models_changed=False,
+        mcps_changed=False,
+        budget_changed=False,
+        model_budgets_changed=False,
+        rate_limits_changed=key.rate_limit_mode == RATE_LIMIT_MODE_PER_MODEL,
+        session=session,
+    )
     await session.commit()
 
 
@@ -809,6 +897,108 @@ async def _resolve_litellm_user(session: AsyncSession, owner_type: str, owner_id
     return None
 
 
+def _has_rate_limit_update(
+    rate_limit_mode: str | None,
+    tpm_limit: int | None,
+    rpm_limit: int | None,
+    max_parallel_requests: int | None,
+    rate_limits: list[dict] | None,
+) -> bool:
+    return any(
+        value is not None
+        for value in (
+            rate_limit_mode,
+            tpm_limit,
+            rpm_limit,
+            max_parallel_requests,
+            rate_limits,
+        )
+    )
+
+
+def _assign_key_rate_limits(
+    key: AiKey,
+    rate_limit_mode: str,
+    tpm_limit: int | None,
+    rpm_limit: int | None,
+    max_parallel_requests: int | None,
+) -> None:
+    if rate_limit_mode not in VALID_RATE_LIMIT_MODES:
+        raise ValidationError(f"无效的限流模式: {rate_limit_mode}")
+
+    key.rate_limit_mode = rate_limit_mode
+    if rate_limit_mode == RATE_LIMIT_MODE_TOTAL:
+        key.tpm_limit = tpm_limit
+        key.rpm_limit = rpm_limit
+        key.max_parallel_requests = max_parallel_requests
+        return
+
+    key.tpm_limit = None
+    key.rpm_limit = None
+    key.max_parallel_requests = None
+
+
+def _clean_limit_value(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+    number = int(value)
+    return number if number > 0 else None
+
+
+def _base_key_metadata(key: AiKey) -> dict:
+    return {"aihelms_key_id": key.id, "key_type": key.key_type}
+
+
+async def _build_key_metadata(session: AsyncSession, key: AiKey) -> dict:
+    metadata = _base_key_metadata(key)
+    if key.rate_limit_mode != RATE_LIMIT_MODE_PER_MODEL:
+        return metadata
+
+    model_tpm_limit, model_rpm_limit = await _build_model_rate_limit_maps(session, key)
+    if model_tpm_limit:
+        metadata["model_tpm_limit"] = model_tpm_limit
+    if model_rpm_limit:
+        metadata["model_rpm_limit"] = model_rpm_limit
+    return metadata
+
+
+async def _build_model_rate_limit_maps(
+    session: AsyncSession,
+    key: AiKey,
+) -> tuple[dict[str, int], dict[str, int]]:
+    limits = await ai_key_model_limit_repo.find_by_key_id(session, key.id)
+    allowed_models = set(key.models or [])
+    tpm_limits: dict[str, int] = {}
+    rpm_limits: dict[str, int] = {}
+
+    for limit in limits:
+        model = await model_repo.find_by_id(session, limit.model_id)
+        if not model or model.model_id not in allowed_models:
+            continue
+        if limit.tpm:
+            tpm_limits[model.model_id] = limit.tpm
+        if limit.rpm:
+            rpm_limits[model.model_id] = limit.rpm
+
+    expanded_tpm = await _expand_rate_limit_map(session, tpm_limits)
+    expanded_rpm = await _expand_rate_limit_map(session, rpm_limits)
+    return expanded_tpm, expanded_rpm
+
+
+async def _expand_rate_limit_map(
+    session: AsyncSession,
+    limits: dict[str, int],
+) -> dict[str, int]:
+    if not limits:
+        return {}
+    _, expanded = await _expand_models_with_anthropic(
+        session,
+        list(limits.keys()),
+        limits,
+    )
+    return expanded or limits
+
+
 def _build_key_alias(key_type: str, owner_type: str, owner_id: int, name: str) -> str:
     if key_type == KEY_TYPE_PERSONAL_MAIN:
         return f"user:{owner_id}/main"
@@ -837,10 +1027,10 @@ async def _save_rate_limits(session: AsyncSession, key_id: int, rate_limits: lis
             session,
             ai_key_id=key_id,
             model_id=mid,
-            tpm=item.get("tpm"),
-            rpm=item.get("rpm"),
-            max_tokens=item.get("max_tokens"),
-            max_calls=item.get("max_calls"),
+            tpm=_clean_limit_value(item.get("tpm")),
+            rpm=_clean_limit_value(item.get("rpm")),
+            max_tokens=None,
+            max_calls=None,
         )
 
     # Remove limits for models not in the incoming list
@@ -849,7 +1039,7 @@ async def _save_rate_limits(session: AsyncSession, key_id: int, rate_limits: lis
         if limit.model_id not in incoming_model_ids:
             await ai_key_model_limit_repo.delete_by_key_and_model(session, key_id, limit.model_id)
 
-    await session.commit()
+    await session.flush()
 
 
 def _serialize_key(key: AiKey) -> dict:
@@ -878,6 +1068,10 @@ def _serialize_key(key: AiKey) -> dict:
         "budget_mcps_per": key.budget_mcps_per,
         "model_budgets": key.model_budgets or {},
         "mcp_budgets": key.mcp_budgets or {},
+        "rate_limit_mode": key.rate_limit_mode or RATE_LIMIT_MODE_NONE,
+        "tpm_limit": key.tpm_limit,
+        "rpm_limit": key.rpm_limit,
+        "max_parallel_requests": key.max_parallel_requests,
         "scenario_id": key.scenario_id,
         "is_active": key.is_active,
         "created_by": key.created_by,

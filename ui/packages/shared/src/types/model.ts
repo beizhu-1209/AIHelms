@@ -5,6 +5,7 @@ export interface ModelInfo {
   category: string
   capabilities: string[]
   description: string
+  logo_provider_type: string
   is_active: boolean
   is_published: boolean
   visibility_type: string
@@ -37,6 +38,7 @@ export interface CreateModelParams {
   category?: string
   capabilities?: string[]
   description?: string
+  logo_provider_type?: string
 }
 
 export interface UpdateModelParams {
@@ -45,6 +47,7 @@ export interface UpdateModelParams {
   category?: string
   capabilities?: string[]
   description?: string
+  logo_provider_type?: string
   is_active?: boolean
 }
 
@@ -84,6 +87,7 @@ export interface ActiveModel {
   category?: string
   capabilities?: string[]
   description?: string
+  logo_provider_type: string
   is_published?: boolean
   requires_approval?: boolean
   has_anthropic_deployment?: boolean

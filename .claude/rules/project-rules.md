@@ -98,10 +98,10 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 - SQLAlchemy 2.0 async + asyncpg driver, business tables in `aihelms` schema
 - ORM models in `apps/models/db.py`, one model per table
 - Repository layer in `apps/repositories/`, one file per resource (e.g., `user_repo.py`)
-- Schema managed via `docker/db/init.sql` (complete structure) + `docker/db/migrations/` (local incremental changes, not committed)
+- Schema managed via `docker/db/init.sql` (complete structure) + `docker/db/migrations/` (incremental changes, committed to sync production upgrades)
 - Table names: snake_case plural. Column names: snake_case. Index: `idx_table_column`
 - API paths: plural nouns, kebab-case (`/api/v1/api-keys`)
-- When database schema changes, `init.sql` must be updated; migration files are local only, not committed
+- When database schema changes, both `init.sql` and a new numbered migration must be updated; migration files are committed. Migrations must be idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING), additive-only (no DROP), and never reuse or modify an existing number
 - Run `./dev/migrate` before committing to verify migrations execute correctly
 
 ## LiteLLM

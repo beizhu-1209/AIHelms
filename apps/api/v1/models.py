@@ -15,6 +15,7 @@ class CreateModelRequest(BaseModel):
     category: str = Field("chat", max_length=50)
     capabilities: list[str] = Field(default_factory=list)
     description: str = Field("", max_length=500)
+    logo_provider_type: str | None = Field(None, max_length=50)
 
 
 class UpdateModelRequest(BaseModel):
@@ -23,6 +24,7 @@ class UpdateModelRequest(BaseModel):
     category: str | None = None
     capabilities: list[str] | None = None
     description: str | None = None
+    logo_provider_type: str | None = Field(None, max_length=50)
     is_active: bool | None = None
 
 
@@ -117,6 +119,7 @@ async def create_model(
             category=req.category,
             capabilities=req.capabilities,
             description=req.description,
+            logo_provider_type=req.logo_provider_type,
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -151,6 +154,7 @@ async def update_model(
             category=req.category,
             capabilities=req.capabilities,
             description=req.description,
+            logo_provider_type=req.logo_provider_type,
             is_active=req.is_active,
         )
     except NotFoundError:

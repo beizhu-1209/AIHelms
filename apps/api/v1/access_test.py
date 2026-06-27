@@ -64,6 +64,7 @@ async def test_access(
         current_user["id"],
         model_obj,
         test_model,
+        is_admin=current_user["is_admin"],
     )
     if error_detail:
         return _build_error_response(error_detail, category, req.stream)
@@ -158,6 +159,7 @@ async def test_embedding(
         current_user["id"],
         model_obj,
         test_model,
+        is_admin=current_user["is_admin"],
     )
     if error_detail:
         return {
@@ -185,6 +187,7 @@ async def test_rerank(
         current_user["id"],
         model_obj,
         test_model,
+        is_admin=current_user["is_admin"],
     )
     if error_detail:
         return {

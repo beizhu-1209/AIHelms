@@ -13,7 +13,12 @@ import dashscopeIcon from '../assets/providers/dashscope.png'
 import zhipuIcon from '../assets/providers/zhipu.svg'
 import moonshotIcon from '../assets/providers/moonshot.svg'
 import minimaxIcon from '../assets/providers/minimax.svg'
+import xiaomiMimoIcon from '../assets/providers/xiaomi_mimo.png'
+import vllmIcon from '../assets/providers/vllm.png'
+import sglangIcon from '../assets/providers/sglang.svg'
 import ollamaIcon from '../assets/providers/ollama.svg'
+import lmstudioIcon from '../assets/providers/lmstudio.svg'
+import openaiCompatibleIcon from '../assets/providers/openai_compatible.svg'
 import customIcon from '../assets/providers/custom.svg'
 
 interface Props {
@@ -36,7 +41,12 @@ const iconMap: Record<string, string> = {
   zhipu: zhipuIcon,
   moonshot: moonshotIcon,
   minimax: minimaxIcon,
+  xiaomi_mimo: xiaomiMimoIcon,
+  vllm: vllmIcon,
+  sglang: sglangIcon,
   ollama: ollamaIcon,
+  lmstudio: lmstudioIcon,
+  openai_compatible: openaiCompatibleIcon,
   custom: customIcon,
 }
 

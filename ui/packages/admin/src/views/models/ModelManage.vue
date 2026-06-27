@@ -32,6 +32,7 @@ import {
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
 import { getDepartmentTree, type DeptTreeNode } from '@aihelms/shared'
+import { Search, X } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import AccessTestDialog from '../../components/AccessTestDialog.vue'
 import ProviderIcon from '../../components/ProviderIcon.vue'
@@ -104,6 +105,9 @@ const formModelId = ref('')
 const formCategory = ref('chat')
 const formTags = ref<string[]>([])
 const formDescription = ref('')
+const formLogoProviderType = ref('')
+const showLogoOptions = ref(false)
+const logoSearch = ref('')
 const showModelAdvanced = ref(false)
 // 创建时可选关联凭证（自动创建 deployment）
 const formProviderId = ref<number | null>(null)
@@ -240,21 +244,89 @@ const FALLBACK_PREFIX_MAP: Record<string, Record<string, string | null>> = {
   lmstudio: { chat: 'openai', embedding: 'openai', rerank: null },
 }
 
-function getModelProviderType(model: ModelInfo): string {
-  const id = model.model_id || ''
-  if (id.includes('/')) return id.split('/')[0]
-  const lower = id.toLowerCase()
-  if (lower.startsWith('gpt') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) return 'openai'
-  if (lower.startsWith('claude')) return 'anthropic'
-  if (lower.startsWith('gemini') || lower.startsWith('gemma')) return 'google'
-  if (lower.startsWith('deepseek')) return 'deepseek'
-  if (lower.startsWith('qwen') || lower.startsWith('qwq')) return 'dashscope'
-  if (lower.startsWith('glm') || lower.startsWith('chatglm') || lower.startsWith('z.ai')) return 'zhipu'
-  if (lower.startsWith('moonshot') || lower.startsWith('kimi')) return 'moonshot'
-  if (lower.startsWith('abab') || lower.startsWith('minimax')) return 'minimax'
-  if (lower.includes('doubao') || lower.startsWith('ep-')) return 'volcengine'
-  if (lower.startsWith('llama') || lower.startsWith('mistral') || lower.startsWith('mixtral')) return 'ollama'
-  return ''
+interface LogoOption { value: string; label: string }
+
+const BUILT_IN_LOGO_OPTIONS: LogoOption[] = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'azure', label: 'Azure' },
+  { value: 'google', label: 'Google' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'bedrock', label: 'Bedrock' },
+  { value: 'vertex_ai', label: 'Vertex AI' },
+  { value: 'volcengine', label: '火山引擎' },
+  { value: 'dashscope', label: '阿里百炼' },
+  { value: 'zhipu', label: '智谱 GLM' },
+  { value: 'moonshot', label: 'Moonshot' },
+  { value: 'minimax', label: 'MiniMax' },
+  { value: 'xiaomi_mimo', label: '小米MiMo' },
+  { value: 'vllm', label: 'vLLM' },
+  { value: 'sglang', label: 'SGLang' },
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'lmstudio', label: 'LM Studio' },
+  { value: 'openai_compatible', label: 'OpenAI Compatible' },
+  { value: 'custom', label: '自定义' },
+]
+
+const modelLogoOptions = computed<LogoOption[]>(() => {
+  const options: LogoOption[] = [{ value: '', label: '默认' }]
+  const seen = new Set<string>([''])
+
+  if (isEditingModel.value && selectedModel.value) {
+    for (const deployment of deployments.value) {
+      const providerType = getCredentialProviderType(deployment.credential_id)
+      if (providerType && !seen.has(providerType)) {
+        options.push({ value: providerType, label: getLogoProviderLabel(providerType) })
+        seen.add(providerType)
+      }
+    }
+  }
+
+  for (const option of BUILT_IN_LOGO_OPTIONS) {
+    if (!seen.has(option.value)) {
+      options.push(option)
+      seen.add(option.value)
+    }
+  }
+  return options
+})
+
+const filteredLogoOptions = computed<LogoOption[]>(() => {
+  const q = logoSearch.value.trim().toLowerCase()
+  if (!q) return modelLogoOptions.value
+  return modelLogoOptions.value.filter(option => {
+    return option.label.toLowerCase().includes(q) || option.value.toLowerCase().includes(q)
+  })
+})
+
+const selectedLogoOption = computed<LogoOption>(() => {
+  const selected = modelLogoOptions.value.find(option => option.value === formLogoProviderType.value)
+  if (selected) return selected
+  if (formLogoProviderType.value) {
+    return { value: formLogoProviderType.value, label: getLogoProviderLabel(formLogoProviderType.value) }
+  }
+  return modelLogoOptions.value[0]
+})
+
+function getLogoProviderLabel(providerType: string): string {
+  return providers.value.find(p => p.provider_type === providerType)?.name
+    || BUILT_IN_LOGO_OPTIONS.find(option => option.value === providerType)?.label
+    || providerType
+}
+
+function handleOpenLogoPicker(): void {
+  logoSearch.value = ''
+  showLogoOptions.value = true
+}
+
+function handleCloseLogoPicker(): void {
+  showLogoOptions.value = false
+  logoSearch.value = ''
+}
+
+function handleSelectLogoProvider(providerType: string): void {
+  formLogoProviderType.value = providerType
+  handleCloseLogoPicker()
 }
 
 const categoryLabels: Record<string, string> = {
@@ -333,6 +405,9 @@ function handleCreateModel(): void {
   formCategory.value = 'chat'
   formTags.value = []
   formDescription.value = ''
+  formLogoProviderType.value = ''
+  showLogoOptions.value = false
+  logoSearch.value = ''
   formProviderId.value = null
   formCredentialId.value = null
   formDeployModelName.value = ''
@@ -349,6 +424,9 @@ function handleEditModel(): void {
   formCategory.value = selectedModel.value.category
   formTags.value = [...selectedModel.value.capabilities]
   formDescription.value = selectedModel.value.description
+  formLogoProviderType.value = selectedModel.value.logo_provider_type || ''
+  showLogoOptions.value = false
+  logoSearch.value = ''
   showModelAdvanced.value = false
   errorMessage.value = ''
   showModelForm.value = true
@@ -368,6 +446,7 @@ async function handleSubmitModel(): Promise<void> {
         category: formCategory.value,
         capabilities: formTags.value,
         description: formDescription.value,
+        logo_provider_type: formLogoProviderType.value,
       })
       await fetchModelDetail(selectedModel.value.id)
     } else {
@@ -377,6 +456,7 @@ async function handleSubmitModel(): Promise<void> {
         category: formCategory.value,
         capabilities: formTags.value,
         description: formDescription.value,
+        logo_provider_type: formLogoProviderType.value,
       })
     }
     showModelForm.value = false
@@ -875,7 +955,7 @@ onMounted(() => {
           @click="handleSelectModel(model)"
         >
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-            <ProviderIcon v-if="getModelProviderType(model)" :type="getModelProviderType(model)" :size="20" />
+            <ProviderIcon v-if="model.logo_provider_type" :type="model.logo_provider_type" :size="20" />
             <svg v-else class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-2.47 2.47a2.25 2.25 0 01-1.591.659H9.061a2.25 2.25 0 01-1.591-.659L5 14.5m14 0V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
             </svg>
@@ -1180,6 +1260,27 @@ onMounted(() => {
             </select>
           </div>
           <div class="mb-3">
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">Logo</label>
+            <div>
+              <button
+                type="button"
+                class="flex h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                @click="handleOpenLogoPicker"
+              >
+                <span class="flex min-w-0 items-center gap-2">
+                  <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100">
+                    <ProviderIcon v-if="formLogoProviderType" :type="formLogoProviderType" :size="18" />
+                    <svg v-else class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5m14 0l-4.091-4.091a2.25 2.25 0 01-.659-1.591V3.104M19 14.5V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
+                    </svg>
+                  </span>
+                  <span class="truncate font-medium">{{ selectedLogoOption.label }}</span>
+                </span>
+                <span class="shrink-0 text-xs text-slate-400">点击修改</span>
+              </button>
+            </div>
+          </div>
+          <div class="mb-3">
             <label class="mb-1.5 block text-sm font-medium text-slate-700">能力标签</label>
             <div class="flex flex-wrap gap-2">
               <label
@@ -1211,6 +1312,52 @@ onMounted(() => {
         </form>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="showLogoOptions"
+        class="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-sm"
+        @click.self="handleCloseLogoPicker"
+      >
+        <div class="w-full max-w-md rounded-2xl border border-slate-200/60 bg-white p-5 shadow-xl">
+          <div class="mb-3 flex items-center justify-between">
+            <h4 class="text-sm font-semibold text-slate-800">选择 Logo</h4>
+            <button type="button" class="rounded p-1 text-slate-400 hover:text-slate-600" @click="handleCloseLogoPicker">
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+          <div class="relative mb-3">
+            <Search class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              v-model="logoSearch"
+              type="text"
+              placeholder="搜索 Logo 名称或 provider_type..."
+              class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none"
+            />
+          </div>
+          <div class="grid max-h-72 grid-cols-5 gap-2 overflow-y-auto pr-1">
+            <button
+              v-for="option in filteredLogoOptions"
+              :key="option.value || 'default'"
+              type="button"
+              class="flex h-16 flex-col items-center justify-center gap-1 rounded-lg border text-xs transition-colors"
+              :class="formLogoProviderType === option.value ? 'border-purple-300 bg-purple-50 text-purple-700 ring-2 ring-purple-500/20' : 'border-slate-100 text-slate-600 hover:bg-slate-50'"
+              :title="option.value || 'default'"
+              @click="handleSelectLogoProvider(option.value)"
+            >
+              <span class="flex h-7 w-7 items-center justify-center rounded bg-slate-100">
+                <ProviderIcon v-if="option.value" :type="option.value" :size="20" />
+                <svg v-else class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5m14 0l-4.091-4.091a2.25 2.25 0 01-.659-1.591V3.104M19 14.5V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
+                </svg>
+              </span>
+              <span class="max-w-full truncate px-1">{{ option.label }}</span>
+            </button>
+          </div>
+          <p v-if="!filteredLogoOptions.length" class="py-4 text-center text-xs text-slate-400">无匹配 Logo</p>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- 添加/编辑凭证弹窗 -->
     <div v-if="showDeployForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
