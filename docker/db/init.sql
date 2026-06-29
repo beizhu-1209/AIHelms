@@ -546,6 +546,10 @@ CREATE INDEX IF NOT EXISTS idx_llm_logs_ai_key ON aihelms.llm_call_logs(ai_key_i
 CREATE INDEX IF NOT EXISTS idx_llm_logs_model ON aihelms.llm_call_logs(model);
 CREATE INDEX IF NOT EXISTS idx_llm_logs_status ON aihelms.llm_call_logs(status);
 
+-- LiteLLM creates public."LiteLLM_SpendLogs" via its own migrations.
+-- The cursor index used by llm_log sync is managed by migration
+-- 008_add_litellm_spendlogs_cursor_index.sql and by the sync task runtime guard.
+
 -- Skill 使用日志（下载 / 安装）
 CREATE TABLE IF NOT EXISTS aihelms.skill_usage_logs (
     id BIGSERIAL PRIMARY KEY,

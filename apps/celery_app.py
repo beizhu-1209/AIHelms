@@ -36,6 +36,10 @@ celery_app.conf.beat_schedule = {
         "task": "llm_log.cleanup",
         "schedule": crontab(hour=4, minute=0),
     },
+    "reconcile-llm-logs": {
+        "task": "llm_log.reconcile",
+        "schedule": crontab(minute=0),
+    },
     "efficiency-aggregate": {
         "task": "efficiency.aggregate",
         "schedule": 5 * 60,
