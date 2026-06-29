@@ -255,6 +255,18 @@ async def get_overview(
     }
 
 
+async def get_trend(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    granularity: str = "day",
+    user_id: int | None = None,
+) -> list[dict]:
+    return await efficiency_repo.get_summary_trend(
+        session, start_date, end_date, granularity, user_id
+    )
+
+
 async def get_user_overview(
     session: AsyncSession, start_date: date, end_date: date, user_id: int
 ) -> dict:
