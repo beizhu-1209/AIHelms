@@ -6,7 +6,7 @@ import { createResourceApplication } from '@aihelms/shared/src/api/resource-appl
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import type { Skill } from '@aihelms/shared/src/types/skill'
 import type { McpServer } from '@aihelms/shared/src/types/mcp'
-import { Server, Sparkles, CheckCircle2, Search, X, ExternalLink } from 'lucide-vue-next'
+import { Server, Sparkles, CheckCircle2, Search, X, ExternalLink, Flame } from 'lucide-vue-next'
 import * as lucideIcons from 'lucide-vue-next'
 
 type MarketItem = (Skill & { _type: 'skill' }) | (McpServer & { _type: 'mcp' })
@@ -82,6 +82,22 @@ function getLucideIcon(name: string) {
   return (lucideIcons as Record<string, unknown>)[name] || null
 }
 
+function getAuthor(item: MarketItem): string {
+  return item.author ?? ''
+}
+
+function getUsageCount(item: MarketItem): number {
+  if (item._type === 'skill') return (item as Skill).install_count ?? 0
+  return (item as McpServer).call_count ?? 0
+}
+
+function formatUsageCount(count: number): string {
+  if (count >= 1_000_000) return `${Math.floor(count / 100_000) / 10}M`
+  if (count >= 10_000) return `${Math.floor(count / 1000)}K`
+  if (count >= 1000) return `${Math.floor(count / 100) / 10}K`
+  return String(count)
+}
+
 async function handleCopyPrompt(item: MarketItem) {
   if (item._type !== 'skill') return
   skillTarget.value = item as unknown as Skill
@@ -111,6 +127,7 @@ interface SkillInstallInfo {
   agent_prompt: string
   download_url: string
   usage_instructions: string
+  author?: string
 }
 
 const showSkillInstallDialog = ref(false)
@@ -127,17 +144,43 @@ function handleViewAccess(item: MarketItem) {
   loadMcpConfig(item.id)
 }
 
-const mcpConnectConfig = ref<{ name: string; description: string; agent_prompt: string; config: Record<string, unknown>; instructions: string; tools: Array<{ name: string; description: string }> } | null>(null)
+interface McpConnectConfig {
+  name: string
+  description: string
+  author?: string
+  agent_prompt: string
+  config: Record<string, unknown>
+  instructions: string
+  tools: Array<{ name: string; description: string }>
+}
+
+const mcpConnectConfig = ref<McpConnectConfig | null>(null)
 const mcpConfigLoading = ref(false)
 const mcpConfigCopied = ref(false)
 
 async function loadMcpConfig(serverId: number) {
   mcpConfigLoading.value = true
   try {
-    const res = await request<{ name: string; description: string; agent_prompt: string; config: Record<string, unknown>; instructions: string; tools: Array<{ name: string; description: string }> }>(`/api/v1/mcp/servers/${serverId}/connect-config`)
+    const res = await request<McpConnectConfig>(`/api/v1/mcp/servers/${serverId}/connect-config`)
     mcpConnectConfig.value = res
   } catch { /* */ }
   finally { mcpConfigLoading.value = false }
+}
+
+function getSkillDialogAuthor(): string {
+  return skillInstallInfo.value?.author ?? skillTarget.value?.author ?? ''
+}
+
+function getMcpDialogAuthor(): string {
+  return mcpConnectConfig.value?.author ?? mcpTarget.value?.author ?? ''
+}
+
+function getSkillDialogUsageCount(): number {
+  return skillTarget.value?.install_count ?? 0
+}
+
+function getMcpDialogUsageCount(): number {
+  return mcpTarget.value?.call_count ?? 0
 }
 
 async function copyMcpConfig() {
@@ -291,20 +334,29 @@ onMounted(loadData)
         </div>
 
         <!-- Name + Category -->
-        <h3 class="mb-1 text-sm font-semibold text-slate-800 line-clamp-1">{{ item.name }}</h3>
+          <div class="mb-1 flex items-start justify-between gap-3">
+            <h3 class="min-w-0 flex-1 text-sm font-semibold text-slate-800 line-clamp-1">{{ item.name }}</h3>
+            <span v-if="getAuthor(item)" class="max-w-[6em] shrink-0 truncate text-xs text-slate-400">{{ getAuthor(item) }}</span>
+          </div>
         <p v-if="item.category" class="mb-2 text-xs text-slate-400">{{ item.category }}</p>
 
         <!-- Tags -->
-        <div v-if="getTags(item).length" class="mb-2 flex flex-wrap gap-1">
-          <span
-            v-for="tag in getTags(item)"
-            :key="tag"
-            class="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
-          >
-            {{ tag }}
-          </span>
-        </div>
-
+          <div class="mb-2 flex items-start justify-between gap-2">
+            <div v-if="getTags(item).length" class="flex min-w-0 flex-wrap gap-1">
+              <span
+                v-for="tag in getTags(item)"
+                :key="tag"
+                class="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
+              >
+                {{ tag }}
+              </span>
+            </div>
+            <div v-else class="min-w-0" />
+            <span class="flex shrink-0 items-center gap-1 pt-0.5 text-xs text-slate-400 tabular-nums">
+              <Flame class="h-3.5 w-3.5 text-orange-500" />
+              {{ formatUsageCount(getUsageCount(item)) }}
+            </span>
+          </div>
         <!-- Description -->
         <p class="flex-1 text-xs leading-relaxed text-slate-500 line-clamp-3">{{ item.description }}</p>
         <!-- Hover actions -->
@@ -377,8 +429,15 @@ onMounted(loadData)
     <Teleport to="body">
       <div v-if="showMcpAccessDialog && mcpTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showMcpAccessDialog = false">
         <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-slate-200/60 bg-white/90 shadow-xl backdrop-blur">
-          <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <h3 class="text-lg font-semibold text-slate-800">{{ mcpTarget.name }}</h3>
+            <div class="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
+              <div class="flex min-w-0 items-center gap-2">
+                <h3 class="truncate text-lg font-semibold text-slate-800">{{ mcpTarget.name }}</h3>
+                <span v-if="getMcpDialogAuthor()" class="max-w-[6em] shrink-0 truncate text-xs text-slate-400">{{ getMcpDialogAuthor() }}</span>
+                <span class="flex shrink-0 items-center gap-1 text-xs text-slate-400 tabular-nums">
+                  <Flame class="h-3.5 w-3.5 text-orange-500" />
+                  {{ formatUsageCount(getMcpDialogUsageCount()) }}
+                </span>
+              </div>
             <button class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" @click="showMcpAccessDialog = false">
               <X class="h-5 w-5" />
             </button>
@@ -439,8 +498,15 @@ onMounted(loadData)
     <Teleport to="body">
       <div v-if="showSkillInstallDialog && skillTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showSkillInstallDialog = false">
         <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-slate-200/60 bg-white/90 shadow-xl backdrop-blur">
-          <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <h3 class="text-lg font-semibold text-slate-800">{{ skillTarget.name }}</h3>
+            <div class="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
+              <div class="flex min-w-0 items-center gap-2">
+                <h3 class="truncate text-lg font-semibold text-slate-800">{{ skillTarget.name }}</h3>
+                <span v-if="getSkillDialogAuthor()" class="max-w-[6em] shrink-0 truncate text-xs text-slate-400">{{ getSkillDialogAuthor() }}</span>
+                <span class="flex shrink-0 items-center gap-1 text-xs text-slate-400 tabular-nums">
+                  <Flame class="h-3.5 w-3.5 text-orange-500" />
+                  {{ formatUsageCount(getSkillDialogUsageCount()) }}
+                </span>
+              </div>
             <button class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" @click="showSkillInstallDialog = false">
               <X class="h-5 w-5" />
             </button>

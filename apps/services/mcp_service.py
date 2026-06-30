@@ -3,7 +3,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import NotFoundError, ConflictError, ValidationError
+from exceptions import ConflictError, NotFoundError, ValidationError
 from models.db import McpServer, McpTool
 from repositories import mcp_repo
 from services import litellm_client
@@ -66,6 +66,7 @@ async def create_server(
     registration_url: str | None = None,
     category: str = "general",
     tags: list | None = None,
+    author: str = "",
     icon_url: str = "",
     documentation_url: str = "",
     source_url: str = "",
@@ -108,6 +109,7 @@ async def create_server(
         registration_url=registration_url,
         category=category,
         tags=tags or [],
+        author=author,
         icon_url=icon_url,
         documentation_url=documentation_url,
         source_url=source_url,
@@ -464,6 +466,7 @@ def _serialize_server(server: McpServer) -> dict:
         "registration_url": server.registration_url,
         "category": server.category,
         "tags": server.tags,
+        "author": server.author,
         "icon_url": server.icon_url,
         "documentation_url": server.documentation_url,
         "source_url": server.source_url,
@@ -475,6 +478,7 @@ def _serialize_server(server: McpServer) -> dict:
         "visibility_type": server.visibility_type,
         "requires_approval": server.requires_approval,
         "status": server.status,
+        "call_count": server.call_count or 0,
         "last_health_check": (
             server.last_health_check.isoformat() if server.last_health_check else None
         ),

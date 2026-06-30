@@ -30,6 +30,7 @@ export interface McpServer {
   registration_url: string | null
   category: string
   tags: string[]
+  author: string
   icon_url: string
   documentation_url: string
   source_url: string
@@ -41,6 +42,7 @@ export interface McpServer {
   visibility_type: string
   requires_approval: boolean
   status: string
+  call_count: number
   last_health_check: string | null
   health_check_error: string | null
   litellm_synced: boolean
@@ -89,6 +91,7 @@ export interface CreateMcpServerParams {
   registration_url?: string
   category?: string
   tags?: string[]
+  author?: string
   icon_url?: string
   documentation_url?: string
   source_url?: string
@@ -117,6 +120,7 @@ export interface UpdateMcpServerParams {
   registration_url?: string
   category?: string
   tags?: string[]
+  author?: string
   icon_url?: string
   documentation_url?: string
   source_url?: string

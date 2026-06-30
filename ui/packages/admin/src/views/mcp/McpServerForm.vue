@@ -31,6 +31,7 @@ const form = ref({
   auth_type: 'none',
   auth_value: '',
   description: '',
+  author: '',
   instructions: '',
   category: 'general',
   billing_type: 'per_call',
@@ -70,6 +71,7 @@ watch(
           auth_type: s.auth_type,
           auth_value: (s.credentials?.auth_value as string) || '',
           description: s.description,
+          author: s.author ?? '',
           instructions: s.instructions,
           category: s.category,
           billing_type: s.billing_type,
@@ -89,6 +91,7 @@ watch(
           auth_type: 'none',
           auth_value: '',
           description: '',
+          author: '',
           instructions: '',
           category: 'general',
           billing_type: 'per_call',
@@ -128,6 +131,7 @@ async function handleSubmit(): Promise<void> {
       auth_type: form.value.auth_type,
       credentials: form.value.auth_type !== 'none' ? credentials : undefined,
       description: form.value.description,
+      author: form.value.author,
       instructions: form.value.instructions,
       category: form.value.category,
       billing_type: form.value.billing_type,
@@ -182,6 +186,13 @@ async function handleSubmit(): Promise<void> {
         <div>
           <IconPicker v-model="form.icon_url" label="图标" />
         </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">作者</label>
+            <input
+              v-model="form.author"
+              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+            />
+          </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">唯一标识 *</label>
           <input

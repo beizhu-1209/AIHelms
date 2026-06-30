@@ -29,6 +29,7 @@ interface SkillFormFields {
   category?: string
   version?: string
   tags?: string[]
+  author?: string
   usage_instructions?: string
   is_published?: boolean
   requires_approval?: boolean
@@ -43,6 +44,7 @@ function buildSkillFormData(fields: SkillFormFields): FormData {
   if (fields.category !== undefined) fd.append('category', fields.category)
   if (fields.version !== undefined) fd.append('version', fields.version)
   fd.append('tags', JSON.stringify(fields.tags ?? []))
+  if (fields.author !== undefined) fd.append('author', fields.author)
   if (fields.usage_instructions !== undefined) fd.append('usage_instructions', fields.usage_instructions)
   if (fields.is_published !== undefined) fd.append('is_published', String(fields.is_published))
   if (fields.requires_approval !== undefined) fd.append('requires_approval', String(fields.requires_approval))
@@ -62,6 +64,7 @@ export function updateSkill(id: number, fields: Partial<SkillFormFields>): Promi
   if (fields.category !== undefined) fd.append('category', fields.category)
   if (fields.version !== undefined) fd.append('version', fields.version)
   if (fields.tags !== undefined) fd.append('tags', JSON.stringify(fields.tags))
+  if (fields.author !== undefined) fd.append('author', fields.author)
   if (fields.usage_instructions !== undefined) fd.append('usage_instructions', fields.usage_instructions)
   if (fields.is_published !== undefined) fd.append('is_published', String(fields.is_published))
   if (fields.requires_approval !== undefined) fd.append('requires_approval', String(fields.requires_approval))

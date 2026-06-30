@@ -33,6 +33,7 @@ const form = ref({
   name: '',
   icon: '📦',
   description: '',
+  author: '',
   category: 'general',
   version: '1.0.0',
   tags: '',
@@ -54,6 +55,7 @@ async function loadData(): Promise<void> {
         name: s.name,
         icon: s.icon,
         description: s.description,
+        author: s.author ?? '',
         category: s.category,
         version: s.version,
         tags: (s.tags || []).join(', '),
@@ -90,6 +92,7 @@ async function handleSave(): Promise<void> {
       name: form.value.name,
       icon: form.value.icon,
       description: form.value.description,
+      author: form.value.author,
       category: form.value.category,
       version: form.value.version,
       tags,
@@ -182,6 +185,13 @@ onMounted(loadData)
           </div>
           <div>
             <IconPicker v-model="form.icon" label="图标" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">作者</label>
+            <input
+              v-model="form.author"
+              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+            />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700">分类</label>

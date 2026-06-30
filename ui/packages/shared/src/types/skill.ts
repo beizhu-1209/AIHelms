@@ -14,6 +14,7 @@ export interface Skill {
   category: string
   version: string
   tags: string[]
+  author: string
   agent_install_prompt: string
   usage_instructions: string
   zip_path: string
