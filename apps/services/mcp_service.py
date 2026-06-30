@@ -454,6 +454,7 @@ def _serialize_server(server: McpServer) -> dict:
         "url": server.url,
         "transport": server.transport,
         "auth_type": server.auth_type,
+        "credentials": server.credentials,
         "instructions": server.instructions,
         "mcp_info": server.mcp_info,
         "extra_headers": server.extra_headers,

@@ -216,7 +216,7 @@ onMounted(loadData)
             />
           </div>
           <div class="col-span-2">
-            <label class="mb-1 block text-sm font-medium text-slate-700">使用说明（支持 Markdown）</label>
+            <label class="mb-1 block text-sm font-medium text-slate-700">使用说明</label>
             <textarea
               v-model="form.usage_instructions"
               rows="8"
