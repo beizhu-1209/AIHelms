@@ -55,3 +55,25 @@ export interface ApproveResourceApplicationParams {
 export interface RejectResourceApplicationParams {
   review_notes?: string
 }
+
+
+export interface BatchApproveResourceApplicationsParams {
+  app_ids: number[]
+  approval_config?: Record<string, unknown>
+  review_notes?: string
+}
+
+export interface BatchRejectResourceApplicationsParams {
+  app_ids: number[]
+  review_notes?: string
+}
+
+export interface BatchReviewFailure {
+  id: number
+  reason: string
+}
+
+export interface BatchReviewResult {
+  success: number[]
+  failed: BatchReviewFailure[]
+}

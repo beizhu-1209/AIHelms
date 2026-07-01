@@ -3,9 +3,16 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import NotFoundError, ConflictError, ValidationError
+from exceptions import ConflictError, NotFoundError, ValidationError
 from models.db import ResourceApplication
-from repositories import resource_application_repo, mcp_repo, ai_key_repo, model_repo, skill_repo, agent_repo
+from repositories import (
+    agent_repo,
+    ai_key_repo,
+    mcp_repo,
+    model_repo,
+    resource_application_repo,
+    skill_repo,
+)
 from services import ai_key_service
 
 logger = logging.getLogger(__name__)
@@ -124,7 +131,66 @@ async def reject_application(
     return await _serialize(session, app)
 
 
+async def batch_approve_applications(
+    session: AsyncSession,
+    app_ids: list[int],
+    reviewer_id: int,
+    approval_config: dict | None = None,
+    review_notes: str = "",
+) -> dict:
+    success: list[int] = []
+    failed: list[dict[str, str | int]] = []
+    for app_id in app_ids:
+        try:
+            await approve_application(
+                session, app_id, reviewer_id, approval_config, review_notes
+            )
+        except Exception as exc:
+            await session.rollback()
+            _log_batch_failure(app_id, exc)
+            failed.append({"id": app_id, "reason": _review_failure_reason(exc)})
+        else:
+            success.append(app_id)
+    return {"success": success, "failed": failed}
+
+
+async def batch_reject_applications(
+    session: AsyncSession,
+    app_ids: list[int],
+    reviewer_id: int,
+    review_notes: str = "",
+) -> dict:
+    success: list[int] = []
+    failed: list[dict[str, str | int]] = []
+    for app_id in app_ids:
+        try:
+            await reject_application(session, app_id, reviewer_id, review_notes)
+        except Exception as exc:
+            await session.rollback()
+            _log_batch_failure(app_id, exc)
+            failed.append({"id": app_id, "reason": _review_failure_reason(exc)})
+        else:
+            success.append(app_id)
+    return {"success": success, "failed": failed}
+
+
 # ─── Internal ────────────────────────────────────────────────────────────────
+
+
+def _review_failure_reason(exc: Exception) -> str:
+    if isinstance(exc, NotFoundError):
+        return "申请不存在"
+    if isinstance(exc, ConflictError):
+        return str(exc)
+    return "处理失败"
+
+
+def _log_batch_failure(app_id: int, exc: Exception) -> None:
+    if isinstance(exc, (NotFoundError, ConflictError)):
+        return
+    logger.exception(
+        "batch review resource application failed", extra={"app_id": app_id}
+    )
 
 
 async def _validate_resource_exists(
@@ -183,7 +249,9 @@ async def _grant_resource(session: AsyncSession, app: ResourceApplication) -> No
 
 
 async def _serialize(session: AsyncSession, app: ResourceApplication) -> dict:
-    resource_info = await _get_resource_info(session, app.resource_type, app.resource_id)
+    resource_info = await _get_resource_info(
+        session, app.resource_type, app.resource_id
+    )
     return {
         "id": app.id,
         "user_id": app.user_id,
@@ -199,20 +267,30 @@ async def _serialize(session: AsyncSession, app: ResourceApplication) -> dict:
         "approval_config": app.approval_config,
         "created_at": app.created_at.isoformat() if app.created_at else None,
         "updated_at": app.updated_at.isoformat() if app.updated_at else None,
-        "user": {
-            "id": app.user.id,
-            "username": app.user.username,
-            "display_name": app.user.display_name,
-        } if app.user else None,
-        "reviewer": {
-            "id": app.reviewer.id,
-            "username": app.reviewer.username,
-            "display_name": app.reviewer.display_name,
-        } if app.reviewer else None,
+        "user": (
+            {
+                "id": app.user.id,
+                "username": app.user.username,
+                "display_name": app.user.display_name,
+            }
+            if app.user
+            else None
+        ),
+        "reviewer": (
+            {
+                "id": app.reviewer.id,
+                "username": app.reviewer.username,
+                "display_name": app.reviewer.display_name,
+            }
+            if app.reviewer
+            else None
+        ),
     }
 
 
-async def _get_resource_info(session: AsyncSession, resource_type: str, resource_id: int) -> dict | None:
+async def _get_resource_info(
+    session: AsyncSession, resource_type: str, resource_id: int
+) -> dict | None:
     if resource_type == "model":
         m = await model_repo.find_by_id(session, resource_id)
         if m:
@@ -228,5 +306,10 @@ async def _get_resource_info(session: AsyncSession, resource_type: str, resource
     elif resource_type == "agent":
         ag = await agent_repo.find_by_id(session, resource_id)
         if ag:
-            return {"id": ag.id, "name": ag.name, "icon": ag.icon, "platform": ag.platform}
+            return {
+                "id": ag.id,
+                "name": ag.name,
+                "icon": ag.icon,
+                "platform": ag.platform,
+            }
     return None
