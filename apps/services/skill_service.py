@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from exceptions import NotFoundError, ConflictError
+from exceptions import ConflictError, NotFoundError
 from models.db import Skill, SkillCategory, SkillUsageLog
 from repositories import skill_repo
 
@@ -74,6 +74,7 @@ async def create_skill(
     category: str = "general",
     version: str = "1.0.0",
     tags: list | None = None,
+    author: str = "",
     agent_install_prompt: str = "",
     usage_instructions: str = "",
     is_published: bool = False,
@@ -102,6 +103,7 @@ async def create_skill(
         category=category,
         version=version,
         tags=tags or [],
+        author=author,
         agent_install_prompt=agent_install_prompt,
         usage_instructions=usage_instructions,
         zip_path=zip_path,
@@ -214,6 +216,7 @@ async def get_install_info(
     return {
         "name": skill.name,
         "description": skill.description or "",
+        "author": skill.author or "",
         "agent_prompt": agent_prompt,
         "download_url": download_url,
         "usage_instructions": skill.usage_instructions or "",
@@ -264,6 +267,7 @@ def _serialize(skill: Skill) -> dict:
         "category": skill.category,
         "version": skill.version,
         "tags": skill.tags,
+        "author": skill.author,
         "agent_install_prompt": skill.agent_install_prompt,
         "usage_instructions": skill.usage_instructions,
         "zip_path": skill.zip_path,

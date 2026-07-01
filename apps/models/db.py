@@ -406,6 +406,7 @@ class McpServer(Base):
     business_scenario_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("aihelms.business_scenarios.id", ondelete="SET NULL"), nullable=True
     )
+    author: Mapped[str] = mapped_column(String(128), default="")
     icon_url: Mapped[str] = mapped_column(String(500), default="")
     documentation_url: Mapped[str] = mapped_column(String(500), default="")
     source_url: Mapped[str] = mapped_column(String(500), default="")
@@ -417,6 +418,7 @@ class McpServer(Base):
     visibility_type: Mapped[str] = mapped_column(String(20), default="all")
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="unknown")
+    call_count: Mapped[int] = mapped_column(Integer, default=0)
     last_health_check: Mapped[datetime | None] = mapped_column(nullable=True)
     health_check_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     litellm_synced: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -597,6 +599,7 @@ class Skill(Base):
     )
     version: Mapped[str] = mapped_column(String(20), default="1.0.0")
     tags: Mapped[list] = mapped_column(JSONB, default=list)
+    author: Mapped[str] = mapped_column(String(128), default="")
     agent_install_prompt: Mapped[str] = mapped_column(Text, default="")
     usage_instructions: Mapped[str] = mapped_column(Text, default="")
     zip_path: Mapped[str] = mapped_column(String(500), default="")

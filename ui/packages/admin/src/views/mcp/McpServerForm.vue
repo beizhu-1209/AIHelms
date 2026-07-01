@@ -8,6 +8,7 @@ import {
   type CreateMcpServerParams,
 } from '@aihelms/shared'
 import { toast } from '@aihelms/shared'
+import { Eye, EyeOff } from 'lucide-vue-next'
 import IconPicker from '../../components/IconPicker.vue'
 
 interface Props {
@@ -30,6 +31,7 @@ const form = ref({
   auth_type: 'none',
   auth_value: '',
   description: '',
+  author: '',
   instructions: '',
   category: 'general',
   billing_type: 'per_call',
@@ -44,6 +46,7 @@ const form = ref({
 const error = ref('')
 const saving = ref(false)
 const serverNameError = ref('')
+const showAuthValue = ref(false)
 
 function validateServerName() {
   if (form.value.server_name.includes('-')) {
@@ -66,8 +69,9 @@ watch(
           url: s.url,
           transport: s.transport,
           auth_type: s.auth_type,
-          auth_value: '',
+          auth_value: (s.credentials?.auth_value as string) || '',
           description: s.description,
+          author: s.author ?? '',
           instructions: s.instructions,
           category: s.category,
           billing_type: s.billing_type,
@@ -87,6 +91,7 @@ watch(
           auth_type: 'none',
           auth_value: '',
           description: '',
+          author: '',
           instructions: '',
           category: 'general',
           billing_type: 'per_call',
@@ -126,6 +131,7 @@ async function handleSubmit(): Promise<void> {
       auth_type: form.value.auth_type,
       credentials: form.value.auth_type !== 'none' ? credentials : undefined,
       description: form.value.description,
+      author: form.value.author,
       instructions: form.value.instructions,
       category: form.value.category,
       billing_type: form.value.billing_type,
@@ -180,6 +186,13 @@ async function handleSubmit(): Promise<void> {
         <div>
           <IconPicker v-model="form.icon_url" label="图标" />
         </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">作者</label>
+            <input
+              v-model="form.author"
+              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+            />
+          </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">唯一标识 *</label>
           <input
@@ -224,12 +237,22 @@ async function handleSubmit(): Promise<void> {
         </div>
         <div v-if="form.auth_type !== 'none'" class="col-span-2">
           <label class="mb-1 block text-sm font-medium text-slate-700">认证值</label>
-          <input
-            v-model="form.auth_value"
-            type="password"
-            placeholder="留空则保留原值"
-            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
-          />
+          <div class="relative">
+            <input
+              v-model="form.auth_value"
+              :type="showAuthValue ? 'text' : 'password'"
+              placeholder="留空则保留原值"
+              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-10 text-sm focus:border-purple-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+              @click="showAuthValue = !showAuthValue"
+            >
+              <EyeOff v-if="showAuthValue" class="h-4 w-4" />
+              <Eye v-else class="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">分类</label>

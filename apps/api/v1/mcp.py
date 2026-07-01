@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.deps import get_db, get_current_user, require_permission
-from exceptions import NotFoundError, ConflictError, ValidationError
-from services import mcp_service, ai_key_service
+from exceptions import ConflictError, NotFoundError, ValidationError
+from services import ai_key_service, mcp_service
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
@@ -27,6 +27,7 @@ class CreateServerRequest(BaseModel):
     registration_url: str | None = None
     category: str = Field("general", max_length=50)
     tags: list[str] | None = None
+    author: str = Field("", max_length=128)
     icon_url: str = Field("", max_length=500)
     documentation_url: str = Field("", max_length=500)
     source_url: str = Field("", max_length=500)
@@ -55,6 +56,7 @@ class UpdateServerRequest(BaseModel):
     registration_url: str | None = None
     category: str | None = None
     tags: list[str] | None = None
+    author: str | None = Field(None, max_length=128)
     icon_url: str | None = None
     documentation_url: str | None = None
     source_url: str | None = None
@@ -149,6 +151,7 @@ async def create_server(
             registration_url=req.registration_url,
             category=req.category,
             tags=req.tags,
+            author=req.author,
             icon_url=req.icon_url,
             documentation_url=req.documentation_url,
             source_url=req.source_url,
@@ -248,6 +251,7 @@ async def get_connect_config(
         "data": {
             "name": server_data["name"],
             "description": server_data.get("description", ""),
+            "author": server_data.get("author", ""),
             "agent_prompt": agent_prompt,
             "config": config,
             "instructions": server_data.get("instructions", ""),

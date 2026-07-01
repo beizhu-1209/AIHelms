@@ -360,7 +360,8 @@ onMounted(loadData)
                   {{ showAuthValue ? (selectedServer.credentials?.auth_value || '-') : '••••••••' }}
                 </span>
                 <button class="ml-1 text-slate-400 hover:text-slate-600" @click="showAuthValue = !showAuthValue">
-                  <component :is="showAuthValue ? EyeOffIcon : EyeIcon" class="inline h-3.5 w-3.5" />
+                  <EyeOffIcon v-if="showAuthValue" class="inline h-3.5 w-3.5" />
+                  <EyeIcon v-else class="inline h-3.5 w-3.5" />
                 </button>
               </div>
               <div>

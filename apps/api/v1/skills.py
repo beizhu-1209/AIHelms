@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_ai_key_identity, get_current_user, get_db, require_permission
-from exceptions import NotFoundError, ConflictError
+from exceptions import ConflictError, NotFoundError
 from services import skill_service
 
 router = APIRouter(prefix="/skills", tags=["skills"])
@@ -102,6 +102,7 @@ async def create_skill(
     category: str = Form("general"),
     version: str = Form("1.0.0"),
     tags: str = Form("[]"),
+    author: str = Form(""),
     agent_install_prompt: str = Form(""),
     usage_instructions: str = Form(""),
     is_published: bool = Form(False),
@@ -128,6 +129,7 @@ async def create_skill(
         category=category,
         version=version,
         tags=tags_list,
+        author=author,
         agent_install_prompt=agent_install_prompt,
         usage_instructions=usage_instructions,
         is_published=is_published,
@@ -148,6 +150,7 @@ async def update_skill(
     category: str | None = Form(None),
     version: str | None = Form(None),
     tags: str | None = Form(None),
+    author: str | None = Form(None),
     agent_install_prompt: str | None = Form(None),
     usage_instructions: str | None = Form(None),
     is_active: bool | None = Form(None),
@@ -173,6 +176,8 @@ async def update_skill(
             kwargs["tags"] = json.loads(tags)
         except json.JSONDecodeError:
             kwargs["tags"] = []
+    if author is not None:
+        kwargs["author"] = author
     if agent_install_prompt is not None:
         kwargs["agent_install_prompt"] = agent_install_prompt
     if usage_instructions is not None:

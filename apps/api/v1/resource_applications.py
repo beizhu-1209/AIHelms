@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_db, require_permission, get_current_user
-from exceptions import NotFoundError, ConflictError, ValidationError
+from core.deps import get_current_user, get_db, require_permission
+from exceptions import ConflictError, NotFoundError, ValidationError
 from services import resource_application_service
 
 router = APIRouter(prefix="/resource-applications", tags=["resource-applications"])
@@ -22,6 +22,17 @@ class ApproveApplicationRequest(BaseModel):
 
 
 class RejectApplicationRequest(BaseModel):
+    review_notes: str = Field("", max_length=500)
+
+
+class BatchApproveRequest(BaseModel):
+    app_ids: list[int] = Field(..., min_length=1, max_length=200)
+    approval_config: dict | None = None
+    review_notes: str = Field("", max_length=500)
+
+
+class BatchRejectRequest(BaseModel):
+    app_ids: list[int] = Field(..., min_length=1, max_length=200)
     review_notes: str = Field("", max_length=500)
 
 
@@ -135,3 +146,34 @@ async def reject_application(
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return {"code": 200, "message": "申请已拒绝", "data": data}
+
+
+@router.put("/batch-approve", summary="批量审批资源申请")
+async def batch_approve_applications(
+    req: BatchApproveRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_permission("resource_application:approve")),
+):
+    data = await resource_application_service.batch_approve_applications(
+        session,
+        app_ids=req.app_ids,
+        reviewer_id=current_user["id"],
+        approval_config=req.approval_config,
+        review_notes=req.review_notes,
+    )
+    return {"code": 200, "message": "批量审批完成", "data": data}
+
+
+@router.put("/batch-reject", summary="批量驳回资源申请")
+async def batch_reject_applications(
+    req: BatchRejectRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_permission("resource_application:approve")),
+):
+    data = await resource_application_service.batch_reject_applications(
+        session,
+        app_ids=req.app_ids,
+        reviewer_id=current_user["id"],
+        review_notes=req.review_notes,
+    )
+    return {"code": 200, "message": "批量驳回完成", "data": data}

@@ -57,6 +57,8 @@ async def _sync_call_logs():
 
             servers_cache: dict[str, McpServer | None] = {}
             tools_cache: dict[str, McpTool | None] = {}
+            call_counts: dict[int, int] = {}
+            inserted_count = 0
 
             for row in rows:
                 request_id = row[0]
@@ -138,7 +140,8 @@ async def _sync_call_logs():
                 mcp_metadata = mcp_metadata_full.get("mcp_tool_call_metadata", {})
                 arguments = mcp_metadata.get("arguments", {})
 
-                # request_args 存完整的 mcp_tool_call_metadata（包含 name、arguments、server 等）
+                # request_args 存完整的 mcp_tool_call_metadata
+                # 包含 name、arguments、server 等字段
                 response_raw = row[10] if len(row) > 10 else None
                 request_args = mcp_metadata if mcp_metadata else arguments
                 response_full = _to_text(response_raw)
@@ -163,9 +166,22 @@ async def _sync_call_logs():
                     called_at=start or end_time,
                 )
                 session.add(log)
+                inserted_count += 1
+                if server_id:
+                    call_counts[server_id] = call_counts.get(server_id, 0) + 1
+
+            for sid, count in call_counts.items():
+                await session.execute(
+                    text(
+                        "UPDATE aihelms.mcp_servers "
+                        "SET call_count = COALESCE(call_count, 0) + :count "
+                        "WHERE id = :server_id"
+                    ),
+                    {"count": count, "server_id": sid},
+                )
 
             await session.commit()
-            logger.info("synced %d mcp call logs", len(rows))
+            logger.info("synced %d mcp call logs", inserted_count)
 
     except Exception as e:
         logger.error("failed to sync mcp call logs: %s", str(e), exc_info=True)

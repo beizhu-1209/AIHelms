@@ -5,6 +5,9 @@ import type {
   CreateResourceApplicationParams,
   ApproveResourceApplicationParams,
   RejectResourceApplicationParams,
+  BatchApproveResourceApplicationsParams,
+  BatchRejectResourceApplicationsParams,
+  BatchReviewResult,
 } from '../types/resource-application'
 
 export function getResourceApplications(
@@ -51,5 +54,26 @@ export function rejectResourceApplication(
   return request<ResourceApplication>(`/api/v1/resource-applications/${id}/reject`, {
     method: 'PUT',
     body: params,
+  })
+}
+
+
+export function batchApproveResourceApplications(
+  params: BatchApproveResourceApplicationsParams,
+): Promise<BatchReviewResult> {
+  return request<BatchReviewResult>('/api/v1/resource-applications/batch-approve', {
+    method: 'PUT',
+    body: params,
+    silent: true,
+  })
+}
+
+export function batchRejectResourceApplications(
+  params: BatchRejectResourceApplicationsParams,
+): Promise<BatchReviewResult> {
+  return request<BatchReviewResult>('/api/v1/resource-applications/batch-reject', {
+    method: 'PUT',
+    body: params,
+    silent: true,
   })
 }
