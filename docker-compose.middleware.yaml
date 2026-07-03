@@ -62,6 +62,24 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  skillspector:
+    image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/skillspector:${SKILLSPECTOR_VERSION:-0.1.0}
+    restart: unless-stopped
+    environment:
+      SKILLSPECTOR_SERVICE_INPUT_ROOT: /scan-input
+      SKILLSPECTOR_SERVICE_TIMEOUT_SECONDS: ${AI_POLICIES_TIMEOUT_SECONDS:-600}
+      SKILLSPECTOR_LOG_LEVEL: ${SKILLSPECTOR_LOG_LEVEL:-WARNING}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data/skills:/scan-input/skills:ro
+    ports:
+      - "${SKILLSPECTOR_PORT:-8010}:8010"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   nginx:
     image: nginx:latest
     restart: unless-stopped

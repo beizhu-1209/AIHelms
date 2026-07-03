@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from exceptions import ConflictError, NotFoundError
 from models.db import Skill, SkillCategory, SkillUsageLog
-from repositories import skill_repo
+from repositories import ai_policies_repo, skill_repo
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +51,9 @@ async def list_skills(
 ) -> dict:
     total = await skill_repo.count_all(session, category, is_published)
     items = await skill_repo.find_all(session, page, page_size, category, is_published)
+    latest_audit_map = await _latest_audit_map(session, items)
     return {
-        "items": [_serialize(s) for s in items],
+        "items": [_serialize(s, latest_audit_map) for s in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -63,7 +64,8 @@ async def get_skill(session: AsyncSession, skill_id: int) -> dict:
     skill = await skill_repo.find_by_id(session, skill_id)
     if not skill:
         raise NotFoundError("skill", skill_id)
-    return _serialize(skill)
+    latest_audit_map = await _latest_audit_map(session, [skill])
+    return _serialize(skill, latest_audit_map)
 
 
 async def create_skill(
@@ -148,6 +150,11 @@ async def update_skill(
             f.write(zip_content)
         skill.zip_path = full_path
         skill.zip_size = len(zip_content)
+        skill.security_status = "not_scanned"
+        skill.security_decision = ""
+        skill.security_severity = ""
+        skill.security_risk_score = 0
+        skill.latest_ai_policies_audit_id = None
         if zip_filename:
             skill.zip_filename = zip_filename
 
@@ -257,7 +264,25 @@ async def delete_category(session: AsyncSession, category_id: int) -> None:
 # ─── Serializer ──────────────────────────────────────────────────────────────
 
 
-def _serialize(skill: Skill) -> dict:
+async def _latest_audit_map(
+    session: AsyncSession, skills: list[Skill]
+) -> dict[int, str]:
+    audit_ids = [
+        skill.latest_ai_policies_audit_id
+        for skill in skills
+        if skill.latest_ai_policies_audit_id
+    ]
+    audits = await ai_policies_repo.find_by_ids(session, audit_ids)
+    return {audit.id: audit.audit_id for audit in audits}
+
+
+def _serialize(skill: Skill, latest_audit_map: dict[int, str] | None = None) -> dict:
+    latest_audit_map = latest_audit_map or {}
+    latest_audit_code = (
+        latest_audit_map.get(skill.latest_ai_policies_audit_id)
+        if skill.latest_ai_policies_audit_id
+        else None
+    )
     return {
         "id": skill.id,
         "skill_id": skill.skill_id,
@@ -278,6 +303,12 @@ def _serialize(skill: Skill) -> dict:
         "is_published": skill.is_published,
         "requires_approval": skill.requires_approval,
         "install_count": skill.install_count,
+        "security_status": skill.security_status,
+        "security_decision": skill.security_decision,
+        "security_severity": skill.security_severity,
+        "security_risk_score": skill.security_risk_score,
+        "latest_ai_policies_audit_id": skill.latest_ai_policies_audit_id,
+        "latest_ai_policies_audit_code": latest_audit_code,
         "created_by": skill.created_by,
         "created_at": skill.created_at.isoformat() if skill.created_at else None,
         "updated_at": skill.updated_at.isoformat() if skill.updated_at else None,

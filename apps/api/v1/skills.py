@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_ai_key_identity, get_current_user, get_db, require_permission
-from exceptions import ConflictError, NotFoundError
-from services import skill_service
+from exceptions import ConflictError, NotFoundError, ValidationError
+from services import ai_policies_service, skill_service
 
 router = APIRouter(prefix="/skills", tags=["skills"])
 
@@ -231,6 +231,25 @@ async def download_skill(
         session, user_id=current_user["id"], skill_id=skill_id, action="download"
     )
     return FileResponse(zip_path, filename=download_name, media_type="application/zip")
+
+
+@router.post("/{skill_id}/ai-policies-audits", summary="发起 Skill 安全审查")
+async def create_skill_ai_policies_audit(
+    skill_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_permission("ai_policies:scan")),
+):
+    try:
+        data = await ai_policies_service.create_skill_audit(
+            session, skill_id, current_user
+        )
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Skill 不存在")
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"code": 200, "message": "审查任务已创建", "data": data}
 
 
 @router.get("/{skill_id}/install-info")

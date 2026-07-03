@@ -17,7 +17,6 @@ import {
   Shield,
   Search,
   Database,
-  Ruler,
   File,
   Key,
   Fingerprint,
@@ -33,6 +32,7 @@ import {
   DollarSign,
   HeartPulse,
   Download,
+  ShieldCheck,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -105,6 +105,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     title: '安全',
     icon: Lock,
     items: [
+      { label: 'AI Policies', icon: ShieldCheck, path: '/ai-policies', permission: 'ai_policies:read' },
       { label: '管理员日志', icon: Shield, path: '/audit', permission: 'audit_log:read' },
       { label: 'API Key', icon: KeyRound, path: '/api-keys', permission: 'api_key:read' },
     ],
@@ -118,7 +119,7 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
       { label: '敏感信息识别', icon: Search, path: '/sensitive', disabled: true },
       { label: 'A2A', icon: GitBranch, path: '/a2a', disabled: true },
       { label: '上下文缓存', icon: Database, path: '/caching', disabled: true },
-      { label: '策略管理', icon: Ruler, path: '/policies', disabled: true },
+      { label: 'AI Policies', icon: ShieldCheck, path: '/lab/ai-policies', permission: 'ai_policies:read' },
       { label: '文件处理', icon: File, path: '/files', disabled: true },
     ],
   },

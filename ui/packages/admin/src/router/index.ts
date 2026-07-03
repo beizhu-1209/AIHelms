@@ -99,6 +99,24 @@ const router = createRouter({
           meta: { permission: 'skill:read' },
         },
         {
+          path: 'ai-policies',
+          name: 'AiPolicies',
+          component: () => import('../views/ai-policies/AiPoliciesView.vue'),
+          meta: { permission: 'ai_policies:read' },
+        },
+        {
+          path: 'ai-policies/audits/:auditId',
+          name: 'AiPoliciesAuditReport',
+          component: () => import('../views/ai-policies/AuditReportView.vue'),
+          meta: { permission: 'ai_policies:read' },
+        },
+        {
+          path: 'lab/ai-policies',
+          name: 'AiPoliciesLab',
+          component: () => import('../views/ai-policies/AiPoliciesLabView.vue'),
+          meta: { permission: 'ai_policies:read' },
+        },
+        {
           path: 'agents',
           name: 'AgentList',
           component: () => import('../views/agents/AgentList.vue'),

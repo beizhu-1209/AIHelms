@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # 管理员日志保留天数
     audit_log_retention_days: int = 180
 
+    # AI Policies
+    ai_policies_scanner_url: str = "http://127.0.0.1:8010"
+    ai_policies_timeout_seconds: int = 600
+
     # LLM 调用日志同步与清理
     llm_log_sync_interval_minutes: int = 5
     llm_log_retention_days: int = 0  # 0 = 不清理
