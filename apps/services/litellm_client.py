@@ -15,11 +15,13 @@ async def _request(
     path: str,
     json_data: dict | None = None,
     params: dict | None = None,
+    timeout: float = LITELLM_TIMEOUT,
+    auth_token: str | None = None,
 ) -> dict:
     url = f"{settings.litellm_url}{path}"
-    headers = {"Authorization": f"Bearer {settings.litellm_master_key}"}
+    headers = {"Authorization": f"Bearer {auth_token or settings.litellm_master_key}"}
     try:
-        async with httpx.AsyncClient(timeout=LITELLM_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(
                 method=method,
                 url=url,
@@ -48,6 +50,38 @@ async def _request(
 
 class LiteLLMError(Exception):
     pass
+
+
+async def chat_completion(
+    model: str,
+    messages: list[dict],
+    temperature: float = 0.1,
+    max_tokens: int = 1200,
+    timeout: float = 60.0,
+    response_format: dict | None = None,
+    api_key: str | None = None,
+    user: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    data = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if response_format:
+        data["response_format"] = response_format
+    if user:
+        data["user"] = user
+    if metadata:
+        data["metadata"] = metadata
+    return await _request(
+        "POST",
+        "/chat/completions",
+        json_data=data,
+        timeout=timeout,
+        auth_token=api_key,
+    )
 
 
 async def create_user(user_id: str, user_email: str) -> dict:

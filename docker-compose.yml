@@ -90,6 +90,8 @@ services:
       CELERY_LOGLEVEL: ${CELERY_LOGLEVEL:-info}
       CELERY_PREFETCH_MULTIPLIER: ${CELERY_PREFETCH_MULTIPLIER:-1}
       AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
+      AI_POLICIES_SCANNER_URL: http://skillspector:8010
+      AI_POLICIES_TIMEOUT_SECONDS: ${AI_POLICIES_TIMEOUT_SECONDS:-600}
       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-localhost}
       WEB_PORT: ${WEB_PORT:-80}
       LITELLM_PORT: ${LITELLM_PORT:-4000}
@@ -110,6 +112,26 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
+      skillspector:
+        condition: service_started
+
+  skillspector:
+    image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/skillspector:${SKILLSPECTOR_VERSION:-0.1.0}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-50m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-3}"
+    environment:
+      SKILLSPECTOR_SERVICE_INPUT_ROOT: /scan-input
+      SKILLSPECTOR_SERVICE_TIMEOUT_SECONDS: ${AI_POLICIES_TIMEOUT_SECONDS:-600}
+      SKILLSPECTOR_LOG_LEVEL: ${SKILLSPECTOR_LOG_LEVEL:-WARNING}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data/skills:/scan-input/skills:ro
+    networks:
+      - internal
 
   nginx:
     image: nginx:latest

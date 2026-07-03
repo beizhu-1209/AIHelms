@@ -1,20 +1,46 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  createSkill,
+  createSkillSecurityAudit,
+  deleteSkill,
   getSkillById,
   getSkillCategories,
-  createSkill,
-  updateSkill,
-  deleteSkill,
   getSkillDownloadUrl,
+  toast,
+  updateSkill,
   type Skill,
   type SkillCategory,
+  usePermission,
 } from '@aihelms/shared'
-import { toast, usePermission } from '@aihelms/shared'
-import { ArrowLeft, Trash2, Download } from 'lucide-vue-next'
+import { ArrowLeft, Download, FileText, PlayCircle, ShieldCheck, Trash2 } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import IconPicker from '../../components/IconPicker.vue'
+
+type SecurityStatus = 'not_scanned' | 'queued' | 'running' | 'completed' | 'failed'
+type SecurityDecision = 'passed' | 'attention_required' | 'high_risk' | 'failed'
+
+interface SkillSecuritySummary {
+  auditId: string
+  status: SecurityStatus
+  decision: SecurityDecision
+  label: string
+  score: number | null
+  progress: number
+  completedChecks: number
+  totalChecks: number
+  shortAdvice: string
+}
+
+const statusTone: Record<SecurityDecision | 'running' | 'not_scanned', string> = {
+  passed: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  attention_required: 'bg-amber-50 text-amber-700 ring-amber-200',
+  high_risk: 'bg-red-50 text-red-700 ring-red-200',
+  failed: 'bg-stone-100 text-stone-700 ring-stone-200',
+  running: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
+  not_scanned: 'bg-slate-100 text-slate-600 ring-slate-200',
+}
 
 const { hasPermission } = usePermission()
 const route = useRoute()
@@ -28,6 +54,8 @@ const categories = ref<SkillCategory[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const showDelete = ref(false)
+const auditStarted = ref(false)
+const zipFile = ref<File | null>(null)
 
 const form = ref({
   name: '',
@@ -41,7 +69,67 @@ const form = ref({
   is_published: false,
   requires_approval: false,
 })
-const zipFile = ref<File | null>(null)
+
+const securitySummary = computed<SkillSecuritySummary | null>(() => {
+  if (!skill.value) return null
+  const s = skill.value
+  const running = auditStarted.value || s.security_status === 'queued' || s.security_status === 'running'
+  if (running) {
+    return {
+      auditId: s.latest_ai_policies_audit_code || '',
+      status: 'running',
+      decision: 'attention_required',
+      label: '审查中',
+      score: null,
+      progress: 58,
+      completedChecks: 3,
+      totalChecks: 5,
+      shortAdvice: '正在检查 Skill 压缩包内容，完成后自动生成报告。',
+    }
+  }
+  if (s.security_status === 'failed' || s.security_decision === 'failed') {
+    return {
+      auditId: s.latest_ai_policies_audit_code || '',
+      status: 'failed',
+      decision: 'failed',
+      label: '审查失败',
+      score: null,
+      progress: 100,
+      completedChecks: 0,
+      totalChecks: 5,
+      shortAdvice: '审查执行失败，请重新发起或检查 zip 文件。',
+    }
+  }
+  if (s.security_status !== 'completed') {
+    return {
+      auditId: '',
+      status: 'not_scanned',
+      decision: 'passed',
+      label: '未审查',
+      score: null,
+      progress: 0,
+      completedChecks: 0,
+      totalChecks: 5,
+      shortAdvice: 'zip 已上传，点击审查后生成独立审查任务。',
+    }
+  }
+  return {
+    auditId: s.latest_ai_policies_audit_code || '',
+    status: 'completed',
+    decision: (s.security_decision || 'passed') as SecurityDecision,
+    label: s.security_decision === 'high_risk' ? '高风险' : s.security_decision === 'attention_required' ? '建议修改' : '通过',
+    score: s.security_risk_score ?? 0,
+    progress: 100,
+    completedChecks: 5,
+    totalChecks: 5,
+    shortAdvice:
+      s.security_decision === 'high_risk'
+        ? '发现高优先级风险，建议发布前复核。'
+        : s.security_decision === 'attention_required'
+          ? '存在需要关注的风险点，建议按报告处理。'
+          : '未发现明显高优先级风险。',
+  }
+})
 
 async function loadData(): Promise<void> {
   loading.value = true
@@ -79,7 +167,7 @@ function handleZipChange(event: Event): void {
 }
 
 async function handleSave(): Promise<void> {
-  if (!form.value.name) {
+  if (!form.value.name.trim()) {
     toast.error('请填写名称')
     return
   }
@@ -89,7 +177,7 @@ async function handleSave(): Promise<void> {
       ? form.value.tags.split(',').map((t) => t.trim()).filter(Boolean)
       : []
     const payload = {
-      name: form.value.name,
+      name: form.value.name.trim(),
       icon: form.value.icon,
       description: form.value.description,
       author: form.value.author,
@@ -144,6 +232,45 @@ function downloadZip(): void {
     .then(() => loadData())
 }
 
+function openAiPolicies(): void {
+  if (!skill.value || !securitySummary.value) return
+  if (!securitySummary.value.auditId) {
+    toast.error('暂无可查看的审查报告')
+    return
+  }
+  router.push(`/ai-policies/audits/${securitySummary.value.auditId}?skill_id=${skill.value.id}`)
+}
+
+async function startSecurityAudit(): Promise<void> {
+  if (!skill.value?.has_zip) {
+    toast.error('请先上传 Skill zip 包')
+    return
+  }
+  try {
+    auditStarted.value = true
+    const audit = await createSkillSecurityAudit(skill.value.id)
+    skill.value = {
+      ...skill.value,
+      security_status: audit.status,
+      security_decision: audit.decision,
+      security_severity: audit.severity,
+      security_risk_score: audit.risk_score,
+      latest_ai_policies_audit_code: audit.audit_id,
+    }
+    toast.success('已提交审查，可在 AI Policies 查看进度')
+  } catch (e) {
+    auditStarted.value = false
+    toast.error((e as { message?: string }).message || '审查任务创建失败')
+  }
+}
+
+function securityBadgeClass(): string {
+  if (!securitySummary.value) return statusTone.not_scanned
+  if (securitySummary.value.status === 'running' || securitySummary.value.status === 'queued') return statusTone.running
+  if (securitySummary.value.status === 'not_scanned') return statusTone.not_scanned
+  return statusTone[securitySummary.value.decision]
+}
+
 onMounted(loadData)
 </script>
 
@@ -157,15 +284,14 @@ onMounted(loadData)
         <ArrowLeft class="h-4 w-4" />
         返回列表
       </button>
-      <div v-if="!isNew && hasPermission('skill:delete')" class="flex gap-2">
-        <button
-          class="flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
-          @click="showDelete = true"
-        >
-          <Trash2 class="h-4 w-4" />
-          删除
-        </button>
-      </div>
+      <button
+        v-if="!isNew && hasPermission('skill:delete')"
+        class="flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
+        @click="showDelete = true"
+      >
+        <Trash2 class="h-4 w-4" />
+        删除
+      </button>
     </div>
 
     <div v-if="loading" class="py-20 text-center text-sm text-slate-400">加载中...</div>
@@ -226,7 +352,7 @@ onMounted(loadData)
             />
           </div>
           <div class="col-span-2">
-            <label class="mb-1 block text-sm font-medium text-slate-700">使用说明</label>
+            <label class="mb-1 block text-sm font-medium text-slate-700">使用说明（支持 Markdown）</label>
             <textarea
               v-model="form.usage_instructions"
               rows="8"
@@ -262,6 +388,52 @@ onMounted(loadData)
               · 已下载 {{ skill.install_count }} 次
             </div>
           </div>
+
+          <div v-if="!isNew && skill?.has_zip && securitySummary" class="col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <ShieldCheck class="h-4 w-4 text-purple-600" />
+                  <h2 class="text-sm font-semibold text-slate-900">AI Policies 最近审查</h2>
+                  <span class="rounded-full px-2 py-0.5 text-[11px] font-medium ring-1" :class="securityBadgeClass()">
+                    {{ securitySummary.label }}
+                  </span>
+                </div>
+                <p class="mt-1 text-sm text-slate-500">{{ securitySummary.shortAdvice }}</p>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-purple-300 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="securitySummary.status === 'running'"
+                  @click="startSecurityAudit"
+                >
+                  <PlayCircle class="h-3.5 w-3.5" />
+                  {{ securitySummary.status === 'running' || securitySummary.status === 'queued' ? '审查中' : securitySummary.status === 'not_scanned' ? '安全审查' : '重新审查' }}
+                </button>
+                <button
+                  v-if="securitySummary.status !== 'not_scanned'"
+                  class="inline-flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-500"
+                  @click="openAiPolicies"
+                >
+                  <FileText class="h-3.5 w-3.5" />
+                  {{ securitySummary.status === 'running' ? '查看进度' : '查看报告' }}
+                </button>
+              </div>
+            </div>
+            <div v-if="securitySummary.status !== 'not_scanned'" class="mt-4 flex items-center gap-3">
+              <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  class="h-full rounded-full"
+                  :class="securitySummary.status === 'running' ? 'bg-indigo-500' : securitySummary.decision === 'high_risk' ? 'bg-red-500' : 'bg-purple-500'"
+                  :style="{ width: `${securitySummary.progress}%` }"
+                />
+              </div>
+              <div class="w-28 text-right text-xs text-slate-500">
+                {{ securitySummary.completedChecks }}/{{ securitySummary.totalChecks }} 项 · {{ securitySummary.progress }}%
+              </div>
+            </div>
+          </div>
+
           <div class="col-span-2 flex items-center gap-4">
             <label class="flex items-center gap-2 text-sm text-slate-700">
               <input v-model="form.is_published" type="checkbox" class="h-4 w-4 rounded border-slate-300" />

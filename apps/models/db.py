@@ -584,6 +584,73 @@ class SkillCategory(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
 
+class AiPoliciesAudit(Base):
+    __tablename__ = "ai_policies_audits"
+    __table_args__ = {"schema": "aihelms"}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    audit_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    audit_type: Mapped[str] = mapped_column(String(32), default="skill")
+    skill_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("aihelms.skills.id", ondelete="SET NULL"), nullable=True
+    )
+    skill_name: Mapped[str] = mapped_column(String(128), default="")
+    skill_version: Mapped[str] = mapped_column(String(64), default="")
+    source_sha256: Mapped[str] = mapped_column(String(64), default="")
+    scanner: Mapped[str] = mapped_column(String(64), default="")
+    scanner_version: Mapped[str] = mapped_column(String(64), default="")
+    mode: Mapped[str] = mapped_column(String(32), default="static")
+    status: Mapped[str] = mapped_column(String(32), default="queued")
+    decision: Mapped[str] = mapped_column(String(32), default="")
+    severity: Mapped[str] = mapped_column(String(32), default="")
+    risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    findings_count: Mapped[int] = mapped_column(Integer, default=0)
+    high_risk_count: Mapped[int] = mapped_column(Integer, default=0)
+    must_review_count: Mapped[int] = mapped_column(Integer, default=0)
+    llm_review_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    llm_review_model: Mapped[str] = mapped_column(String(128), default="")
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("aihelms.users.id", ondelete="SET NULL"), nullable=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    findings: Mapped[list] = mapped_column(JSONB, default=list)
+    raw_report: Mapped[dict] = mapped_column(JSONB, default=dict)
+    markdown_report: Mapped[str] = mapped_column(Text, default="")
+    error_message: Mapped[str] = mapped_column(Text, default="")
+
+
+class AiPoliciesRiskCatalog(Base):
+    __tablename__ = "ai_policies_risk_catalog"
+    __table_args__ = {"schema": "aihelms"}
+
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    name_en: Mapped[str] = mapped_column(String(128), nullable=False)
+    name_zh: Mapped[str] = mapped_column(String(128), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    description_zh: Mapped[str] = mapped_column(Text, default="")
+    check_points: Mapped[list] = mapped_column(JSONB, default=list)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AiPoliciesSettings(Base):
+    __tablename__ = "ai_policies_settings"
+    __table_args__ = {"schema": "aihelms"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    llm_review_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    llm_review_model_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("aihelms.models.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("aihelms.users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class Skill(Base):
     __tablename__ = "skills"
     __table_args__ = {"schema": "aihelms"}
@@ -609,6 +676,13 @@ class Skill(Base):
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=False)
     install_count: Mapped[int] = mapped_column(Integer, default=0)
+    security_status: Mapped[str] = mapped_column(String(32), default="not_scanned")
+    security_decision: Mapped[str] = mapped_column(String(32), default="")
+    security_severity: Mapped[str] = mapped_column(String(32), default="")
+    security_risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    latest_ai_policies_audit_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("aihelms.ai_policies_audits.id", ondelete="SET NULL"), nullable=True
+    )
     created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

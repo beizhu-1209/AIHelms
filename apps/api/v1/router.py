@@ -5,6 +5,7 @@ from api.v1.agents import router as agents_router
 from api.v1.ai_keys import router as ai_keys_router
 from api.v1.api_keys import router as api_keys_router
 from api.v1.audit_logs import router as audit_logs_router
+from api.v1.ai_policies import router as ai_policies_router
 from api.v1.auth import router as auth_router
 from api.v1.business_scenarios import router as business_scenarios_router
 from api.v1.credentials import router as credentials_router
@@ -46,6 +47,7 @@ router.include_router(agents_router, tags=["智能体中心"])
 router.include_router(resource_applications_router, tags=["资源审计"])
 router.include_router(audit_logs_router, tags=["安全"])
 router.include_router(api_keys_router, tags=["安全"])
+router.include_router(ai_policies_router, tags=["安全"])
 router.include_router(usage_logs_router, tags=["资源审计"])
 router.include_router(export_tasks_router, tags=["资源审计"])
 router.include_router(business_scenarios_router, tags=["AI 身份"])

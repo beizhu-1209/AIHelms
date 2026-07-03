@@ -8,7 +8,7 @@
 <p>承载 AI 数字资产 · 释放 AI 生产力 · 链接未来</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.0-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases)
+[![Release](https://img.shields.io/badge/Release-v0.1.13-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.13)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -71,6 +71,22 @@ AIHelms 是面向企业的 AI 资源纳管平台。帮助企业**管理 AI 资�
 - **模型纳管** — 多供应商统一接入，同模型多部署负载均衡，OpenAI/Anthropic 双格式兼容
 - **Skill & MCP** — 企业内部 AI 工具统一注册、审批、分发
 - **权限精细化** — 谁能用什么模型、用多少额度、什么时候过期，全部可配置
+
+## 更新日志
+
+最近版本汇总自 [GitHub Releases](https://github.com/beizhu-1209/AIHelms/releases)，完整变更请以发布页为准。
+
+| 版本 | 发布时间 | 一句话更新 |
+|------|----------|----------|
+| `0.1.13` | 2026-07-03 | 新增 AI Policies 安全审查：一键扫描 Skill，自动识别恶意指令、数据外传、权限过大等风险并生成报告。 |
+| `0.1.12` | 2026-07-01 | 资源申请支持批量审批；Skill / MCP 新增作者信息，用户端显示使用量。 |
+| `0.1.11` | 2026-06-29 | 优化日志修复codex /goal 等长Agent日志错配问题。 |
+| `0.1.9` | 2026-06-27 | 新增小米 MiMo 模型接入和模型 Logo 选择；AI 身份限流更完善（总量 + 按模型限速）。 |
+| `0.1.8` | 2026-06-23 | 支持 vLLM 的 Anthropic 格式接入。 |
+| `0.1.7` | 2026-06-23 | 修复成本计算和日志统计的若干问题，账目更准。 |
+| `0.1.6` | 2026-06-16 | 完善模型连通性测试。 |
+| `0.1.5` | 2026-06-10 | 升级管理员看板与成本、效能、预算分析体验。 |
+| `0.1.4` | 2026-06-04 | 修复若干问题，合入社区贡献。 |
 
 ## 主要功能
 
