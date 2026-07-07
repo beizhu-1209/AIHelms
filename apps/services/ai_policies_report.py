@@ -10,11 +10,22 @@ SEVERITY_LABELS = {
     "high": "高危",
     "medium": "中危",
     "low": "低危",
+    "info": "提示",
+    "none": "未发现问题",
     "unknown": "未知",
     "": "未分级",
 }
 
-SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1, "unknown": 0, "": 0}
+SEVERITY_ORDER = {
+    "critical": 5,
+    "high": 4,
+    "medium": 3,
+    "low": 2,
+    "info": 1,
+    "none": 0,
+    "unknown": 0,
+    "": 0,
+}
 
 
 def progress_for(audit: Any) -> dict:
@@ -49,6 +60,8 @@ def _hit_count(item: dict) -> int:
 def _severity_counts(findings: list[dict]) -> dict:
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for item in findings:
+        if item.get("counts_toward_score") is False:
+            continue
         severity = item.get("severity") or "unknown"
         if severity in counts:
             counts[severity] += _hit_count(item)
@@ -81,6 +94,7 @@ def build_summary(audit: Any) -> dict:
         "llm_review_used": audit.llm_review_used,
         "llm_review_model": audit.llm_review_model,
         "severity_counts": _severity_counts(findings),
+        "scan_limitations": (audit.raw_report or {}).get("scan_limitations", []),
         "progress": progress_for(audit),
     }
 
@@ -96,6 +110,16 @@ def _llm_category_review(llm_review: dict | None, code: str) -> dict | None:
         return None
     for item in reviews:
         if isinstance(item, dict) and item.get("code") == code:
+            return item
+    return None
+
+
+def _llm_finding_review(llm_review: dict | None, group_id: str) -> dict | None:
+    reviews = llm_review.get("finding_reviews") if isinstance(llm_review, dict) else []
+    if not isinstance(reviews, list):
+        return None
+    for item in reviews:
+        if isinstance(item, dict) and item.get("group_id") == group_id:
             return item
     return None
 
@@ -139,6 +163,24 @@ def _group_by_category(findings: list[dict]) -> list[tuple[str, list[dict]]]:
     )
 
 
+def _risk_findings(findings: list[dict]) -> list[dict]:
+    return [
+        item
+        for item in findings
+        if item.get("counts_toward_score") is not False
+        and item.get("severity") in {"critical", "high", "medium", "low"}
+    ]
+
+
+def _review_findings(findings: list[dict]) -> list[dict]:
+    return [
+        item
+        for item in findings
+        if item.get("finding_type") == "review_note"
+        and item.get("counts_toward_score") is False
+    ]
+
+
 def _location_line(location: dict) -> str:
     line = location.get("start_line")
     end_line = location.get("end_line")
@@ -177,8 +219,114 @@ def _llm_line(review: dict | None) -> str:
     return "；".join(part for part in parts if part)
 
 
+def _finding_llm_line(review: dict | None) -> str:
+    if not review:
+        return ""
+    parts = [
+        str(review.get("reason") or "").strip(),
+        str(review.get("recommendation") or "").strip(),
+    ]
+    return "；".join(part for part in parts if part)
+
+
 def _category_label(category_labels: dict[str, str], code: str) -> str:
     return category_labels.get(code) or "安全风险"
+
+
+def _decision_label(audit: Any) -> str:
+    if audit.status == "failed" or audit.decision == "failed":
+        return "审查失败"
+    if audit.decision == "high_risk":
+        return "高风险"
+    if audit.severity in {"critical", "high"}:
+        return "存在风险"
+    if audit.decision == "attention_required":
+        return "需关注"
+    return "可信"
+
+
+def _format_bytes(value: Any) -> str:
+    if not isinstance(value, (int, float)) or value <= 0:
+        return "-"
+    units = ["B", "KB", "MB", "GB"]
+    size = float(value)
+    index = 0
+    while size >= 1024 and index < len(units) - 1:
+        size /= 1024
+        index += 1
+    if index == 0:
+        return f"{int(size)} {units[index]}"
+    return f"{size:.1f} {units[index]}"
+
+
+def _elapsed_time(audit: Any) -> str:
+    started_at = getattr(audit, "started_at", None)
+    finished_at = getattr(audit, "finished_at", None)
+    if not started_at or not finished_at:
+        return "-"
+    seconds = round((finished_at - started_at).total_seconds())
+    if seconds < 60:
+        return f"{seconds}s"
+    return f"{seconds // 60}m {seconds % 60}s"
+
+
+def _intent_analysis(summary: dict) -> dict:
+    raw = summary.get("intent_analysis") if isinstance(summary, dict) else None
+    return raw if isinstance(raw, dict) else {}
+
+
+def _chapter_two_title(audit: Any) -> str:
+    return "## 2. 意图与行为分析" if audit.llm_review_used else "## 2. 审查结论"
+
+
+def _behavior_text(audit: Any, llm_review: dict | None, summary: dict) -> list[str]:
+    intent = _intent_analysis(summary)
+    if audit.llm_review_used and intent:
+        return [
+            f"- 声明用途：{intent.get('declared_intent') or '-'}",
+            f"- 实际行为：{intent.get('actual_behavior') or '-'}",
+            f"- 一致性：{intent.get('consistency') or '-'}",
+            f"- 判断依据：{intent.get('basis') or '-'}",
+            f"- 审查结论：{_summary_text(audit)}",
+        ]
+    if audit.llm_review_used:
+        judgement = (llm_review or {}).get("overall_judgement") or (
+            llm_review or {}
+        ).get("reason")
+        return [
+            _review_note(audit, llm_review),
+            f"- 行为判断：{judgement or 'AI 深度分析已完成。'}",
+            f"- 审查结论：{_summary_text(audit)}",
+        ]
+    if llm_review and llm_review.get("status") in {"failed", "unparsed", "skipped"}:
+        return [
+            "已完成规则扫描。AI 深度分析未完成，本报告以规则扫描结果为准。",
+            f"- 审查结论：{_summary_text(audit)}",
+        ]
+    return [
+        "未开启 AI 深度审查，本报告为规则初筛，可能存在误报。",
+        f"- 审查结论：{_summary_text(audit)}",
+    ]
+
+
+def _summary_files(summary: dict) -> list[dict]:
+    files = summary.get("files") if isinstance(summary, dict) else []
+    if not isinstance(files, list):
+        return []
+    return [item for item in files if isinstance(item, dict)]
+
+
+def _summary_links(summary: dict) -> list[dict]:
+    links = summary.get("external_links") if isinstance(summary, dict) else []
+    if not isinstance(links, list):
+        return []
+    items: list[dict] = []
+    for item in links:
+        if isinstance(item, str):
+            items.append({"url": item, "label": item})
+        elif isinstance(item, dict) and item.get("url"):
+            items.append(item)
+    return items
 
 
 def build_markdown(audit: Any, category_labels: dict[str, str] | None = None) -> str:
@@ -186,12 +334,18 @@ def build_markdown(audit: Any, category_labels: dict[str, str] | None = None) ->
     summary = audit.summary or {}
     llm_review = _llm_review(summary)
     findings = audit.findings or []
-    categories_with_findings = {item.get("category") for item in findings}
-    missed_count = max(0, len(category_labels) - len(categories_with_findings))
+    risk_findings = _risk_findings(findings)
+    review_findings = _review_findings(findings)
+    scan_limitations = summary.get("scan_limitations") or []
+    categories_with_findings = {item.get("category") for item in risk_findings}
     severity_counts = _severity_counts(findings)
     severity_label = SEVERITY_LABELS.get(
         audit.severity or "", audit.severity or "未分级"
     )
+    package_files = _summary_files(summary)
+    external_links = _summary_links(summary)
+    file_count = summary.get("file_count") or len(package_files) or "-"
+    source_size = _format_bytes(summary.get("source_size_bytes"))
     lines = [
         "# AI Policies Skill 安全审查报告",
         "",
@@ -201,36 +355,38 @@ def build_markdown(audit: Any, category_labels: dict[str, str] | None = None) ->
         f"- 版本：{audit.skill_version}",
         f"- 风险分：{audit.risk_score}",
         f"- 风险等级：{severity_label}",
+        f"- 结论：{_decision_label(audit)}",
         f"- 风险：{len(categories_with_findings)} 类 · {audit.findings_count} 处",
         f"- 审查方式：{_review_method(audit)}",
-        "",
-        "## 2. 审查说明",
-        _review_note(audit, llm_review),
-        "",
-        "## 3. 审查对象",
-        f"- Skill 名称：{audit.skill_name}",
-        f"- Skill 版本：{audit.skill_version}",
+        f"- 文件：{file_count}",
+        f"- 包大小：{source_size}",
+        f"- 耗时：{_elapsed_time(audit)}",
         f"- 源文件 SHA256：{audit.source_sha256}",
+        (
+            "- 风险等级分布："
+            f"严重 {severity_counts['critical']}；"
+            f"高危 {severity_counts['high']}；"
+            f"中危 {severity_counts['medium']}；"
+            f"低危 {severity_counts['low']}"
+        ),
         "",
-        "## 4. 风险等级分布",
-        f"- 严重：{severity_counts['critical']}",
-        f"- 高危：{severity_counts['high']}",
-        f"- 中危：{severity_counts['medium']}",
-        f"- 低危：{severity_counts['low']}",
+        _chapter_two_title(audit),
+        *_behavior_text(audit, llm_review, summary),
         "",
-        "## 5. 详细结果",
+        "## 3. 详细结果",
     ]
-    if not findings:
+    if not risk_findings and not review_findings:
         lines.append("未发现问题。")
-    for code, items in _group_by_category(findings):
+    if risk_findings:
+        lines.extend(["", "### 需要关注的风险"])
+    for code, items in _group_by_category(risk_findings):
         category_severity = _highest_severity(items)
         category_count = sum(_hit_count(item) for item in items)
-        category_review = _llm_category_review(llm_review, code)
         lines.extend(
             [
                 "",
                 (
-                    f"### {code} {_category_label(category_labels, code)} · "
+                    f"### {_category_label(category_labels, code)} · "
                     f"{SEVERITY_LABELS.get(category_severity, category_severity)} · "
                     f"{category_count} 处"
                 ),
@@ -246,11 +402,17 @@ def build_markdown(audit: Any, category_labels: dict[str, str] | None = None) ->
                     f"#### {index}. {item.get('title') or '安全风险'}",
                     f"- 风险等级：{item_severity}",
                     f"- 发现：{_hit_count(item)} 处",
-                    f"- 风险说明：{item.get('description') or ''}",
+                    f"- 问题说明：{item.get('description') or ''}",
                     f"- 处理建议：{item.get('recommendation') or ''}",
                 ]
             )
-            llm_text = _llm_line(category_review) if audit.llm_review_used else ""
+            llm_text = (
+                _finding_llm_line(
+                    _llm_finding_review(llm_review, item.get("group_id") or "")
+                )
+                if audit.llm_review_used
+                else ""
+            )
             if llm_text:
                 lines.append(f"- AI 研判：{llm_text}")
             lines.append("- 文件：")
@@ -261,19 +423,58 @@ def build_markdown(audit: Any, category_labels: dict[str, str] | None = None) ->
                     lines.extend(["", "````", snippet, "````"])
                 else:
                     lines.append("    未提取到代码片段，可打开上方文件位置查看。")
-    if missed_count:
-        lines.extend(["", f"其余 {missed_count} 类未发现问题。"])
-    lines.extend(["", "## 6. 总结"])
-    lines.append(_summary_text(audit))
+    if review_findings:
+        lines.extend(["", "### 建议复核"])
+        for item in review_findings:
+            lines.extend(
+                [
+                    "",
+                    f"#### {item.get('title') or '建议复核'}",
+                    f"- 发现：{_hit_count(item)} 处",
+                    (
+                        f"- 说明："
+                        f"{item.get('denoise_reason') or item.get('description') or ''}"
+                    ),
+                ]
+            )
+            llm_text = (
+                _finding_llm_line(
+                    _llm_finding_review(llm_review, item.get("group_id") or "")
+                )
+                if audit.llm_review_used
+                else ""
+            )
+            if llm_text:
+                lines.append(f"- AI 研判：{llm_text}")
+            lines.append("- 文件：")
+            for location in _locations(item):
+                lines.append(f"  - {_location_line(location)}")
+    if package_files:
+        lines.extend(["", "### Skill 包文件"])
+        for item in package_files[:50]:
+            lines.append(
+                f"- {item.get('path') or '-'}：{item.get('role_label') or '文件'} / "
+                f"{SEVERITY_LABELS.get(item.get('severity') or 'none', '未发现问题')}"
+            )
+        if len(package_files) > 50:
+            lines.append(f"- 其余 {len(package_files) - 50} 个文件略。")
+    if external_links:
+        lines.extend(["", "### 外部链接"])
+        for item in external_links:
+            file_text = f"（{item.get('file')}）" if item.get("file") else ""
+            lines.append(f"- {item.get('url')}{file_text}")
     lines.extend(
         [
             "",
-            "## 7. 声明",
+            "## 4. 声明",
             OWASP_NOTICE,
-            "",
-            "## 8. 参考",
-            "OWASP Agentic Skills Top 10 · AIHelms 审查规则与报告模板",
-            "",
+            "参考：OWASP Agentic Skills Top 10；AIHelms 审查规则与报告模板。",
         ]
     )
+    if scan_limitations:
+        lines.extend(["", "审查限制："])
+        for item in scan_limitations:
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('message') or item.get('title') or ''}")
+    lines.append("")
     return "\n".join(lines)

@@ -28,7 +28,10 @@ async def get_department_by_id(session: AsyncSession, dept_id: int) -> dict:
 
 
 async def create_department(session: AsyncSession, name: str, parent_id: int | None = None, description: str = "") -> dict:
-    if parent_id:
+    # 前端以 0 表示顶级部门，归一成 None，避免外键约束违反
+    if not parent_id or parent_id <= 0:
+        parent_id = None
+    else:
         parent = await department_repo.find_by_id(session, parent_id)
         if not parent or not parent.is_active:
             raise NotFoundError("parent department", parent_id)

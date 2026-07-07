@@ -30,7 +30,7 @@ export type { McpServer, McpTool, McpCategory, McpServerListResult, CreateMcpSer
 export { getMcpServers, getMcpServerById, createMcpServer, updateMcpServer, deleteMcpServer, getMcpTools, refreshMcpTools, updateToolBilling, healthCheckMcpServer, getMcpCategories, createMcpCategory, deleteMcpCategory } from './api/mcp'
 export type { Skill, SkillCategory, SkillListResult, CreateSkillCategoryParams } from './types/skill'
 export { getSkills, getSkillById, createSkill, updateSkill, deleteSkill, createSkillSecurityAudit, getSkillDownloadUrl, getSkillCategories, createSkillCategory, deleteSkillCategory } from './api/skill'
-export type { AiPolicyAudit, AiPolicyAuditSummary, AiPolicyAuditListResult, AiPolicyAuditQuery, AiPolicyFinding, AiPolicyRiskCatalogItem, AiPolicySettings } from './types/aiPolicies'
+export type { AiPolicyAudit, AiPolicyAuditSummary, AiPolicyAuditListResult, AiPolicyAuditQuery, AiPolicyFinding, AiPolicyAuditFileSummary, AiPolicyRiskCatalogItem, AiPolicySettings } from './types/aiPolicies'
 export { getAiPolicyAudits, getAiPolicyAudit, getAiPolicyReportDownloadUrl, getAiPolicyRiskCatalog, getAiPolicySettings, updateAiPolicySettings } from './api/aiPolicies'
 export type { Agent, AgentCategory, AgentPlatform, AgentListResult, CreateAgentParams, UpdateAgentParams, CreateAgentCategoryParams, CreateAgentPlatformParams, AgentUsageLog, AgentUsageLogListResult } from './types/agent'
 export { getAgents, getAgentById, createAgent, updateAgent, deleteAgent, getAgentCategories, createAgentCategory, deleteAgentCategory, getAgentPlatforms, createAgentPlatform, deleteAgentPlatform, recordAgentUsage, getAgentUsageLogs } from './api/agent'

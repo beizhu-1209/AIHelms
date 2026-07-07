@@ -1,6 +1,6 @@
 export type AiPolicyAuditStatus = 'queued' | 'running' | 'completed' | 'failed'
 export type AiPolicyAuditDecision = '' | 'passed' | 'attention_required' | 'high_risk' | 'failed'
-export type AiPolicyAuditSeverity = '' | 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+export type AiPolicyAuditSeverity = '' | 'critical' | 'high' | 'medium' | 'low' | 'info' | 'none' | 'unknown'
 
 export interface AiPolicyFindingLocation {
   file?: string
@@ -19,14 +19,25 @@ export interface AiPolicyFindingGroupLocation extends AiPolicyFindingLocation {
 
 export interface AiPolicyFinding {
   source?: 'static' | 'llm' | string
+  group_id?: string
   rule_id?: string
   category?: string
   raw_category?: string
+  scanner_severity?: AiPolicyAuditSeverity
+  effective_severity?: AiPolicyAuditSeverity
   severity?: AiPolicyAuditSeverity
   confidence?: number
   title?: string
   description?: string
   recommendation?: string
+  file_role?: string
+  path_bucket?: string
+  finding_type?: 'true_risk' | 'false_positive' | 'review_note' | 'scanner_diagnostic' | string
+  counts_toward_score?: boolean
+  denoise_reason?: string
+  command_context?: Record<string, unknown>
+  llm_review?: Record<string, unknown>
+  redline?: boolean
   location?: AiPolicyFindingLocation
   evidence?: AiPolicyFindingEvidence
   hit_count?: number
@@ -49,12 +60,23 @@ export interface AiPolicyAuditSummary {
   must_review_count: number
   llm_review_used: boolean
   llm_review_model?: string
+  source_sha256?: string
   error_message?: string
   started_at?: string | null
   finished_at?: string | null
   created_at?: string | null
   updated_at?: string | null
   summary?: Record<string, unknown>
+}
+
+export interface AiPolicyAuditFileSummary {
+  path: string
+  role?: string
+  role_label?: string
+  status?: string
+  severity?: AiPolicyAuditSeverity
+  risk_count?: number
+  size?: number
 }
 
 export interface AiPolicyAudit extends AiPolicyAuditSummary {
