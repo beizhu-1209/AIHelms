@@ -7,6 +7,7 @@ import {
   getAiPolicyReportDownloadUrl,
   toast,
   type AiPolicyAudit,
+  type AiPolicyAuditFileSummary,
   type AiPolicyFinding,
   type AiPolicyRiskCatalogItem,
 } from '@aihelms/shared'
@@ -15,12 +16,14 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Copy,
   Download,
   Loader2,
   ScanLine,
 } from 'lucide-vue-next'
 
 interface RiskCategory {
+  section: 'risk' | 'review'
   code: string
   name: string
   findings: AiPolicyFinding[]
@@ -43,13 +46,34 @@ interface LlmCategoryReview {
   recommendation?: string
 }
 
+interface LlmFindingReview {
+  group_id: string
+  finding_type?: string
+  effective_severity?: string
+  reason?: string
+  recommendation?: string
+}
+
 interface LlmReviewSummary {
   status?: string
   model?: string
   overall_judgement?: string
   reason?: string
   message?: string
+  finding_reviews?: LlmFindingReview[]
   category_reviews?: LlmCategoryReview[]
+}
+
+interface IntentAnalysis {
+  declared_intent?: string
+  actual_behavior?: string
+  consistency?: string
+  basis?: string
+}
+
+interface ExternalLinkSummary {
+  url: string
+  label?: string
 }
 
 const route = useRoute()
@@ -61,12 +85,14 @@ const catalog = ref<AiPolicyRiskCatalogItem[]>([])
 const detailSectionOpen = ref(true)
 const expandedCategories = ref<Record<string, boolean>>({})
 const expandedLocations = ref<Record<string, boolean>>({})
+const filesExpanded = ref(false)
 
 const severityOrder: Record<string, number> = {
   critical: 4,
   high: 3,
   medium: 2,
   low: 1,
+  info: 1,
   unknown: 0,
   none: 0,
   '': 0,
@@ -92,12 +118,72 @@ const llmReview = computed<LlmReviewSummary | null>(() => {
   const raw = audit.value?.summary?.llm_review
   return raw && typeof raw === 'object' ? (raw as LlmReviewSummary) : null
 })
+const intentAnalysis = computed<IntentAnalysis | null>(() => {
+  const raw = audit.value?.summary?.intent_analysis
+  return raw && typeof raw === 'object' ? (raw as IntentAnalysis) : null
+})
 
-const riskCategories = computed<RiskCategory[]>(() => {
+const riskFindings = computed(() =>
+  findings.value.filter((finding) => finding.counts_toward_score !== false && ['critical', 'high', 'medium', 'low'].includes(finding.severity || '')),
+)
+const reviewFindings = computed(() =>
+  findings.value.filter((finding) => finding.finding_type === 'review_note' && finding.counts_toward_score === false),
+)
+const packageFiles = computed<AiPolicyAuditFileSummary[]>(() => {
+  const raw = audit.value?.summary?.files
+  const findingStatuses = fileStatusesFromFindings()
+  if (Array.isArray(raw)) {
+    return (raw.filter((item) => item && typeof item === 'object') as AiPolicyAuditFileSummary[]).map((file) => {
+      const fromFinding = findingStatuses.get(file.path)
+      if (!fromFinding) return file
+      const currentStatus = String(file.status || file.severity || '')
+      const status = statusRank(fromFinding.status) > statusRank(currentStatus) ? fromFinding.status : currentStatus
+      return {
+        ...file,
+        status: status as AiPolicyAuditFileSummary['status'],
+        severity: status as AiPolicyAuditFileSummary['severity'],
+        risk_count: Math.max(file.risk_count || 0, fromFinding.riskCount),
+      }
+    })
+  }
+  const files = new Map<string, AiPolicyAuditFileSummary>()
+  findings.value.forEach((finding) => {
+    locationsOf(finding).forEach((location) => {
+      if (!location.file) return
+      const fromFinding = findingStatuses.get(location.file)
+      const status = fromFinding?.status || 'clean'
+      files.set(location.file, {
+        path: location.file,
+        role_label: '文件',
+        severity: status as AiPolicyAuditFileSummary['severity'],
+        status: status as AiPolicyAuditFileSummary['status'],
+        risk_count: fromFinding?.riskCount || 0,
+      })
+    })
+  })
+  return [...files.values()]
+})
+const shownPackageFiles = computed(() => (filesExpanded.value ? packageFiles.value : packageFiles.value.slice(0, 14)))
+const externalLinks = computed<ExternalLinkSummary[]>(() => {
+  const raw = audit.value?.summary?.external_links
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    if (typeof item === 'string') return [{ url: item }]
+    if (!item || typeof item !== 'object') return []
+    const record = item as Record<string, unknown>
+    return typeof record.url === 'string' ? [{ url: record.url, label: typeof record.label === 'string' ? record.label : undefined }] : []
+  })
+})
+
+const riskCategories = computed<RiskCategory[]>(() => categoriesFor(riskFindings.value, 'risk'))
+const reviewCategories = computed<RiskCategory[]>(() => categoriesFor(reviewFindings.value, 'review'))
+
+function categoriesFor(categoryFindings: AiPolicyFinding[], section: 'risk' | 'review'): RiskCategory[] {
   const items = referenceItems.value
     .map((item) => {
-      const related = findings.value.filter((finding) => finding.category === item.code)
+      const related = categoryFindings.filter((finding) => finding.category === item.code)
       return {
+        section,
         ...item,
         findings: related,
         severity: highestSeverity(related),
@@ -106,19 +192,14 @@ const riskCategories = computed<RiskCategory[]>(() => {
     })
     .filter((item) => item.findings.length > 0)
   return items.sort((a, b) => severityOrder[b.severity] - severityOrder[a.severity] || a.code.localeCompare(b.code))
-})
+}
 
-const missedCategoryCount = computed(() => {
-  const hitCodes = new Set(riskCategories.value.map((item) => item.code))
-  return catalog.value.filter((item) => !hitCodes.has(item.code)).length
-})
-const riskCategoryCount = computed(() => riskCategories.value.length)
 const progress = computed<AuditProgress>(() => progressFromSummary())
 
 const progressSteps = computed(() => [
   { key: 'prepare', label: '准备 Skill 包', description: '校验 zip 与基础信息', state: stepState(1) },
   { key: 'scan', label: '规则扫描', description: '检查危险代码、外传和依赖风险', state: stepState(2) },
-  { key: 'classify', label: '风险归类', description: '按 AST 风险分类整理', state: stepState(3) },
+  { key: 'classify', label: '风险归类', description: '整理风险类型和证据', state: stepState(3) },
   { key: 'report', label: '生成报告', description: '生成文件和处理建议', state: stepState(4) },
 ])
 
@@ -133,8 +214,6 @@ const severityBuckets = computed(() => {
     { key: 'low', label: '低危', value: numberValue(counts.low, fallback.low), className: 'border-slate-200 bg-slate-50 text-slate-700' },
   ]
 })
-
-const allClear = computed(() => severityBuckets.value.every((item) => item.value === 0))
 
 async function loadAudit(): Promise<void> {
   loading.value = true
@@ -153,8 +232,8 @@ async function fetchAudit(resetExpanded = false, forceRefresh = false): Promise<
   audit.value = await getAiPolicyAudit(String(route.params.auditId), params)
   if (!resetExpanded) return
   const initialExpanded: Record<string, boolean> = {}
-  riskCategories.value.forEach((item) => {
-    initialExpanded[item.code] = item.severity === 'critical' || item.severity === 'high'
+  ;[...riskCategories.value, ...reviewCategories.value].forEach((item) => {
+    initialExpanded[categorySectionKey(item)] = item.severity === 'critical' || item.severity === 'high'
   })
   expandedCategories.value = initialExpanded
 }
@@ -193,10 +272,21 @@ function progressFromSummary(): AuditProgress {
   const raw = audit.value?.summary?.progress
   if (raw && typeof raw === 'object') {
     const progress = raw as Partial<AuditProgress>
+    const total = typeof progress.total === 'number' ? progress.total : 4
+    const value = typeof progress.value === 'number' ? progress.value : 0
+    const completed = typeof progress.completed === 'number' ? progress.completed : 0
+    if (audit.value?.status === 'queued' || audit.value?.status === 'running') {
+      return {
+        value: Math.min(99, Math.max(0, value)),
+        completed: Math.min(Math.max(0, completed), Math.max(0, total - 1)),
+        total,
+        step: typeof progress.step === 'string' ? progress.step : '处理中',
+      }
+    }
     return {
-      value: typeof progress.value === 'number' ? progress.value : 0,
-      completed: typeof progress.completed === 'number' ? progress.completed : 0,
-      total: typeof progress.total === 'number' ? progress.total : 4,
+      value,
+      completed,
+      total,
       step: typeof progress.step === 'string' ? progress.step : '处理中',
     }
   }
@@ -222,7 +312,7 @@ function stepIcon(state: string) {
 }
 
 function highestSeverity(items: AiPolicyFinding[]): string {
-  return ['critical', 'high', 'medium', 'low'].find((level) => items.some((item) => item.severity === level)) || 'none'
+  return ['critical', 'high', 'medium', 'low', 'info'].find((level) => items.some((item) => item.severity === level)) || 'none'
 }
 
 function hitCount(finding: AiPolicyFinding): number {
@@ -231,14 +321,48 @@ function hitCount(finding: AiPolicyFinding): number {
   return 1
 }
 
+function statusRank(status: string): number {
+  return {
+    critical: 6,
+    high: 5,
+    medium: 4,
+    low: 3,
+    review: 2,
+    info: 2,
+    entry: 1,
+    clean: 0,
+    none: 0,
+    unchecked: 0,
+  }[status] ?? 0
+}
+
+function fileStatusesFromFindings(): Map<string, { status: string; riskCount: number }> {
+  const statuses = new Map<string, { status: string; riskCount: number }>()
+  findings.value.forEach((finding) => {
+    if (finding.finding_type === 'false_positive') return
+    const status = finding.counts_toward_score === false ? 'review' : finding.severity || 'review'
+    locationsOf(finding).forEach((location) => {
+      if (!location.file) return
+      const current = statuses.get(location.file)
+      const nextStatus = !current || statusRank(status) > statusRank(current.status) ? status : current.status
+      statuses.set(location.file, {
+        status: nextStatus,
+        riskCount: (current?.riskCount || 0) + hitCount(finding),
+      })
+    })
+  })
+  return statuses
+}
+
 function decisionLabel(): string {
   if (!audit.value) return '-'
   if (audit.value.status === 'queued') return '排队中'
   if (audit.value.status === 'running') return '审查中'
   if (audit.value.status === 'failed' || audit.value.decision === 'failed') return '审查失败'
   if (audit.value.decision === 'high_risk') return '高风险'
-  if (audit.value.decision === 'attention_required') return '建议修改'
-  return '通过'
+  if (audit.value.severity === 'high' || audit.value.severity === 'critical') return '存在风险'
+  if (audit.value.decision === 'attention_required') return '需关注'
+  return '可信'
 }
 
 function severityLabel(severity?: string): string {
@@ -247,6 +371,7 @@ function severityLabel(severity?: string): string {
     high: '高危',
     medium: '中危',
     low: '低危',
+    info: '提示',
     none: '未发现问题',
     unknown: '未知',
     '': '未分级',
@@ -269,6 +394,33 @@ function scoreBarClass(): string {
   return 'bg-emerald-500'
 }
 
+function scoreWidth(): string {
+  return `${Math.min(100, Math.max(0, audit.value?.risk_score || 0))}%`
+}
+
+function fileCountText(): string {
+  const raw = audit.value?.summary?.file_count
+  if (typeof raw === 'number') return String(raw)
+  if (packageFiles.value.length > 0) return String(packageFiles.value.length)
+  return '-'
+}
+
+function packageSizeText(): string {
+  return formatBytes(audit.value?.summary?.source_size_bytes)
+}
+
+function formatBytes(value: unknown): string {
+  if (typeof value !== 'number' || value <= 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = value
+  let index = 0
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024
+    index += 1
+  }
+  return index === 0 ? `${Math.round(size)} ${units[index]}` : `${size.toFixed(1)} ${units[index]}`
+}
+
 function severityClass(severity?: string): string {
   if (severity === 'critical') return 'bg-red-50 text-red-700 ring-red-200'
   if (severity === 'high') return 'bg-orange-50 text-orange-700 ring-orange-200'
@@ -277,9 +429,64 @@ function severityClass(severity?: string): string {
   return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
 }
 
-function formatTime(value?: string | null): string {
+function fileStatusLabel(file: AiPolicyAuditFileSummary): string {
+  const status = String(file.status || file.severity || '')
+  const labels: Record<string, string> = {
+    critical: '需关注',
+    high: '需关注',
+    medium: '需关注',
+    low: '需关注',
+    review: '建议复核',
+    entry: '入口',
+    clean: '未发现问题',
+    unchecked: '未检查',
+    none: '未发现问题',
+    info: '建议复核',
+  }
+  return labels[status] || '未发现问题'
+}
+
+function fileStatusClass(file: AiPolicyAuditFileSummary): string {
+  const status = file.status || file.severity || ''
+  if (status === 'critical' || status === 'high') return 'bg-red-50 text-red-700 ring-red-200'
+  if (status === 'medium' || status === 'review' || status === 'info') return 'bg-amber-50 text-amber-700 ring-amber-200'
+  if (status === 'low') return 'bg-sky-50 text-sky-700 ring-sky-200'
+  if (status === 'entry') return 'bg-indigo-50 text-indigo-700 ring-indigo-200'
+  return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+}
+
+function fileDisplayName(path?: string): string {
+  if (!path) return '未命名文件'
+  const parts = path.split('/').filter(Boolean)
+  return parts[parts.length - 1] || path
+}
+
+function elapsedTime(): string {
+  if (!audit.value?.started_at || !audit.value?.finished_at) return '-'
+  const start = new Date(audit.value.started_at).getTime()
+  const end = new Date(audit.value.finished_at).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '-'
+  const seconds = Math.round((end - start) / 1000)
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
+function shortHash(value?: string): string {
   if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN', { hour12: false })
+  return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-8)}` : value
+}
+
+function copyHash(): void {
+  if (!audit.value?.source_sha256) return
+  const write = navigator.clipboard?.writeText(audit.value.source_sha256)
+  if (!write) {
+    toast.error('复制失败')
+    return
+  }
+  write.then(
+    () => toast.success('SHA-256 已复制'),
+    () => toast.error('复制失败'),
+  )
 }
 
 function locationText(location: { file?: string; start_line?: number | null; end_line?: number | null }): string {
@@ -297,16 +504,20 @@ function locationSnippet(location: { snippet?: string }): string {
   return location.snippet || '未提取到代码片段，可打开上方文件位置查看。'
 }
 
+function categorySectionKey(item: RiskCategory): string {
+  return `${item.section}-${item.code}`
+}
+
 function isCategoryExpanded(item: RiskCategory): boolean {
-  return expandedCategories.value[item.code] ?? false
+  return expandedCategories.value[categorySectionKey(item)] ?? false
 }
 
 function toggleCategory(item: RiskCategory): void {
-  expandedCategories.value = { ...expandedCategories.value, [item.code]: !isCategoryExpanded(item) }
+  expandedCategories.value = { ...expandedCategories.value, [categorySectionKey(item)]: !isCategoryExpanded(item) }
 }
 
 function groupKey(category: RiskCategory, finding: AiPolicyFinding, index: number): string {
-  return `${category.code}-${finding.rule_id || 'rule'}-${index}`
+  return finding.group_id || `${category.code}-${finding.rule_id || 'rule'}-${index}`
 }
 
 function isLocationsExpanded(key: string): boolean {
@@ -327,12 +538,19 @@ function llmCategoryReview(code: string): LlmCategoryReview | null {
   return reviews.find((item) => item.code === code) || null
 }
 
-function llmReviewText(code: string): string {
+function llmFindingReview(groupId?: string): LlmFindingReview | null {
+  if (!groupId) return null
+  const reviews = llmReview.value?.finding_reviews || []
+  return reviews.find((item) => item.group_id === groupId) || null
+}
+
+function llmReviewText(finding: AiPolicyFinding): string {
   if (!audit.value?.llm_review_used) return ''
-  const review = llmCategoryReview(code)
-  if (!review) return ''
-  if (review.result === 'LLM 未单独研判') return 'LLM 未单独研判'
-  return [review.result, review.reason, review.recommendation].filter(Boolean).join('；')
+  const review = llmFindingReview(finding.group_id)
+  if (review) return [review.reason, review.recommendation].filter(Boolean).join('；')
+  const categoryReview = llmCategoryReview(finding.category || '')
+  if (!categoryReview || categoryReview.result === 'LLM 未单独研判') return ''
+  return [categoryReview.result, categoryReview.reason, categoryReview.recommendation].filter(Boolean).join('；')
 }
 
 function reviewMethod(): string {
@@ -351,12 +569,65 @@ function reviewNote(): string {
   return '已对 Skill 压缩包完成规则扫描。结果供决策参考，不阻断发布，不改动文件。'
 }
 
-function summaryText(): string {
+function chapterTwoTitle(): string {
+  return '2. 意图与行为分析'
+}
+
+function behaviorSummary(): string {
   if (!audit.value) return ''
-  if (audit.value.status === 'failed' || audit.value.decision === 'failed') return '审查未完成，请排查后重新发起。'
-  if (audit.value.decision === 'high_risk') return '高危风险集中在供应链依赖与权限控制，建议优先处理后再评估使用。'
-  if (audit.value.decision === 'attention_required') return '存在若干风险，建议逐项确认后决定是否调整。'
-  return '未发现明显高危风险。'
+  if (audit.value.llm_review_used) {
+    return llmReview.value?.overall_judgement || llmReview.value?.reason || reviewNote()
+  }
+  if (llmReview.value?.status && ['failed', 'unparsed', 'skipped'].includes(llmReview.value.status)) {
+    return 'AI 深度审查未完成，本报告以规则扫描结果为准。'
+  }
+  return '未开启 AI 深度审查，本报告为规则初筛，可能存在误报。'
+}
+
+function findingScopeText(): string {
+  const parts: string[] = []
+  if (riskCategories.value.length > 0) {
+    parts.push(`需要关注的风险 ${riskCategories.value.length} 类、${riskFindings.value.reduce((sum, finding) => sum + hitCount(finding), 0)} 处`)
+  }
+  if (reviewFindings.value.length > 0) {
+    parts.push(`建议复核 ${reviewFindings.value.reduce((sum, finding) => sum + hitCount(finding), 0)} 处`)
+  }
+  return parts.join('；')
+}
+
+function declaredIntentText(): string {
+  return intentAnalysis.value?.declared_intent || `该 Skill 名称为 ${audit.value?.skill_name || '-'}，规则扫描未提取到更完整的声明用途。`
+}
+
+function actualBehaviorText(): string {
+  if (intentAnalysis.value?.actual_behavior) return intentAnalysis.value.actual_behavior
+  const scope = findingScopeText()
+  if (scope) return `规则扫描已完成，发现${scope}。未发现需要阻断发布的自动处置项。`
+  return '规则扫描未发现明显高风险行为。'
+}
+
+function consistencyText(): string {
+  if (intentAnalysis.value?.consistency) return intentAnalysis.value.consistency
+  if (audit.value?.decision === 'high_risk') return '存在偏差'
+  if (audit.value?.decision === 'attention_required') return '建议复核'
+  if (audit.value?.status === 'failed') return '审查未完成'
+  return '未发现明显偏差'
+}
+
+function basisText(): string {
+  if (intentAnalysis.value?.basis) return intentAnalysis.value.basis
+  const llmStatus = llmReview.value?.status
+  const aiNote = llmStatus && ['failed', 'unparsed', 'skipped'].includes(llmStatus)
+    ? 'AI 深度分析结果未形成可展示内容，本章依据规则扫描结果生成。'
+    : ''
+  return `${aiNote}${conclusionText()}`
+}
+
+function conclusionText(): string {
+  if (audit.value?.decision === 'high_risk') return '发现需要优先关注的高风险行为，请结合下方证据复核。'
+  if (audit.value?.decision === 'attention_required') return '规则扫描未发现高风险行为，中低风险项可按下方建议确认。'
+  if (audit.value?.status === 'failed') return '审查未完成，请排查后重新发起。'
+  return '未发现明显高风险行为。'
 }
 
 function downloadReport(): void {
@@ -384,10 +655,16 @@ onMounted(loadAudit)
 
 <template>
   <div class="space-y-5">
-    <button class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700" @click="router.push('/ai-policies')">
-      <ArrowLeft class="h-4 w-4" />
-      返回 AI Policies
-    </button>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <button class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700" @click="router.push('/ai-policies')">
+        <ArrowLeft class="h-4 w-4" />
+        返回 AI Policies
+      </button>
+      <button v-if="audit && !loading" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-purple-300" @click="downloadReport">
+        <Download class="h-4 w-4" />
+        Markdown
+      </button>
+    </div>
 
     <div v-if="loading" class="flex items-center justify-center gap-2 py-20 text-sm text-slate-400">
       <Loader2 class="h-4 w-4 animate-spin" />
@@ -395,211 +672,257 @@ onMounted(loadAudit)
     </div>
 
     <template v-else-if="audit">
-      <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <h2 class="text-lg font-semibold text-slate-900">1. 概览</h2>
-          <button class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:border-purple-300" @click="downloadReport">
-            <Download class="h-4 w-4" />
-            Markdown
-          </button>
-        </div>
-        <div class="grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)]">
-          <div class="flex h-40 flex-col items-center justify-center rounded-2xl" :class="scoreTone()">
-            <div class="text-5xl font-black leading-none">{{ isRunning ? `${progress.value}%` : scoreLabel }}</div>
-            <div class="mt-3 text-base font-semibold">{{ isRunning ? '审查中' : severityLabel(audit.severity) }}</div>
-          </div>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-              <span>风险 {{ riskCategoryCount }} 类 · {{ audit.findings_count }} 处</span>
-              <span class="text-slate-300">|</span>
-              <span>审查方式 {{ reviewMethod() }}</span>
-            </div>
-            <h1 class="mt-3 text-2xl font-bold text-slate-900">{{ audit.skill_name }} 安全审查结果</h1>
-            <div class="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div class="h-full rounded-full transition-all" :class="scoreBarClass()" :style="{ width: `${Math.min(100, audit.risk_score || 0)}%` }" />
-            </div>
-            <div class="mt-5 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div class="rounded-xl bg-slate-50 p-3">
-                <div class="text-xs text-slate-500">报告编号</div>
-                <div class="mt-1 break-all font-medium text-slate-900">{{ audit.audit_id }}</div>
+      <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <main class="space-y-5">
+          <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-900">1. 概览</h2>
+            <div class="mt-4 grid gap-5 lg:grid-cols-[176px_minmax(0,1fr)]">
+              <div class="flex h-40 flex-col items-center justify-center rounded-2xl" :class="scoreTone()">
+                <div class="text-5xl font-black leading-none">{{ isRunning ? `${progress.value}%` : scoreLabel }}</div>
+                <div class="mt-3 text-base font-semibold">{{ isRunning ? '审查中' : decisionLabel() }}</div>
               </div>
-              <div class="rounded-xl bg-slate-50 p-3">
-                <div class="text-xs text-slate-500">审查开始时间</div>
-                <div class="mt-1 font-medium text-slate-900">{{ formatTime(audit.started_at || audit.created_at) }}</div>
-              </div>
-              <div class="rounded-xl bg-slate-50 p-3">
-                <div class="text-xs text-slate-500">审查结束时间</div>
-                <div class="mt-1 font-medium text-slate-900">{{ formatTime(audit.finished_at) }}</div>
-              </div>
-              <div class="rounded-xl bg-slate-50 p-3">
-                <div class="text-xs text-slate-500">审查结论</div>
-                <div class="mt-1 font-medium text-slate-900">{{ decisionLabel() }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="isRunning" class="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm">
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="text-lg font-semibold text-slate-900">审查进度</h2>
-            <p class="mt-1 text-sm text-slate-500">当前阶段：{{ progress.step }}</p>
-          </div>
-          <div class="text-right">
-            <div class="text-2xl font-bold text-indigo-700">{{ progress.value }}%</div>
-            <div class="text-xs text-slate-500">{{ progress.completed }}/{{ progress.total }} 项检查完成</div>
-            <button
-              class="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:border-indigo-300 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              :disabled="refreshing"
-              @click="refreshAudit"
-            >
-              <Loader2 v-if="refreshing" class="h-3.5 w-3.5 animate-spin" />
-              {{ refreshing ? '刷新中' : '刷新' }}
-            </button>
-          </div>
-        </div>
-        <div class="h-2 overflow-hidden rounded-full bg-slate-200">
-          <div class="h-full rounded-full bg-indigo-500 transition-all" :style="{ width: `${progress.value}%` }" />
-        </div>
-        <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div v-for="step in progressSteps" :key="step.key" class="rounded-xl border border-slate-200 p-3">
-            <component
-              :is="stepIcon(step.state)"
-              class="mb-2 h-5 w-5"
-              :class="step.state === 'done' ? 'text-emerald-600' : step.state === 'running' ? 'animate-spin text-indigo-600' : step.state === 'failed' ? 'text-red-600' : 'text-slate-300'"
-            />
-            <div class="text-sm font-semibold text-slate-900">{{ step.label }}</div>
-            <div class="mt-1 text-xs text-slate-500">{{ step.description }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="space-y-5">
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 class="text-lg font-semibold text-slate-900">2. 审查说明</h2>
-          <p class="mt-2 text-sm leading-6 text-slate-600">{{ reviewNote() }}</p>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 class="text-lg font-semibold text-slate-900">3. 审查对象</h2>
-          <div class="mt-4 grid gap-3 md:grid-cols-4">
-            <div class="rounded-xl bg-slate-50 p-3">
-              <div class="text-xs text-slate-500">Skill 名称</div>
-              <div class="mt-1 font-semibold text-slate-900">{{ audit.skill_name }}</div>
-            </div>
-            <div class="rounded-xl bg-slate-50 p-3">
-              <div class="text-xs text-slate-500">版本</div>
-              <div class="mt-1 font-semibold text-slate-900">v{{ audit.skill_version || '-' }}</div>
-            </div>
-            <div class="rounded-xl bg-slate-50 p-3">
-              <div class="text-xs text-slate-500">风险</div>
-              <div class="mt-1 font-semibold text-slate-900">发现 {{ audit.findings_count }} 处</div>
-            </div>
-            <div class="rounded-xl bg-slate-50 p-3">
-              <div class="text-xs text-slate-500">风险等级</div>
-              <div class="mt-1 font-semibold text-slate-900">{{ severityLabel(audit.severity) }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 class="mb-4 text-lg font-semibold text-slate-900">4. 风险等级分布</h2>
-          <div v-if="allClear" class="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-700">
-            <div class="text-base font-semibold">未发现风险</div>
-          </div>
-          <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div v-for="bucket in severityBuckets" :key="bucket.key" class="rounded-xl border p-4" :class="bucket.className">
-              <div class="text-sm font-semibold">{{ bucket.label }}</div>
-              <div class="mt-2 text-3xl font-black">{{ bucket.value }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div class="border-b border-slate-100 p-5">
-            <button class="inline-flex items-center gap-1 text-left text-lg font-semibold text-slate-900" @click="detailSectionOpen = !detailSectionOpen">
-              <component :is="detailSectionOpen ? ChevronDown : ChevronRight" class="h-5 w-5 text-slate-500" />
-              5. 详细结果
-            </button>
-          </div>
-          <div v-if="detailSectionOpen" class="space-y-4 p-5">
-            <div v-if="riskCategories.length === 0" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              未发现问题。
-            </div>
-
-            <section v-for="category in riskCategories" :key="category.code" class="rounded-xl border border-slate-200 p-4">
-              <button class="block w-full text-left" @click="toggleCategory(category)">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{{ category.code }}</span>
-                  <span class="rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="severityClass(category.severity)">{{ severityLabel(category.severity) }}</span>
-                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">发现 {{ category.hitCount }} 处</span>
-                </div>
-                <h3 class="mt-2 text-base font-semibold text-slate-900">
-                  {{ category.code }} {{ category.name }} · {{ severityLabel(category.severity) }} · {{ category.hitCount }} 处
-                </h3>
-                <span class="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                  <component :is="isCategoryExpanded(category) ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
-                  {{ isCategoryExpanded(category) ? '收起' : '展开查看明细' }}
-                </span>
-              </button>
-
-              <div v-if="isCategoryExpanded(category)" class="mt-4 space-y-3">
-                <article v-for="(finding, index) in category.findings" :key="groupKey(category, finding, index)" class="rounded-xl bg-slate-50 p-4">
-                  <div class="mb-2 flex flex-wrap items-center gap-2">
-                    <span class="rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="severityClass(finding.severity)">{{ severityLabel(finding.severity) }}</span>
-                    <span class="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">发现 {{ hitCount(finding) }} 处</span>
-                    <span v-if="finding.must_review" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">建议复核</span>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <h1 class="break-words text-2xl font-semibold text-slate-900">{{ audit.skill_name }} · v{{ audit.skill_version || '-' }}</h1>
+                    <p class="mt-1 text-sm text-slate-500">报告编号 {{ audit.audit_id }}</p>
                   </div>
-                  <h4 class="text-sm font-semibold text-slate-900">{{ finding.title || '安全风险' }}</h4>
-                  <p v-if="finding.description" class="mt-3 text-sm leading-6 text-slate-600">{{ finding.description }}</p>
-                  <p v-if="finding.recommendation" class="mt-2 text-sm leading-6 text-slate-700">处理建议：{{ finding.recommendation }}</p>
-                  <p v-if="llmReviewText(category.code)" class="mt-2 text-sm leading-6 text-indigo-700">AI 研判：{{ llmReviewText(category.code) }}</p>
+                  <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ring-1" :class="severityClass(audit.severity)">
+                    {{ decisionLabel() }}
+                  </span>
+                </div>
+                <div class="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                  <span>{{ reviewMethod() }}</span>
+                  <span class="text-slate-300">|</span>
+                  <span>文件 {{ fileCountText() }}</span>
+                  <span class="text-slate-300">|</span>
+                  <span>包大小 {{ packageSizeText() }}</span>
+                  <span class="text-slate-300">|</span>
+                  <span>耗时 {{ elapsedTime() }}</span>
+                  <span class="text-slate-300">|</span>
+                  <span>SHA-256 {{ shortHash(audit.source_sha256) }}</span>
+                  <button v-if="audit.source_sha256" class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700" type="button" @click="copyHash">
+                    <Copy class="h-3.5 w-3.5" />
+                    复制
+                  </button>
+                </div>
+                <div class="mt-4 flex items-center gap-3">
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <div class="h-full rounded-full transition-all" :class="scoreBarClass()" :style="{ width: scoreWidth() }" />
+                  </div>
+                  <span class="w-16 text-right text-sm font-semibold text-slate-600">{{ isRunning ? `${progress.value}/100` : `${scoreLabel}/100` }}</span>
+                </div>
+                <div class="mt-5 text-sm font-semibold text-slate-900">风险等级</div>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div v-for="bucket in severityBuckets" :key="bucket.key" class="rounded-xl border p-4" :class="bucket.className">
+                    <div class="text-sm font-semibold">{{ bucket.label }}</div>
+                    <div class="mt-2 text-3xl font-black">{{ bucket.value }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
 
-                  <div class="mt-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
-                    <div class="mb-2 flex items-center justify-between gap-2">
-                      <div class="text-xs font-medium text-slate-500">文件</div>
-                      <button
-                        v-if="locationsOf(finding).length > 3"
-                        class="text-xs font-medium text-purple-600 hover:text-purple-700"
-                        type="button"
-                        @click="toggleLocations(groupKey(category, finding, index))"
-                      >
-                        {{ isLocationsExpanded(groupKey(category, finding, index)) ? '收起' : `展开全部 ${locationsOf(finding).length} 处` }}
-                      </button>
+          <section v-if="isRunning" class="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold text-slate-900">审查进度</h2>
+                <p class="mt-1 text-sm text-slate-500">当前阶段：{{ progress.step }}</p>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-bold text-indigo-700">{{ progress.value }}%</div>
+                <div class="text-xs text-slate-500">{{ progress.completed }}/{{ progress.total }} 项检查完成</div>
+                <button class="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:border-indigo-300 disabled:cursor-not-allowed disabled:opacity-60" type="button" :disabled="refreshing" @click="refreshAudit">
+                  <Loader2 v-if="refreshing" class="h-3.5 w-3.5 animate-spin" />
+                  {{ refreshing ? '刷新中' : '刷新' }}
+                </button>
+              </div>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-slate-200">
+              <div class="h-full rounded-full bg-indigo-500 transition-all" :style="{ width: `${progress.value}%` }" />
+            </div>
+            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div v-for="step in progressSteps" :key="step.key" class="rounded-xl border border-slate-200 p-3">
+                <component :is="stepIcon(step.state)" class="mb-2 h-5 w-5" :class="step.state === 'done' ? 'text-emerald-600' : step.state === 'running' ? 'animate-spin text-indigo-600' : step.state === 'failed' ? 'text-red-600' : 'text-slate-300'" />
+                <div class="text-sm font-semibold text-slate-900">{{ step.label }}</div>
+                <div class="mt-1 text-xs text-slate-500">{{ step.description }}</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-900">{{ chapterTwoTitle() }}</h2>
+            <div class="mt-4 space-y-4 text-sm leading-6 text-slate-600">
+              <div>
+                <div class="font-semibold text-slate-900">声明用途</div>
+                <p class="mt-1">{{ declaredIntentText() }}</p>
+              </div>
+              <div>
+                <div class="font-semibold text-slate-900">实际行为</div>
+                <p class="mt-1">{{ actualBehaviorText() }}</p>
+              </div>
+              <div>
+                <div class="font-semibold text-slate-900">一致性判断</div>
+                <p class="mt-1">{{ consistencyText() }}</p>
+              </div>
+              <div>
+                <div class="font-semibold text-slate-900">判断依据</div>
+                <p class="mt-1">{{ basisText() }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="border-b border-slate-100 p-5">
+              <button class="inline-flex items-center gap-1 text-left text-lg font-semibold text-slate-900" @click="detailSectionOpen = !detailSectionOpen">
+                <component :is="detailSectionOpen ? ChevronDown : ChevronRight" class="h-5 w-5 text-slate-500" />
+                3. 详细结果
+              </button>
+            </div>
+            <div v-if="detailSectionOpen" class="space-y-4 p-5">
+              <div v-if="riskCategories.length === 0 && reviewCategories.length === 0" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+                未发现问题。
+              </div>
+
+              <div v-if="riskCategories.length > 0" class="text-sm font-semibold text-slate-900">需要关注的风险</div>
+              <section v-for="category in riskCategories" :key="categorySectionKey(category)" class="rounded-xl border border-slate-200 p-4">
+                <button class="block w-full text-left" @click="toggleCategory(category)">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="severityClass(category.severity)">{{ severityLabel(category.severity) }}</span>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">发现 {{ category.hitCount }} 处</span>
+                  </div>
+                  <h3 class="mt-2 text-base font-semibold text-slate-900">
+                    {{ category.name }} · {{ severityLabel(category.severity) }} · {{ category.hitCount }} 处
+                  </h3>
+                  <span class="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                    <component :is="isCategoryExpanded(category) ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
+                    {{ isCategoryExpanded(category) ? '收起' : '展开查看明细' }}
+                  </span>
+                </button>
+
+                <div v-if="isCategoryExpanded(category)" class="mt-4 space-y-3">
+                  <article v-for="(finding, index) in category.findings" :key="groupKey(category, finding, index)" class="rounded-xl bg-slate-50 p-4">
+                    <div class="mb-2 flex flex-wrap items-center gap-2">
+                      <span class="rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="severityClass(finding.severity)">{{ severityLabel(finding.severity) }}</span>
+                      <span class="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">发现 {{ hitCount(finding) }} 处</span>
                     </div>
-                    <div class="space-y-2">
-                      <div v-for="location in shownLocations(finding, groupKey(category, finding, index))" :key="locationText(location)" class="rounded-lg border border-slate-100 p-3">
-                        <div class="break-all font-mono text-xs text-slate-600">{{ locationText(location) }}</div>
-                        <pre class="mt-2 max-h-44 overflow-auto rounded-lg bg-slate-900 p-3 text-xs leading-5 text-slate-100">{{ locationSnippet(location) }}</pre>
+                    <h4 class="text-sm font-semibold text-slate-900">{{ finding.title || '安全风险' }}</h4>
+                    <p v-if="finding.description" class="mt-3 text-sm leading-6 text-slate-600">{{ finding.description }}</p>
+                    <p v-if="finding.recommendation" class="mt-2 text-sm leading-6 text-slate-700">处理建议：{{ finding.recommendation }}</p>
+                    <p v-if="llmReviewText(finding)" class="mt-2 text-sm leading-6 text-indigo-700">AI 研判：{{ llmReviewText(finding) }}</p>
+                    <div class="mt-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+                      <div class="mb-2 flex flex-wrap items-center gap-2">
+                        <div class="text-xs font-medium text-slate-500">文件</div>
+                        <button v-if="locationsOf(finding).length > 3" class="text-xs font-medium text-purple-600 hover:text-purple-700" type="button" @click="toggleLocations(groupKey(category, finding, index))">
+                          {{ isLocationsExpanded(groupKey(category, finding, index)) ? '收起' : `展开全部 ${locationsOf(finding).length} 处` }}
+                        </button>
+                      </div>
+                      <div class="space-y-2">
+                        <div v-for="location in shownLocations(finding, groupKey(category, finding, index))" :key="locationText(location)" class="rounded-lg border border-slate-100 p-3">
+                          <div class="break-all font-mono text-xs text-slate-600">{{ locationText(location) }}</div>
+                          <pre class="mt-2 max-h-44 overflow-auto rounded-lg bg-slate-900 p-3 text-xs leading-5 text-slate-100">{{ locationSnippet(location) }}</pre>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </article>
+                  </article>
+                </div>
+              </section>
+
+              <div v-if="riskCategories.length === 0 && reviewCategories.length > 0" class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                本次未发现需要立即关注的高风险项。
               </div>
-            </section>
 
-            <div v-if="missedCategoryCount > 0" class="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-              其余 {{ missedCategoryCount }} 类未发现问题
+              <div v-if="reviewCategories.length > 0" class="text-sm font-semibold text-amber-700">建议复核</div>
+              <section v-for="category in reviewCategories" :key="categorySectionKey(category)" class="rounded-xl border border-amber-200 p-4">
+                <button class="block w-full text-left" type="button" @click="toggleCategory(category)">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">{{ severityLabel(category.severity) }}</span>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">发现 {{ category.hitCount }} 处</span>
+                  </div>
+                  <h3 class="mt-2 text-base font-semibold text-slate-900">
+                    {{ category.name }} · {{ severityLabel(category.severity) }} · {{ category.hitCount }} 处
+                  </h3>
+                  <span class="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                    <component :is="isCategoryExpanded(category) ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
+                    {{ isCategoryExpanded(category) ? '收起' : '展开查看明细' }}
+                  </span>
+                </button>
+                <div v-if="isCategoryExpanded(category)" class="mt-4 space-y-3">
+                  <article v-for="(finding, index) in category.findings" :key="groupKey(category, finding, index)" class="rounded-xl bg-slate-50 p-4">
+                    <div class="mb-2 flex flex-wrap items-center gap-2">
+                      <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">建议复核</span>
+                      <span class="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">发现 {{ hitCount(finding) }} 处</span>
+                    </div>
+                    <h4 class="text-sm font-semibold text-slate-900">{{ finding.title || '建议复核' }}</h4>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">{{ finding.denoise_reason || finding.description || '该问题缺少可执行证据，建议复核。' }}</p>
+                    <p v-if="llmReviewText(finding)" class="mt-2 text-sm leading-6 text-indigo-700">AI 研判：{{ llmReviewText(finding) }}</p>
+                    <div class="mt-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+                      <div class="mb-2 flex flex-wrap items-center gap-2">
+                        <div class="text-xs font-medium text-slate-500">文件</div>
+                        <button v-if="locationsOf(finding).length > 3" class="text-xs font-medium text-purple-600 hover:text-purple-700" type="button" @click="toggleLocations(groupKey(category, finding, index))">
+                          {{ isLocationsExpanded(groupKey(category, finding, index)) ? '收起' : `展开全部 ${locationsOf(finding).length} 处` }}
+                        </button>
+                      </div>
+                      <div class="space-y-2">
+                        <div v-for="location in shownLocations(finding, groupKey(category, finding, index))" :key="locationText(location)" class="rounded-lg border border-slate-100 p-3">
+                          <div class="break-all font-mono text-xs text-slate-600">{{ locationText(location) }}</div>
+                          <pre class="mt-2 max-h-44 overflow-auto rounded-lg bg-slate-900 p-3 text-xs leading-5 text-slate-100">{{ locationSnippet(location) }}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </section>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 class="text-lg font-semibold text-slate-900">6. 总结</h2>
-          <p class="mt-2 text-sm leading-6 text-slate-600">{{ summaryText() }}</p>
-        </div>
+          <section class="rounded-xl border border-slate-200 bg-white p-5 text-xs leading-relaxed text-slate-500 shadow-sm">
+            <h2 class="mb-2 text-lg font-semibold text-slate-900">4. 声明</h2>
+            风险分类参考 OWASP Agentic Skills Top 10。OWASP 内容遵循 CC BY-SA 4.0，OWASP 不对本产品或审查结果作认证或背书。
+            <div class="mt-2">参考：OWASP Agentic Skills Top 10；AIHelms 审查规则与报告模板。</div>
+          </section>
+        </main>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-5 text-xs leading-relaxed text-slate-500 shadow-sm">
-          <h2 class="mb-2 text-lg font-semibold text-slate-900">7. 声明</h2>
-          风险分类参考 OWASP Agentic Skills Top 10。OWASP 内容遵循 CC BY-SA 4.0，OWASP 不对本产品或审查结果作认证或背书。
-        </div>
+        <aside class="space-y-5 xl:sticky xl:top-5 xl:self-start">
+          <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="text-base font-semibold text-slate-900">Skill 包文件 ({{ fileCountText() }})</h2>
+            </div>
+            <div v-if="packageFiles.length > 0" class="mt-4 divide-y divide-slate-100">
+              <div v-for="file in shownPackageFiles" :key="file.path" class="flex items-start justify-between gap-3 py-2.5" :title="file.path">
+                <div class="min-w-0">
+                  <div class="truncate font-mono text-xs text-slate-700">{{ fileDisplayName(file.path) }}</div>
+                  <div v-if="file.path !== fileDisplayName(file.path)" class="mt-0.5 truncate text-[11px] text-slate-400">
+                    {{ file.path }}
+                  </div>
+                </div>
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="fileStatusClass(file)">
+                  {{ fileStatusLabel(file) }}
+                </span>
+              </div>
+              <button v-if="packageFiles.length > 14" class="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:border-purple-300 hover:text-purple-700" type="button" @click="filesExpanded = !filesExpanded">
+                {{ filesExpanded ? '收起文件' : `展开全部 ${packageFiles.length} 个文件` }}
+              </button>
+            </div>
+            <div v-else class="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">
+              本报告未记录文件清单。
+            </div>
+          </section>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 shadow-sm">
-          <h2 class="mb-2 text-lg font-semibold text-slate-900">8. 参考</h2>
-          OWASP Agentic Skills Top 10 · AIHelms 审查规则与报告模板
-        </div>
+          <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="text-base font-semibold text-slate-900">外部链接 ({{ externalLinks.length }})</h2>
+            </div>
+            <div v-if="externalLinks.length > 0" class="mt-4 space-y-2">
+              <a v-for="link in externalLinks" :key="link.url" class="block truncate rounded-lg border border-slate-100 px-3 py-2 text-xs text-slate-600 hover:border-purple-200 hover:text-purple-700" :href="link.url" target="_blank" rel="noreferrer">
+                {{ link.label || link.url }}
+              </a>
+            </div>
+            <div v-else class="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">
+              未发现外部链接
+            </div>
+          </section>
+        </aside>
       </div>
     </template>
   </div>

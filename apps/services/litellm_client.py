@@ -62,6 +62,7 @@ async def chat_completion(
     api_key: str | None = None,
     user: str | None = None,
     metadata: dict | None = None,
+    extra_body: dict | None = None,
 ) -> dict:
     data = {
         "model": model,
@@ -75,6 +76,8 @@ async def chat_completion(
         data["user"] = user
     if metadata:
         data["metadata"] = metadata
+    if extra_body:
+        data["extra_body"] = extra_body
     return await _request(
         "POST",
         "/chat/completions",

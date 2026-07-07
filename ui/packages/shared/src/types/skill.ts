@@ -27,7 +27,15 @@ export interface Skill {
   install_count: number
   security_status?: 'not_scanned' | 'queued' | 'running' | 'completed' | 'failed'
   security_decision?: '' | 'passed' | 'attention_required' | 'high_risk' | 'failed'
-  security_severity?: '' | 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+  security_severity?:
+    | ''
+    | 'critical'
+    | 'high'
+    | 'medium'
+    | 'low'
+    | 'info'
+    | 'none'
+    | 'unknown'
   security_risk_score?: number
   latest_ai_policies_audit_id?: number | null
   latest_ai_policies_audit_code?: string | null

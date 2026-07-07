@@ -1,11 +1,17 @@
 import json
 import re
+import zipfile
+from pathlib import PurePosixPath
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from repositories import ai_key_repo, model_repo, user_repo
 from services import litellm_client
+
+MAX_REVIEW_FILES = 8
+MAX_FILE_CHARS = 3000
+MAX_TOTAL_FILE_CHARS = 12000
 
 
 def _clean_llm_text(text: str) -> str:
@@ -82,16 +88,25 @@ def _finding_brief(item: dict, index: int, category_labels: dict[str, str]) -> d
             "file": first_location.get("file"),
             "start_line": first_location.get("start_line"),
         }
-        snippet = str(first_location.get("snippet") or "")[:800]
+        snippet = str(first_location.get("snippet") or "")[:300]
     else:
         snippet = str(evidence.get("snippet") or evidence.get("matched_text") or "")[
-            :800
+            :300
         ]
     return {
         "index": index,
+        "group_id": item.get("group_id") or f"group-{index}",
         "category": item.get("category") or "AST08",
         "category_name": category_labels.get(item.get("category"), "安全风险"),
-        "severity": item.get("severity") or "unknown",
+        "scanner_severity": item.get("scanner_severity")
+        or item.get("severity")
+        or "unknown",
+        "effective_severity": item.get("effective_severity")
+        or item.get("severity")
+        or "unknown",
+        "finding_type": item.get("finding_type") or "true_risk",
+        "file_role": item.get("file_role") or "unknown",
+        "path_bucket": item.get("path_bucket") or "",
         "title": item.get("title") or "安全风险",
         "description": item.get("description") or "",
         "recommendation": item.get("recommendation") or "",
@@ -99,7 +114,303 @@ def _finding_brief(item: dict, index: int, category_labels: dict[str, str]) -> d
         "file": loc.get("file") or "",
         "line": loc.get("start_line"),
         "evidence": snippet,
+        "command_context": item.get("command_context") or {},
+        "redline": bool(item.get("redline")),
     }
+
+
+def _selection_finding_brief(item: dict) -> dict:
+    locations = item.get("locations") or []
+    first_location = (
+        locations[0] if locations and isinstance(locations[0], dict) else {}
+    )
+    return {
+        "group_id": item.get("group_id") or "",
+        "category": item.get("category") or "",
+        "severity": item.get("severity") or "",
+        "title": item.get("title") or "",
+        "file_role": item.get("file_role") or "",
+        "file": first_location.get("file") or "",
+        "hit_count": item.get("hit_count") or 1,
+    }
+
+
+def _compact_file_tree(file_tree: list[dict]) -> list[dict]:
+    return [
+        {
+            "path": item.get("path"),
+            "role": item.get("role"),
+            "size": item.get("size"),
+        }
+        for item in file_tree[:200]
+    ]
+
+
+def _zip_file_tree(zip_path: str | None) -> list[dict]:
+    if not zip_path or not zipfile.is_zipfile(zip_path):
+        return []
+    files: list[dict] = []
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                path = info.filename.lstrip("/")
+                files.append(
+                    {
+                        "path": path,
+                        "size": info.file_size,
+                        "role": _file_role_for_prompt(path),
+                    }
+                )
+    except Exception:  # noqa: BLE001
+        return []
+    return sorted(
+        files,
+        key=lambda item: (item["role"] != "runtime_entry", item["path"]),
+    )
+
+
+def _file_role_for_prompt(path: str) -> str:
+    clean = (path or "").replace("\\", "/").lower()
+    name = PurePosixPath(clean).name
+    suffix = PurePosixPath(clean).suffix
+    parts = set(PurePosixPath(clean).parts)
+    if name in {"skill.md", "manifest.json", "ai-plugin.json"}:
+        return "runtime_entry"
+    if name in {"requirements.txt", "package.json", "package-lock.json"}:
+        return "dependency_manifest"
+    if suffix in {".py", ".sh", ".js", ".ts", ".mjs", ".cjs"}:
+        return "executable_script"
+    if parts & {"assets", "templates", "static", "public"} or suffix in {
+        ".html",
+        ".svg",
+        ".css",
+    }:
+        return "template_asset"
+    if suffix in {".md", ".txt", ".rst"} or name.startswith("readme"):
+        return "documentation"
+    return "unknown"
+
+
+def _deterministic_selected_files(
+    file_tree: list[dict], finding_briefs: list[dict]
+) -> list[str]:
+    paths: list[str] = []
+    known = {item["path"] for item in file_tree}
+    for item in file_tree:
+        if item["role"] == "runtime_entry":
+            paths.append(item["path"])
+    for finding in finding_briefs:
+        path = str(finding.get("file") or "")
+        if path in known:
+            paths.append(path)
+    for item in file_tree:
+        if item["role"] in {"executable_script", "dependency_manifest"}:
+            paths.append(item["path"])
+    deduped = list(dict.fromkeys(paths))
+    return deduped[:MAX_REVIEW_FILES]
+
+
+def _selected_paths_from_llm(parsed: dict, file_tree: list[dict]) -> list[str]:
+    known = {item["path"] for item in file_tree}
+    raw_items = parsed.get("selected_files") if isinstance(parsed, dict) else []
+    if not isinstance(raw_items, list):
+        return []
+    paths: list[str] = []
+    for item in raw_items:
+        path = item.get("path") if isinstance(item, dict) else item
+        if isinstance(path, str) and path in known:
+            paths.append(path)
+    return list(dict.fromkeys(paths))[:MAX_REVIEW_FILES]
+
+
+def _read_review_files(zip_path: str | None, paths: list[str]) -> list[dict]:
+    if not zip_path or not zipfile.is_zipfile(zip_path) or not paths:
+        return []
+    remaining = MAX_TOTAL_FILE_CHARS
+    files: list[dict] = []
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            for path in paths:
+                if remaining <= 0:
+                    break
+                try:
+                    raw = zf.read(path)
+                except KeyError:
+                    continue
+                text = raw.decode("utf-8", errors="replace")
+                content = text[: min(MAX_FILE_CHARS, remaining)]
+                remaining -= len(content)
+                files.append(
+                    {
+                        "path": path,
+                        "role": _file_role_for_prompt(path),
+                        "truncated": len(content) < len(text),
+                        "content": content,
+                    }
+                )
+    except Exception:  # noqa: BLE001
+        return []
+    return files
+
+
+def _intent_review_files(files: list[dict]) -> list[dict]:
+    remaining = 5000
+    compact: list[dict] = []
+    for item in files[:5]:
+        if remaining <= 0:
+            break
+        content = str(item.get("content") or "")
+        excerpt = content[: min(1200, remaining)]
+        remaining -= len(excerpt)
+        compact.append(
+            {
+                "path": item.get("path"),
+                "role": item.get("role"),
+                "truncated": bool(item.get("truncated") or len(excerpt) < len(content)),
+                "content": excerpt,
+            }
+        )
+    return compact
+
+
+def _file_selection_prompt(prompt_payload: dict, retry: bool = False) -> list[dict]:
+    user_prefix = "上一次输出未解析为合法 JSON。请重新输出。" if retry else ""
+    schema = (
+        '{"selected_files":[{"path":"SKILL.md","reason":"入口说明"}],'
+        '"declared_intent":"Skill 声明用途"}'
+    )
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是 AIHelms 的 Skill 安全审查文件选择助手。请基于文件树、"
+                "Skill 基本信息和规则命中摘要，选择后续需要读取原文的文件。"
+                "优先选择入口说明、manifest、被命中文件、可执行脚本和依赖文件。"
+                f"最多选择 {MAX_REVIEW_FILES} 个文件。只输出 JSON，不要解释。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"{user_prefix}请按此 JSON 结构输出：{schema}\n\n"
+                f"输入：{json.dumps(prompt_payload, ensure_ascii=False)}"
+            ),
+        },
+    ]
+
+
+async def _select_review_files(
+    model_name: str,
+    api_key: str,
+    user_id: str,
+    metadata: dict,
+    prompt_payload: dict,
+    file_tree: list[dict],
+    finding_briefs: list[dict],
+) -> tuple[list[str], dict]:
+    if not file_tree:
+        return ([], {})
+    result = await _chat_json(
+        model_name,
+        _file_selection_prompt(prompt_payload),
+        api_key,
+        user_id,
+        metadata,
+    )
+    parsed = extract_json_object(result["content"])
+    if not parsed:
+        result = await _chat_json(
+            model_name,
+            _file_selection_prompt(prompt_payload, retry=True),
+            api_key,
+            user_id,
+            metadata,
+            True,
+        )
+        parsed = extract_json_object(result["content"])
+    selected = _selected_paths_from_llm(parsed, file_tree)
+    if not selected:
+        selected = _deterministic_selected_files(file_tree, finding_briefs)
+    return (selected, parsed if parsed else {})
+
+
+def _intent_analysis_prompt(prompt_payload: dict, retry: bool = False) -> list[dict]:
+    user_prefix = "上一次输出未解析为合法 JSON。请重新输出。" if retry else ""
+    schema = {
+        "intent_analysis": {
+            "declared_intent": "该 Skill 声明用于把法规、合同或资料转换为结构化文档。",
+            "actual_behavior": (
+                "读取 Skill 包内入口说明、脚本和模板文件，生成 Markdown 或 HTML 报告。"
+            ),
+            "consistency": "基本一致",
+            "basis": (
+                "入口说明、被选中文件原文和规则扫描摘要均指向文档生成流程，"
+                "未发现与声明用途明显不一致的行为。"
+            ),
+        }
+    }
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是 AIHelms 的 Skill 意图与行为分析助手。"
+                "本次只做意图与行为分析，不做风险分类，不做逐条复核。"
+                "只输出一个 JSON 对象，且必须包含 intent_analysis 字段；"
+                "intent_analysis 下必须包含 declared_intent、actual_behavior、"
+                "consistency、basis 四个字段，缺一不可。"
+                "不要思维链，不要 markdown，不要解释。"
+                "不要使用阻断、封禁、下架、驳回等执行性措辞。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"{user_prefix}请严格按以下 JSON 示例的字段结构输出，"
+                "替换为基于输入证据得到的中文内容："
+                f"{json.dumps(schema, ensure_ascii=False, indent=2)}\n\n"
+                f"输入：{json.dumps(prompt_payload, ensure_ascii=False)}"
+            ),
+        },
+    ]
+
+
+def _intent_analysis_from_parsed(parsed: dict) -> dict:
+    if not isinstance(parsed, dict):
+        return {}
+    return llm_intent_analysis(parsed)
+
+
+async def _run_intent_analysis(
+    model_name: str,
+    api_key: str,
+    user_id: str,
+    metadata: dict,
+    prompt_payload: dict,
+) -> tuple[dict, dict]:
+    result = await _chat_json(
+        model_name,
+        _intent_analysis_prompt(prompt_payload),
+        api_key,
+        user_id,
+        metadata,
+        max_tokens=1000,
+    )
+    parsed = extract_json_object(result["content"])
+    if not parsed:
+        result = await _chat_json(
+            model_name,
+            _intent_analysis_prompt(prompt_payload, retry=True),
+            api_key,
+            user_id,
+            metadata,
+            True,
+            max_tokens=1000,
+        )
+        parsed = extract_json_object(result["content"])
+    intent_analysis = _intent_analysis_from_parsed(parsed)
+    return intent_analysis, _part_state(intent_analysis, result)
 
 
 
@@ -147,6 +458,114 @@ def extract_json_object(text: str) -> dict:
     return {}
 
 
+def _normalize_lookup(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _normalize_severity(value: Any) -> str:
+    raw = _normalize_lookup(value)
+    mapping = {
+        "critical": "critical",
+        "严重": "critical",
+        "严重风险": "critical",
+        "高严重": "critical",
+        "high": "high",
+        "高": "high",
+        "高危": "high",
+        "高风险": "high",
+        "medium": "medium",
+        "中": "medium",
+        "中危": "medium",
+        "中风险": "medium",
+        "low": "low",
+        "低": "low",
+        "低危": "low",
+        "低风险": "low",
+        "info": "info",
+        "提示": "info",
+        "建议复核": "info",
+        "review": "info",
+        "review_note": "info",
+        "none": "none",
+        "无": "none",
+        "未发现": "none",
+        "未发现明确风险": "none",
+    }
+    if raw in {"critical", "high", "medium", "low", "info", "none"}:
+        return raw
+    return mapping.get(raw, "info")
+
+
+def _normalize_confidence(value: Any) -> str:
+    raw = _normalize_lookup(value)
+    mapping = {
+        "high": "high",
+        "高": "high",
+        "高置信": "high",
+        "medium": "medium",
+        "中": "medium",
+        "中等": "medium",
+        "low": "low",
+        "低": "low",
+    }
+    return mapping.get(raw, "low")
+
+
+def _normalize_finding_type(value: Any) -> str:
+    raw = _normalize_lookup(value)
+    mapping = {
+        "true_risk": "true_risk",
+        "risk": "true_risk",
+        "real_risk": "true_risk",
+        "需处理": "true_risk",
+        "建议处理": "true_risk",
+        "存在风险": "true_risk",
+        "确认风险": "true_risk",
+        "false_positive": "false_positive",
+        "falsepositive": "false_positive",
+        "误报": "false_positive",
+        "未发现明确风险": "false_positive",
+        "review_note": "review_note",
+        "review": "review_note",
+        "needs_review": "review_note",
+        "建议复核": "review_note",
+        "需复核": "review_note",
+        "扫描限制": "review_note",
+    }
+    return mapping.get(raw, "review_note")
+
+
+def _normalize_consistency(value: Any) -> str:
+    raw = str(value or "").strip()
+    normalized = _normalize_lookup(raw)
+    mapping = {
+        "highly_consistent": "高度一致",
+        "consistent": "基本一致",
+        "mostly_consistent": "基本一致",
+        "partial": "存在偏差",
+        "partially_consistent": "存在偏差",
+        "inconsistent": "不一致",
+        "needs_review": "建议复核",
+        "review": "建议复核",
+        "高度一致": "高度一致",
+        "基本一致": "基本一致",
+        "存在偏差": "存在偏差",
+        "不一致": "不一致",
+        "建议复核": "建议复核",
+    }
+    return mapping.get(normalized, raw[:40])
+
+
+def _part_state(parsed_value: Any, response_state: dict) -> dict:
+    if parsed_value:
+        return {"status": "completed", "message": ""}
+    if response_state.get("truncated"):
+        return {"status": "unparsed", "message": "模型输出被截断，未形成可展示内容"}
+    if response_state.get("empty"):
+        return {"status": "unparsed", "message": "模型未返回可展示内容"}
+    return {"status": "unparsed", "message": "模型输出未解析为合法 JSON"}
+
+
 def llm_category_reviews(
     parsed: dict, findings: list[dict], category_labels: dict[str, str]
 ) -> list[dict]:
@@ -191,14 +610,146 @@ def llm_category_reviews(
     return reviews
 
 
+def llm_finding_reviews(parsed: dict, findings: list[dict]) -> list[dict]:
+    raw_items = parsed.get("finding_reviews") if isinstance(parsed, dict) else []
+    if not isinstance(raw_items, list):
+        return []
+    known_ids = {str(item.get("group_id")) for item in findings if item.get("group_id")}
+    reviews: list[dict] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        group_id = str(
+            item.get("group_id")
+            or item.get("groupId")
+            or item.get("id")
+            or ""
+        )
+        if group_id not in known_ids:
+            continue
+        finding_type = _normalize_finding_type(
+            item.get("finding_type") or item.get("findingType") or item.get("result")
+        )
+        effective_severity = _normalize_severity(
+            item.get("effective_severity")
+            or item.get("effectiveSeverity")
+            or item.get("severity")
+        )
+        confidence = _normalize_confidence(item.get("confidence"))
+        reviews.append(
+            {
+                "group_id": group_id,
+                "finding_type": finding_type,
+                "effective_severity": effective_severity,
+                "counts_toward_score": bool(item.get("counts_toward_score")),
+                "confidence": confidence,
+                "reason": _policy_safe_text(item.get("reason") or "", 700),
+                "recommendation": _policy_safe_text(
+                    item.get("recommendation") or "", 700
+                ),
+            }
+        )
+    return reviews
+
+
+def llm_intent_analysis(parsed: dict) -> dict:
+    raw = parsed.get("intent_analysis") if isinstance(parsed, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    declared_intent = _policy_safe_text(
+        raw.get("declared_intent") or raw.get("declaredIntent") or "", 400
+    )
+    actual_behavior = _policy_safe_text(
+        raw.get("actual_behavior") or raw.get("actualBehavior") or "", 700
+    )
+    consistency = _normalize_consistency(raw.get("consistency") or "")
+    basis = _policy_safe_text(raw.get("basis") or raw.get("evidence") or "", 900)
+    if not any([declared_intent, actual_behavior, consistency, basis]):
+        return {}
+    return {
+        "declared_intent": declared_intent,
+        "actual_behavior": actual_behavior,
+        "consistency": consistency,
+        "basis": basis,
+    }
+
+
+def _content_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str):
+                    parts.append(text)
+                elif isinstance(text, dict) and isinstance(text.get("value"), str):
+                    parts.append(text["value"])
+        return "".join(parts)
+    if isinstance(value, dict):
+        if isinstance(value.get("text"), str):
+            return value["text"]
+        if isinstance(value.get("value"), str):
+            return value["value"]
+    return ""
+
+
 def _response_content(response: dict) -> str:
     choices = response.get("choices") if isinstance(response, dict) else None
-    if not isinstance(choices, list) or not choices:
-        return ""
-    message = choices[0].get("message") if isinstance(choices[0], dict) else None
-    if not isinstance(message, dict):
-        return ""
-    return str(message.get("content") or "")
+    if isinstance(choices, list) and choices:
+        choice = choices[0] if isinstance(choices[0], dict) else {}
+        message = choice.get("message") if isinstance(choice, dict) else None
+        if isinstance(message, dict):
+            content = _content_text(message.get("content"))
+            if content:
+                return content
+        content = _content_text(choice.get("text"))
+        if content:
+            return content
+    output_text = (
+        _content_text(response.get("output_text"))
+        if isinstance(response, dict)
+        else ""
+    )
+    if output_text:
+        return output_text
+    output = response.get("output") if isinstance(response, dict) else None
+    if isinstance(output, list):
+        return _content_text(
+            [
+                content
+                for item in output
+                if isinstance(item, dict)
+                for content in [item.get("content") or item.get("text")]
+            ]
+        )
+    return ""
+
+
+def _finish_reason(response: dict) -> str:
+    choices = response.get("choices") if isinstance(response, dict) else None
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        return str(
+            choices[0].get("finish_reason")
+            or choices[0].get("finishReason")
+            or ""
+        )
+    return str(response.get("finish_reason") or response.get("status") or "")
+
+
+def _response_state(response: dict, content: str) -> dict:
+    finish_reason = _normalize_lookup(_finish_reason(response))
+    return {
+        "content": content,
+        "finish_reason": finish_reason,
+        "empty": not bool(content.strip()),
+        "truncated": finish_reason in {"length", "max_tokens", "incomplete"},
+    }
 
 
 def _review_metadata(audit: Any, user: Any, key: Any) -> dict:
@@ -221,58 +772,96 @@ async def _chat_json(
     user_id: str,
     metadata: dict,
     retry: bool = False,
-) -> str:
+    max_tokens: int = 1600,
+) -> dict:
+    common_kwargs = {
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "timeout": 90,
+        "api_key": api_key,
+        "user": user_id,
+        "metadata": metadata,
+        "extra_body": {"thinking": {"type": "disabled"}},
+    }
     try:
         response = await litellm_client.chat_completion(
             model_name,
             messages,
-            temperature=0,
-            max_tokens=1600,
-            timeout=90,
             response_format={"type": "json_object"},
-            api_key=api_key,
-            user=user_id,
-            metadata=metadata,
+            **common_kwargs,
         )
     except Exception as exc:
         message = str(exc).lower()
-        if "response_format" not in message and "json_object" not in message:
+        can_retry_without_options = any(
+            marker in message
+            for marker in ("response_format", "json_object", "extra_body", "thinking")
+        )
+        if not can_retry_without_options:
             raise
         response = await litellm_client.chat_completion(
             model_name,
             messages,
-            temperature=0,
-            max_tokens=1600,
-            timeout=90,
-            api_key=api_key,
-            user=user_id,
-            metadata=metadata,
+            **{
+                key: value
+                for key, value in common_kwargs.items()
+                if key != "extra_body"
+            },
         )
     content = _response_content(response)
-    if content or retry:
-        return content
-    return ""
+    if content:
+        return _response_state(response, content)
+    response = await litellm_client.chat_completion(
+        model_name,
+        messages,
+        **{key: value for key, value in common_kwargs.items() if key != "extra_body"},
+    )
+    return _response_state(response, _response_content(response))
 
 
 def _review_prompt(prompt_payload: dict, retry: bool = False) -> list[dict]:
-    schema = (
-        '{"overall_judgement":"一句总体判断",'
-        '"reason":"基于输入证据给出具体原因",'
-        '"category_reviews":[{"code":"AST02",'
-        '"result":"需处理/建议复核/未发现问题",'
-        '"reason":"模型对该分类的具体研判",'
-        '"recommendation":"处理建议"}]}'
-    )
+    schema = {
+        "overall_judgement": "发现 1 处供应链依赖风险，建议固定依赖版本。",
+        "reason": "规则命中的 npx 命令未固定版本，安装时可能拉取到不同版本的包。",
+        "finding_reviews": [
+            {
+                "group_id": "AIPG_xxx",
+                "finding_type": "true_risk",
+                "effective_severity": "low",
+                "counts_toward_score": True,
+                "confidence": "high",
+                "reason": "该命令会在运行时解析依赖版本，证据与供应链风险一致。",
+                "recommendation": "固定到明确版本，例如 npx @scope/server@1.2.3。",
+            }
+        ],
+    }
     user_prefix = "上一次输出未解析为合法 JSON。请重新输出。" if retry else ""
     return [
         {
             "role": "system",
             "content": (
-                "你是 AIHelms 的 Skill 安全审查助手。只能基于输入的规则扫描结果、"
-                "文件位置和证据片段做中文研判，不要编造未给出的文件内容。"
-                "本产品只提供审查建议，不自动阻断发布；不要使用系统已拒绝、"
+                "你是 AIHelms 的 Skill 安全审查复核助手。扫描器命中只是线索，"
+                "不等于最终风险。你的任务不是复述扫描结果，而是基于 Skill 用途、"
+                "文件角色、证据片段和规则命中，判断每个风险组是否构成"
+                "真实可执行的安全风险。"
+                "本次只做逐条风险复核，不做意图分析，不输出分类摘要。"
+                "只输出一个 JSON 对象，且必须包含 finding_reviews 字段。"
+                "finding_reviews 中必须使用输入里的 group_id，不要自造 id。"
+                "AIHelms 只提供审查建议，不自动阻断发布；不要使用系统已拒绝、"
                 "系统已阻断、必须隔离、封禁、禁止上线、下架、驳回等执行性措辞，"
-                "只能表达建议处理、建议复核。"
+                "只能表达建议处理、建议复核、建议暂缓并确认、未发现明确风险。"
+                "证据不足必须降为建议复核，不得推断高危。扫描器诊断、网络超时、"
+                "漏洞库不可达不是 Skill 风险，不得作为安全结论。"
+                "documentation、template_asset、example_or_test 中的普通说明、"
+                "模板占位符、HTML/SVG 文本、README 示例通常不是提示注入。"
+                "subprocess 使用 list 参数且 shell=False，调用 pandoc、mmdc、"
+                "ffmpeg 等本地固定工具，并且参数是静态值或文件路径时，通常"
+                "未发现明确命令注入风险。只有用户可控值可能被工具当成选项、"
+                "片段不完整或字符串拼接混入外部输入时，才标为建议复核。"
+                "反向 shell、curl|bash、wget|sh、nc -e、凭证外传、破坏性"
+                "系统命令、eval/exec/pickle.loads 且数据来自外部输入属于红线，"
+                "不能降为误报。"
+                "不要暴露 file_role、shell=True、finding group、false_positive "
+                "等内部字段名。"
                 "只输出一个 JSON 对象，不要思维链，不要 markdown，不要解释文字。"
             ),
         },
@@ -280,8 +869,10 @@ def _review_prompt(prompt_payload: dict, retry: bool = False) -> list[dict]:
             "role": "user",
             "content": (
                 f"{user_prefix}请按 OWASP Agentic Skills Top 10 风险分类，"
-                "对以下 Skill 审查结果做 AI 深度分析。"
-                f"输出必须严格符合此 JSON 结构：{schema}\n\n"
+                "对以下 Skill 审查结果逐个风险组做 AI 深度复核。"
+                "输出必须严格按以下 JSON 示例的字段结构，"
+                "替换为基于输入证据得到的中文内容："
+                f"{json.dumps(schema, ensure_ascii=False, indent=2)}\n\n"
                 f"输入：{json.dumps(prompt_payload, ensure_ascii=False)}"
             ),
         },
@@ -294,6 +885,7 @@ async def run_llm_review(
     audit: Any,
     findings: list[dict],
     category_labels: dict[str, str],
+    zip_path: str | None = None,
 ) -> dict:
     if not model_id:
         return {"status": "skipped", "message": "未选择审查模型"}
@@ -322,44 +914,105 @@ async def run_llm_review(
     litellm_user_id = user.litellm_user_id or f"aihelms_user_{user.id}"
     metadata = _review_metadata(audit, user, key)
 
+    reviewable_findings = [
+        item for item in findings if not item.get("redline")
+    ][:10]
     finding_briefs = [
         _finding_brief(item, index, category_labels)
-        for index, item in enumerate(findings[:30], 1)
+        for index, item in enumerate(reviewable_findings, 1)
     ]
+    file_tree = _zip_file_tree(zip_path)
     prompt_payload = {
         "audit_id": audit.audit_id,
         "skill_name": audit.skill_name,
         "skill_version": audit.skill_version,
+        "declared_purpose": getattr(audit, "skill_description", "") or "",
         "risk_score": audit.risk_score,
         "severity": audit.severity,
         "findings": finding_briefs,
         "categories": category_labels,
     }
-    content = await _chat_json(
+    if not finding_briefs and not file_tree:
+        return {
+            "status": "skipped",
+            "model_id": model.id,
+            "model": model.name or model_name,
+            "message": "没有需要 AI 复核的风险组",
+            "finding_reviews": [],
+            "category_reviews": [],
+            "intent_analysis": {},
+        }
+    selection_payload = {
+        "skill_name": audit.skill_name,
+        "skill_version": audit.skill_version,
+        "declared_purpose": getattr(audit, "skill_description", "") or "",
+        "file_tree": _compact_file_tree(file_tree),
+        "findings": [_selection_finding_brief(item) for item in reviewable_findings],
+    }
+    selected_files, selection_result = await _select_review_files(
         model_name,
-        _review_prompt(prompt_payload),
         key.litellm_key_id,
         litellm_user_id,
         metadata,
+        selection_payload,
+        file_tree,
+        finding_briefs,
     )
-    parsed = extract_json_object(content)
-    if not parsed:
-        content = await _chat_json(
+    prompt_payload["selected_files"] = _read_review_files(zip_path, selected_files)
+    prompt_payload["file_selection"] = {
+        "selected_paths": selected_files,
+        "declared_intent": selection_result.get("declared_intent", ""),
+    }
+    intent_payload = {
+        "skill_name": audit.skill_name,
+        "skill_version": audit.skill_version,
+        "declared_purpose": getattr(audit, "skill_description", "") or "",
+        "file_selection_declared_intent": selection_result.get("declared_intent", ""),
+        "selected_files": _intent_review_files(prompt_payload["selected_files"]),
+        "findings": finding_briefs,
+    }
+    intent_analysis, intent_state = await _run_intent_analysis(
+        model_name,
+        key.litellm_key_id,
+        litellm_user_id,
+        metadata,
+        intent_payload,
+    )
+    parsed: dict = {}
+    review_result = {"content": "", "empty": True, "truncated": False}
+    if finding_briefs:
+        review_result = await _chat_json(
+            model_name,
+            _review_prompt(prompt_payload),
+            key.litellm_key_id,
+            litellm_user_id,
+            metadata,
+            max_tokens=2200,
+        )
+        parsed = extract_json_object(review_result["content"])
+    if finding_briefs and not parsed:
+        review_result = await _chat_json(
             model_name,
             _review_prompt(prompt_payload, retry=True),
             key.litellm_key_id,
             litellm_user_id,
             metadata,
             True,
+            max_tokens=2200,
         )
-        parsed = extract_json_object(content)
-    reviews = llm_category_reviews(parsed, findings, category_labels) if parsed else []
-    has_valid_reviews = any(
-        item.get("result") != "LLM 未单独研判"
-        and (item.get("result") or item.get("reason") or item.get("recommendation"))
-        for item in reviews
+        parsed = extract_json_object(review_result["content"])
+    finding_reviews = llm_finding_reviews(parsed, reviewable_findings) if parsed else []
+    finding_state = (
+        _part_state(finding_reviews, review_result)
+        if finding_briefs
+        else {"status": "skipped", "message": "没有需要复核的风险组"}
     )
-    status = "completed" if parsed and has_valid_reviews else "unparsed"
+    status = "completed" if finding_reviews or intent_analysis else "unparsed"
+    messages = [
+        state["message"]
+        for state in (intent_state, finding_state)
+        if state.get("status") != "completed" and state.get("message")
+    ]
     return {
         "status": status,
         "model_id": model.id,
@@ -368,9 +1021,19 @@ async def run_llm_review(
             parsed.get("overall_judgement") or "", 500
         ),
         "reason": _policy_safe_text(parsed.get("reason") or "", 1000),
-        "category_reviews": reviews if status == "completed" else [],
+        "finding_reviews": finding_reviews if status == "completed" else [],
+        "category_reviews": [],
+        "intent_analysis": intent_analysis if status == "completed" else {},
+        "selected_files": selected_files if status == "completed" else [],
+        "parts": {
+            "intent_analysis": intent_state,
+            "finding_reviews": finding_state,
+        },
         "message": ""
         if status == "completed"
-        else "LLM 语义研判未完成（结果未解析），本报告以静态审查结果为准",
-        "raw_text": _clean_llm_text(content)[:1200] if status != "completed" else "",
+        else "；".join(messages)
+        or "LLM 语义研判未完成（结果未解析），本报告以静态审查结果为准",
+        "raw_text": _clean_llm_text(review_result["content"])[:1200]
+        if status != "completed"
+        else "",
     }
