@@ -1,0 +1,22 @@
+{
+  "modelSquare.title": "模型广场",
+  "modelSquare.subtitle": "浏览可用模型，申请开通后即可在客户端调用",
+  "modelSquare.search.placeholder": "搜索模型名称、ID...",
+  "modelSquare.filter.all": "全部",
+  "modelSquare.filter.capability": "能力：",
+  "modelSquare.empty": "没有匹配的模型",
+  "modelSquare.fallback.noDescription": "暂无描述",
+  "modelSquare.action.viewAccess": "查看接入信息",
+  "modelSquare.action.apply": "申请使用",
+  "modelSquare.access.modelId": "模型 ID",
+  "modelSquare.access.openaiClients": "适用于 Qcoder, Openclaw, Dify, FastGPT, LobeChat, Cherry Studio 等",
+  "modelSquare.access.anthropicClients": "适用于 Claude Code, Claude Desktop 等 Anthropic SDK 客户端",
+  "modelSquare.action.copied": "已复制",
+  "modelSquare.action.copy": "复制",
+  "modelSquare.fallback.noKey": "未分配 Key",
+  "modelSquare.fallback.notConfigured": "未配置",
+  "modelSquare.apply.title": "申请使用：{name}",
+  "modelSquare.apply.placeholder": "申请理由（可选）",
+  "modelSquare.apply.submit": "提交申请",
+  "modelSquare.apply.submitting": "提交中..."
+}

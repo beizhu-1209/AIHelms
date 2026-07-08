@@ -10,7 +10,9 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "vue": "^3.4.0"
+    "vue": "^3.4.0",
+    "vue-i18n": "^9.14.0",
+    "lucide-vue-next": "1.0.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

@@ -1,0 +1,22 @@
+{
+  "modelSquare.title": "Models",
+  "modelSquare.subtitle": "Browse available models and request access before using them in local clients.",
+  "modelSquare.search.placeholder": "Search model name or ID...",
+  "modelSquare.filter.all": "All",
+  "modelSquare.filter.capability": "Capability:",
+  "modelSquare.empty": "No matching models",
+  "modelSquare.fallback.noDescription": "No description",
+  "modelSquare.action.viewAccess": "Detail",
+  "modelSquare.action.apply": "Request access",
+  "modelSquare.access.modelId": "Model ID",
+  "modelSquare.access.openaiClients": "For Qcoder, Openclaw, Dify, FastGPT, LobeChat, Cherry Studio, and similar clients.",
+  "modelSquare.access.anthropicClients": "For Claude Code, Claude Desktop, and other Anthropic-compatible clients.",
+  "modelSquare.action.copied": "Copied",
+  "modelSquare.action.copy": "Copy",
+  "modelSquare.fallback.noKey": "No key assigned",
+  "modelSquare.fallback.notConfigured": "Not configured",
+  "modelSquare.apply.title": "Request access: {name}",
+  "modelSquare.apply.placeholder": "Reason for this request (optional)",
+  "modelSquare.apply.submit": "Submit request",
+  "modelSquare.apply.submitting": "Submitting..."
+}

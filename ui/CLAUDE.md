@@ -216,6 +216,43 @@ const routes = [
 ]
 ```
 
+### i18n (国际化)
+
+> Current scope: **web (user portal) is i18n-enabled**; admin is not yet migrated (planned, see `dev/roadmap/i18n.md`). Follow these rules for web and for any new i18n work.
+
+All user-visible text must go through i18n. Hardcoded Chinese or English is forbidden.
+
+```vue
+<!-- ✅ Good — all user-visible text via t() -->
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+</script>
+<template>
+  <h1>{{ t('market.title') }}</h1>
+  <button>{{ t('common.action.confirm') }}</button>
+  <span>{{ t('market.applyCount', { n: count }) }}</span>
+</template>
+```
+
+```vue
+<!-- ❌ Bad — hardcoded text -->
+<template>
+  <h1>AI 市场</h1>
+  <button>确定</button>
+</template>
+```
+
+Rules:
+
+- **Message format**: flat JSON with dotted keys (`"module.section.item"`). No nested objects, no `.ts` locale modules.
+- **Key placement**: shared/common text → `shared/src/i18n/locales/<lang>/`. Page/module text → each app's `src/locales/<lang>/`.
+- **Key naming**: `module.section.item`, lowercase, dot-separated (e.g. `users.table.email`, `common.action.save`).
+- **Both languages required**: every new key must be added to both `zh-CN` and `en-US`. CI (`check-i18n-keys`) blocks missing translations.
+- **Interpolation**: use ICU via vue-i18n (`t('key', { n })`), never string concatenation.
+- **Do not translate** backend-returned data or messages (model names, user nicknames, and API `message` — backend is not localized yet and returns Chinese).
+- Component-external code uses `i18n.global.t()`; `request.ts` reads locale via `getCurrentLocale()` (not the vue-i18n instance, to avoid circular imports).
+
 ## Verification
 
 - Use dev server (`./dev/start-web`) to verify frontend changes, Vite HMR auto-reloads on save, no restart needed
@@ -228,5 +265,6 @@ const routes = [
 - No `console.log` (remove after debugging)
 - No `any`, no `as any`
 - No custom CSS, no inline styles
+- No hardcoded user-visible text — all through i18n `t('key')`
 - admin and web must not import from each other
 - Components must not call fetch/axios directly — use shared API layer

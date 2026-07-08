@@ -1,0 +1,19 @@
+{
+  "agent.toast.applySubmitted": "申请已提交",
+  "agent.toast.applyFailed": "申请失败",
+  "agent.title": "智能体中心",
+  "agent.subtitle": "浏览企业智能体，点击即可开始对话",
+  "agent.search.placeholder": "搜索智能体...",
+  "agent.filter.all": "全部",
+  "agent.filter.platform": "平台：",
+  "agent.empty": "暂无智能体",
+  "agent.badge.requiresApproval": "需申请",
+  "agent.fallback.noDescription": "暂无描述",
+  "agent.status.online": "在线",
+  "agent.status.offline": "离线",
+  "agent.usage.people": "{count} 人使用",
+  "agent.apply.title": "申请使用智能体",
+  "agent.apply.placeholder": "请填写申请理由（可选）",
+  "agent.apply.submit": "提交申请",
+  "agent.apply.submitting": "提交中..."
+}

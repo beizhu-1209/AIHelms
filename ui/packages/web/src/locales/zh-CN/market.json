@@ -1,0 +1,23 @@
+{
+  "market.title": "AI 市场",
+  "market.filter.all": "全部",
+  "market.search.placeholder": "搜索名称或描述...",
+  "market.filter.allCategories": "全部分类",
+  "market.empty": "暂无可用资源",
+  "market.action.installSkill": "安装 Skill",
+  "market.action.viewAccess": "查看接入信息",
+  "market.action.apply": "申请使用",
+  "market.apply.title": "申请使用",
+  "market.apply.description": "申请使用「{name}」，请填写申请理由：",
+  "market.apply.placeholder": "请描述使用场景和理由...",
+  "market.apply.submit": "提交申请",
+  "market.apply.submitting": "提交中...",
+  "market.install.config": "安装配置",
+  "market.install.copyConfig": "复制安装配置",
+  "market.install.copied": "已复制",
+  "market.install.tools": "包含工具（{count}）",
+  "market.install.instructions": "使用说明",
+  "market.action.close": "关闭",
+  "market.skill.agentPrompt": "Agent 安装提示词",
+  "market.skill.copyPrompt": "复制安装提示词"
+}

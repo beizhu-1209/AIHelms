@@ -1,0 +1,23 @@
+{
+  "market.title": "Market",
+  "market.filter.all": "All",
+  "market.search.placeholder": "Search name or description...",
+  "market.filter.allCategories": "All categories",
+  "market.empty": "No resources available",
+  "market.action.installSkill": "Detail",
+  "market.action.viewAccess": "Detail",
+  "market.action.apply": "Request access",
+  "market.apply.title": "Request access",
+  "market.apply.description": "Request access to \"{name}\". Add a comment for this request:",
+  "market.apply.placeholder": "Describe your scenario and reason...",
+  "market.apply.submit": "Submit request",
+  "market.apply.submitting": "Submitting...",
+  "market.install.config": "Prompt",
+  "market.install.copyConfig": "Copy",
+  "market.install.copied": "Copied",
+  "market.install.tools": "Included tools ({count})",
+  "market.install.instructions": "Instructions",
+  "market.action.close": "Close",
+  "market.skill.agentPrompt": "Prompt",
+  "market.skill.copyPrompt": "Copy install prompt"
+}

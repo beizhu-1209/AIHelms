@@ -1,0 +1,15 @@
+{
+  "login.validation.required": "请输入账号和密码",
+  "login.error.invalidCredentials": "用户名或密码错误",
+  "login.title": "欢迎回来",
+  "login.subtitle": "登录你的 AI 身份",
+  "login.field.account": "账号",
+  "login.field.accountPlaceholder": "请输入邮箱或用户名",
+  "login.field.password": "密码",
+  "login.field.passwordPlaceholder": "请输入密码",
+  "login.action.submit": "登录",
+  "login.status.submitting": "登录中...",
+  "login.adminPrompt": "管理员？",
+  "login.adminLink": "切换到管理后台",
+  "login.copyright": "All rights reserved."
+}

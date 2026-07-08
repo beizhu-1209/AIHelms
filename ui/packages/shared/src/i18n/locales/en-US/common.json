@@ -1,0 +1,9 @@
+{
+  "common.language.zhCN": "中文",
+  "common.language.enUS": "English",
+  "common.action.cancel": "Cancel",
+  "common.action.confirm": "Confirm",
+  "common.action.save": "Save",
+  "common.action.delete": "Delete",
+  "common.status.loading": "Loading..."
+}

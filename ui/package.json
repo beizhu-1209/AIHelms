@@ -7,7 +7,9 @@
   "scripts": {
     "build": "npm run build --workspace=@aihelms/shared && npm run build --workspace=@aihelms/admin && npm run build --workspace=@aihelms/web",
     "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "node scripts/check-i18n-keys.mjs && npm run lint --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "check-i18n-keys": "node scripts/check-i18n-keys.mjs"
   },
   "engines": {
     "node": ">=18.0.0"

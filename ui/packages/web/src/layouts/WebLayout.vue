@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth, changePassword } from '@aihelms/shared'
 import { LogOut, Settings, KeyRound, ChevronDown } from 'lucide-vue-next'
+import LanguageSwitcher from '@aihelms/shared/src/components/LanguageSwitcher.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const { currentUser, fetchCurrentUser, logout } = useAuth()
 
 onMounted(async () => {
@@ -42,10 +45,10 @@ function isActive(path: string): boolean {
 }
 
 const navItems = [
-  { path: '/', label: '我的 AI 身份' },
-  { path: '/market', label: 'AI 市场' },
-  { path: '/models', label: '模型广场' },
-  { path: '/agents', label: '智能体中心' },
+  { path: '/', labelKey: 'layout.nav.identity' },
+  { path: '/market', labelKey: 'layout.nav.market' },
+  { path: '/models', labelKey: 'layout.nav.models' },
+  { path: '/agents', labelKey: 'layout.nav.agents' },
 ]
 
 // 下拉菜单
@@ -90,7 +93,7 @@ function handleOpenPasswordModal(): void {
 async function handleChangePassword(): Promise<void> {
   passwordError.value = ''
   if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
-    passwordError.value = '两次输入的新密码不一致'
+    passwordError.value = t('layout.password.mismatch')
     return
   }
   passwordLoading.value = true
@@ -104,7 +107,7 @@ async function handleChangePassword(): Promise<void> {
     logout()
   } catch (e: unknown) {
     const err = e as { message?: string }
-    passwordError.value = err.message || '修改失败，请重试'
+    passwordError.value = err.message || t('layout.password.failed')
   } finally {
     passwordLoading.value = false
   }
@@ -135,16 +138,17 @@ async function handleChangePassword(): Promise<void> {
         <RouterLink v-for="item in navItems" :key="item.path" :to="item.path"
           class="whitespace-nowrap rounded-lg px-3.5 py-2 text-sm transition-colors"
           :class="isActive(item.path) ? 'bg-purple-50 font-medium text-purple-700' : 'text-slate-600 hover:bg-slate-100'">
-          {{ item.label }}
+          {{ t(item.labelKey) }}
         </RouterLink>
       </nav>
 
       <!-- 右：用户操作 -->
       <div class="flex items-center justify-end gap-3">
+        <LanguageSwitcher />
         <a v-if="currentUser?.is_admin" href="/admin/"
           class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">
           <Settings class="h-4 w-4" />
-          管理后台
+          {{ t('layout.adminConsole') }}
         </a>
 
         <!-- 用户下拉菜单 -->
@@ -171,13 +175,13 @@ async function handleChangePassword(): Promise<void> {
         <button @click="handleOpenPasswordModal"
           class="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50">
           <KeyRound class="h-4 w-4" />
-          修改密码
+          {{ t('layout.password.change') }}
         </button>
         <div class="my-1 border-t border-slate-100" />
         <button @click="handleLogout"
           class="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-slate-50">
           <LogOut class="h-4 w-4" />
-          退出登录
+          {{ t('layout.logout') }}
         </button>
       </div>
     </Teleport>
@@ -191,20 +195,20 @@ async function handleChangePassword(): Promise<void> {
         <div v-if="showPasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
           @click.self="showPasswordModal = false">
           <div class="w-[400px] rounded-xl bg-white p-6 shadow-xl">
-            <h3 class="mb-4 text-lg font-semibold text-slate-900">修改密码</h3>
+            <h3 class="mb-4 text-lg font-semibold text-slate-900">{{ t('layout.password.change') }}</h3>
             <form @submit.prevent="handleChangePassword" class="space-y-4">
               <div>
-                <label class="mb-1 block text-sm text-slate-600">当前密码</label>
+                <label class="mb-1 block text-sm text-slate-600">{{ t('layout.password.current') }}</label>
                 <input v-model="passwordForm.oldPassword" type="password" required
                   class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400" />
               </div>
               <div>
-                <label class="mb-1 block text-sm text-slate-600">新密码</label>
+                <label class="mb-1 block text-sm text-slate-600">{{ t('layout.password.new') }}</label>
                 <input v-model="passwordForm.newPassword" type="password" required minlength="8"
                   class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400" />
               </div>
               <div>
-                <label class="mb-1 block text-sm text-slate-600">确认新密码</label>
+                <label class="mb-1 block text-sm text-slate-600">{{ t('layout.password.confirm') }}</label>
                 <input v-model="passwordForm.confirmPassword" type="password" required minlength="8"
                   class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400" />
               </div>
@@ -212,11 +216,11 @@ async function handleChangePassword(): Promise<void> {
               <div class="flex justify-end gap-2 pt-2">
                 <button type="button" @click="showPasswordModal = false"
                   class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">
-                  取消
+                  {{ t('common.action.cancel') }}
                 </button>
                 <button type="submit" :disabled="passwordLoading"
                   class="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50">
-                  {{ passwordLoading ? '提交中...' : '确认修改' }}
+                  {{ passwordLoading ? t('layout.password.submitting') : t('layout.password.confirmChange') }}
                 </button>
               </div>
             </form>

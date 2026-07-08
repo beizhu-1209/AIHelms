@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { request } from '@aihelms/shared/src/api/request'
 import { getMyKeys, createResourceApplication, recordAgentUsage, toast } from '@aihelms/shared'
 import type { Agent } from '@aihelms/shared/src/types/agent'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import { Bot, Search, ExternalLink } from 'lucide-vue-next'
 import * as lucideIcons from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 function getLucideIcon(name: string) {
   return (lucideIcons as Record<string, unknown>)[name] || null
@@ -74,10 +77,10 @@ async function submitApply(): Promise<void> {
       resource_id: applyTarget.value.id,
       reason: applyReason.value.trim(),
     })
-    toast.success('申请已提交')
+    toast.success(t('agent.toast.applySubmitted'))
     showApplyDialog.value = false
   } catch (e) {
-    toast.error((e as { message?: string }).message || '申请失败')
+    toast.error((e as { message?: string }).message || t('agent.toast.applyFailed'))
   } finally {
     applyingId.value = null
   }
@@ -100,22 +103,22 @@ onMounted(async () => {
 <template>
   <div class="mx-auto max-w-5xl px-6 py-8">
     <div class="mb-6">
-      <h1 class="text-xl font-bold text-slate-900">智能体中心</h1>
-      <p class="mt-1 text-sm text-slate-500">浏览企业智能体，点击即可开始对话</p>
+      <h1 class="text-xl font-bold text-slate-900">{{ t('agent.title') }}</h1>
+      <p class="mt-1 text-sm text-slate-500">{{ t('agent.subtitle') }}</p>
     </div>
 
     <!-- 筛选 -->
     <div class="mb-5 space-y-3">
       <div class="relative">
         <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input v-model="search" type="text" placeholder="搜索智能体..."
+        <input v-model="search" type="text" :placeholder="t('agent.search.placeholder')"
           class="h-10 w-full max-w-md rounded-lg border border-slate-200/60 bg-white/70 pl-9 pr-3 text-sm backdrop-blur placeholder:text-slate-400 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
       </div>
       <div class="flex flex-wrap gap-2">
         <button @click="categoryFilter = ''"
           class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
           :class="!categoryFilter ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
-          全部
+          {{ t('agent.filter.all') }}
         </button>
         <button v-for="cat in categories" :key="cat" @click="categoryFilter = cat"
           class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
@@ -124,11 +127,11 @@ onMounted(async () => {
         </button>
       </div>
       <div v-if="platforms.length > 1" class="flex flex-wrap gap-2">
-        <span class="text-xs text-slate-400 leading-6">平台：</span>
+        <span class="text-xs text-slate-400 leading-6">{{ t('agent.filter.platform') }}</span>
         <button @click="platformFilter = ''"
           class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
           :class="!platformFilter ? 'bg-blue-100 text-blue-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'">
-          全部
+          {{ t('agent.filter.all') }}
         </button>
         <button v-for="p in platforms" :key="p" @click="platformFilter = p"
           class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
@@ -144,7 +147,7 @@ onMounted(async () => {
     </div>
     <div v-else-if="!filtered.length" class="rounded-2xl border border-slate-200/60 bg-white/70 p-12 text-center backdrop-blur">
       <Bot class="mx-auto h-10 w-10 text-slate-300" />
-      <p class="mt-3 text-sm text-slate-400">暂无智能体</p>
+      <p class="mt-3 text-sm text-slate-400">{{ t('agent.empty') }}</p>
     </div>
     <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <div v-for="agent in filtered" :key="agent.id"
@@ -165,7 +168,7 @@ onMounted(async () => {
             <p class="truncate text-xs text-slate-400">{{ agent.platform }}</p>
           </div>
           <ExternalLink v-if="canDirectUse(agent) && agent.chat_url" class="h-4 w-4 shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
-          <span v-else-if="!canDirectUse(agent)" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">需申请</span>
+          <span v-else-if="!canDirectUse(agent)" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">{{ t('agent.badge.requiresApproval') }}</span>
         </div>
 
         <div v-if="agent.tags?.length" class="mt-3 flex flex-wrap gap-1.5">
@@ -173,18 +176,18 @@ onMounted(async () => {
             class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{{ tag }}</span>
         </div>
 
-        <p class="mt-2.5 flex-1 text-xs leading-relaxed text-slate-500 line-clamp-3">{{ agent.description || '暂无描述' }}</p>
+        <p class="mt-2.5 flex-1 text-xs leading-relaxed text-slate-500 line-clamp-3">{{ agent.description || t('agent.fallback.noDescription') }}</p>
 
         <div class="mt-3 flex items-center gap-3 text-xs text-slate-400">
           <span v-if="agent.status === 'online'" class="flex items-center gap-1">
             <span class="h-1.5 w-1.5 rounded-full bg-green-500" />
-            在线
+            {{ t('agent.status.online') }}
           </span>
           <span v-else class="flex items-center gap-1">
             <span class="h-1.5 w-1.5 rounded-full bg-slate-300" />
-            离线
+            {{ t('agent.status.offline') }}
           </span>
-          <span v-if="agent.user_count">{{ agent.user_count }} 人使用</span>
+          <span v-if="agent.user_count">{{ t('agent.usage.people', { count: agent.user_count }) }}</span>
         </div>
       </div>
     </div>
@@ -193,22 +196,22 @@ onMounted(async () => {
     <Teleport to="body">
       <div v-if="showApplyDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showApplyDialog = false">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-          <h3 class="text-lg font-semibold text-slate-900">申请使用智能体</h3>
+          <h3 class="text-lg font-semibold text-slate-900">{{ t('agent.apply.title') }}</h3>
           <p class="mt-1 text-sm text-slate-500">{{ applyTarget?.name }}</p>
           <textarea
             v-model="applyReason"
             rows="3"
-            placeholder="请填写申请理由（可选）"
+            :placeholder="t('agent.apply.placeholder')"
             class="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-purple-500 focus:outline-none"
           />
           <div class="mt-4 flex justify-end gap-3">
-            <button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="showApplyDialog = false">取消</button>
+            <button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="showApplyDialog = false">{{ t('common.action.cancel') }}</button>
             <button
               class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
               :disabled="applyingId !== null"
               @click="submitApply"
             >
-              {{ applyingId ? '提交中...' : '提交申请' }}
+              {{ applyingId ? t('agent.apply.submitting') : t('agent.apply.submit') }}
             </button>
           </div>
         </div>
