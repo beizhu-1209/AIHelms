@@ -8,7 +8,7 @@
 <p>承载 AI 数字资产 · 释放 AI 生产力 · 链接未来</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.13-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.13)
+[![Release](https://img.shields.io/badge/Release-v0.1.14-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.14)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -20,7 +20,9 @@
 [![vLLM](https://img.shields.io/badge/vLLM-FF6F00.svg)](https://docs.vllm.ai/)
 [![SGLang](https://img.shields.io/badge/SGLang-8B5CF6.svg)](https://github.com/sgl-project/sglang)
 
- [核心价值](#核心价值) · [功能展示](#功能展示)  · [快速开始](#快速开始)  · [部署文档](#部署)
+[简体中文](README.md) · **English** 见 [README.en.md](README.en.md)
+
+ [核心价值](#核心价值) · [功能展示](#主要功能)  · [快速开始](#快速开始)  · [部署文档](#部署)
 
 </div>
 
@@ -37,6 +39,7 @@ AIHelms 是面向企业的 AI 资源纳管平台。帮助企业**管理 AI 资�
 - **员工** - 通过用户端获取 AI 身份，接入任意客户端使用
 
 ![架构图](docs/struct.png)
+
 
 ## 核心价值
 
@@ -235,4 +238,6 @@ docker compose up -d
 
 ## License
 
-本项目采用 [GPL-3.0](LICENSE) 开源协议。
+本项目采用 [GPL-3.0](LICENSE) 开源协议，底座应用 LiteLLM 社区版（MIT License）。
+
+如果您所在组织的政策不允许使用 GPL-3.0 许可的软件，或您希望规避 GPL-3.0 的开源义务，请发送邮件至 [jiangshiwei@microbaton.com](mailto:jiangshiwei@microbaton.com) 咨询商业授权。
