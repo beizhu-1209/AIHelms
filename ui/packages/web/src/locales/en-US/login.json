@@ -1,0 +1,15 @@
+{
+  "login.validation.required": "Enter your account and password.",
+  "login.error.invalidCredentials": "Incorrect username or password",
+  "login.title": "Welcome",
+  "login.subtitle": "Sign in to your AI workspace",
+  "login.field.account": "Account",
+  "login.field.accountPlaceholder": "Email or username",
+  "login.field.password": "Password",
+  "login.field.passwordPlaceholder": "Password",
+  "login.action.submit": "Sign in",
+  "login.status.submitting": "Signing in...",
+  "login.adminPrompt": "Admin?",
+  "login.adminLink": "Go to Admin",
+  "login.copyright": "All rights reserved."
+}

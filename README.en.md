@@ -20,7 +20,12 @@
 [![vLLM](https://img.shields.io/badge/vLLM-FF6F00.svg)](https://docs.vllm.ai/)
 [![SGLang](https://img.shields.io/badge/SGLang-8B5CF6.svg)](https://github.com/sgl-project/sglang)
 
-**English** · [简体中文](README.md)
+<p align="center">
+| <b>English</b> | <a href="./README.md"><b>简体中文</b></a> | 
+</p>
+
+<p align="center">
+
 
 [What Is It](#what-is-it) · [Why AIHelms](#why-aihelms) · [Built on LiteLLM](#built-on-litellm) · [Quick Start](#quick-start) · [Deployment](#deployment)
 
@@ -236,4 +241,4 @@ See [Development and release workflow](docs/INTERNAL.md) for detailed convention
 
 AIHelms is licensed under [GPL-3.0](LICENSE), and runs on the LiteLLM community edition (MIT License).
 
-If your organization's policies do not allow GPL-3.0 licensed software, or you want to use AIHelms without the obligations of GPL-3.0, email us at [jiangshiwei@microbaton.com](mailto:jiangshiwei@microbaton.com) for a commercial license.
+If your organization's policies do not allow GPL-3.0 licensed software, or you want to use AIHelms without the obligations of GPL-3.0, email us at [Mail](mailto:jiangshiwei@microbaton.com)for a commercial license.

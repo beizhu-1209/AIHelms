@@ -1,5 +1,8 @@
 import { toast } from '../utils/toast'
 import { getLoginUrl } from '../utils/auth-redirect'
+import { getCurrentLocale } from '../i18n'
+import errorsZh from '../i18n/locales/zh-CN/errors.json'
+import errorsEn from '../i18n/locales/en-US/errors.json'
 
 export interface ApiResponse<T = unknown> {
   code: number
@@ -14,6 +17,20 @@ interface RequestOptions {
   silent?: boolean
 }
 
+type LocalErrorKey = keyof typeof errorsZh
+
+function formatLocalMessage(template: string, params: Record<string, string | number> = {}): string {
+  return Object.entries(params).reduce(
+    (message, [key, value]) => message.split(`{${key}}`).join(String(value)),
+    template
+  )
+}
+
+function getLocalErrorMessage(key: LocalErrorKey, params?: Record<string, string | number>): string {
+  const messages = getCurrentLocale() === 'en-US' ? errorsEn : errorsZh
+  return formatLocalMessage(messages[key] || errorsZh[key] || key, params)
+}
+
 function getToken(): string | null {
   return localStorage.getItem('aihelms_token')
 }
@@ -23,14 +40,14 @@ async function parseResponseJSON<T>(response: Response, silent: boolean): Promis
   try {
     text = await response.text()
   } catch {
-    const message = '读取响应数据失败'
+    const message = getLocalErrorMessage('error.readResponse')
     if (!silent) toast.error(message)
     throw new Error(message)
   }
   try {
     return JSON.parse(text) as ApiResponse<T>
   } catch {
-    const message = `服务器返回了非 JSON 数据: ${text.slice(0, 200)}`
+    const message = getLocalErrorMessage('error.nonJsonResponse', { body: text.slice(0, 200) })
     if (!silent) toast.error(message)
     throw new Error(message)
   }
@@ -55,6 +72,7 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
   const isFormData = body instanceof FormData
   const headers: Record<string, string> = {}
+  headers['Accept-Language'] = getCurrentLocale()
   if (!isFormData) {
     headers['Content-Type'] = 'application/json'
   }
@@ -73,7 +91,7 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
   try {
     response = await fetch(fullUrl, fetchOptions)
   } catch {
-    const message = '网络连接失败，请检查网络'
+    const message = getLocalErrorMessage('error.network')
     if (!silent) toast.error(message)
     throw new Error(message)
   }
@@ -85,12 +103,12 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
       localStorage.removeItem('aihelms_token')
       window.location.href = getLoginUrl()
     }
-    const message = json.message || '用户名或密码错误'
+    const message = json.message || getLocalErrorMessage('error.unauthorized')
     throw new Error(message)
   }
 
   if (!response.ok) {
-    const message = json.message || `请求失败: ${response.status}`
+    const message = json.message || getLocalErrorMessage('error.requestFailed', { status: response.status })
     if (!silent) toast.error(message)
     throw new Error(message)
   }

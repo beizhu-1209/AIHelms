@@ -1,0 +1,9 @@
+{
+  "common.language.zhCN": "中文",
+  "common.language.enUS": "English",
+  "common.action.cancel": "取消",
+  "common.action.confirm": "确认",
+  "common.action.save": "保存",
+  "common.action.delete": "删除",
+  "common.status.loading": "加载中..."
+}

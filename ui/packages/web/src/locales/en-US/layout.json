@@ -1,0 +1,16 @@
+{
+  "layout.nav.identity": "My AI ID",
+  "layout.nav.market": "AI Tools",
+  "layout.nav.models": "Model Hub",
+  "layout.nav.agents": "Agent Center",
+  "layout.adminConsole": "Admin",
+  "layout.password.mismatch": "The new passwords do not match.",
+  "layout.password.failed": "Could not change the password. Try again.",
+  "layout.password.change": "Change password",
+  "layout.password.current": "Current password",
+  "layout.password.new": "New password",
+  "layout.password.confirm": "Confirm new password",
+  "layout.password.submitting": "Submitting...",
+  "layout.password.confirmChange": "Confirm change",
+  "layout.logout": "Sign out"
+}

@@ -1,0 +1,19 @@
+{
+  "agent.toast.applySubmitted": "Request submitted",
+  "agent.toast.applyFailed": "Request failed",
+  "agent.title": "Agents",
+  "agent.subtitle": "Browse agents and start a conversation.",
+  "agent.search.placeholder": "Search agents...",
+  "agent.filter.all": "All",
+  "agent.filter.platform": "Platform:",
+  "agent.empty": "No agents yet",
+  "agent.badge.requiresApproval": "Approval required",
+  "agent.fallback.noDescription": "No description",
+  "agent.status.online": "Online",
+  "agent.status.offline": "Offline",
+  "agent.usage.people": "{count} users",
+  "agent.apply.title": "Request agent access",
+  "agent.apply.placeholder": "Comment for this request (optional)",
+  "agent.apply.submit": "Submit request",
+  "agent.apply.submitting": "Submitting..."
+}

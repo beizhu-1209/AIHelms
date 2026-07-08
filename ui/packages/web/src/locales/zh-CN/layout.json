@@ -1,0 +1,16 @@
+{
+  "layout.nav.identity": "我的 AI 身份",
+  "layout.nav.market": "AI 市场",
+  "layout.nav.models": "模型广场",
+  "layout.nav.agents": "智能体中心",
+  "layout.adminConsole": "管理后台",
+  "layout.password.mismatch": "两次输入的新密码不一致",
+  "layout.password.failed": "修改失败，请重试",
+  "layout.password.change": "修改密码",
+  "layout.password.current": "当前密码",
+  "layout.password.new": "新密码",
+  "layout.password.confirm": "确认新密码",
+  "layout.password.submitting": "提交中...",
+  "layout.password.confirmChange": "确认修改",
+  "layout.logout": "退出登录"
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getMyKeys } from '@aihelms/shared'
 import { request } from '@aihelms/shared/src/api/request'
 import { createResourceApplication } from '@aihelms/shared/src/api/resource-application'
@@ -8,6 +9,8 @@ import type { Skill } from '@aihelms/shared/src/types/skill'
 import type { McpServer } from '@aihelms/shared/src/types/mcp'
 import { Server, Sparkles, CheckCircle2, Search, X, ExternalLink, Flame } from 'lucide-vue-next'
 import * as lucideIcons from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 type MarketItem = (Skill & { _type: 'skill' }) | (McpServer & { _type: 'mcp' })
 
@@ -239,7 +242,7 @@ onMounted(loadData)
   <div class="mx-auto max-w-6xl px-6 py-8 space-y-6">
     <!-- Header -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-slate-800">AI 市场</h1>
+      <h1 class="text-2xl font-bold text-slate-800">{{ t('market.title') }}</h1>
     </div>
 
     <!-- Filters -->
@@ -248,7 +251,7 @@ onMounted(loadData)
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-1 rounded-xl bg-white/70 p-1 backdrop-blur border border-slate-200/60">
           <button
-            v-for="opt in [{ key: 'all', label: '全部' }, { key: 'skill', label: 'Skill' }, { key: 'mcp', label: 'MCP' }]"
+            v-for="opt in [{ key: 'all', label: t('market.filter.all') }, { key: 'skill', label: 'Skill' }, { key: 'mcp', label: 'MCP' }]"
             :key="opt.key"
             class="rounded-lg px-4 py-1.5 text-sm font-medium transition-all"
             :class="typeFilter === opt.key
@@ -264,7 +267,7 @@ onMounted(loadData)
           <input
             v-model="search"
             type="text"
-            placeholder="搜索名称或描述..."
+            :placeholder="t('market.search.placeholder')"
             class="w-full rounded-xl border border-slate-200/60 bg-white/70 py-2 pl-9 pr-4 text-sm backdrop-blur placeholder:text-slate-400 focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
           />
         </div>
@@ -278,7 +281,7 @@ onMounted(loadData)
             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
           @click="categoryFilter = ''"
         >
-          全部分类
+          {{ t('market.filter.allCategories') }}
         </button>
         <button
           v-for="cat in categories"
@@ -301,7 +304,7 @@ onMounted(loadData)
 
     <!-- Empty -->
     <div v-else-if="!filtered.length" class="py-20 text-center text-slate-400">
-      暂无可用资源
+      {{ t('market.empty') }}
     </div>
 
     <!-- Card Grid -->
@@ -366,7 +369,7 @@ onMounted(loadData)
             class="rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-transform hover:scale-105"
             @click="handleCopyPrompt(item)"
           >
-            安装 Skill
+            {{ t('market.action.installSkill') }}
           </button>
           <button
             v-else-if="(isOwned(item) || !item.requires_approval) && item._type === 'mcp'"
@@ -374,14 +377,14 @@ onMounted(loadData)
             @click="handleViewAccess(item)"
           >
             <ExternalLink class="h-3 w-3" />
-            查看接入信息
+            {{ t('market.action.viewAccess') }}
           </button>
           <button
             v-else
             class="rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-transform hover:scale-105"
             @click="handleApply(item)"
           >
-            申请使用
+            {{ t('market.action.apply') }}
           </button>
         </div>
       </div>
@@ -392,18 +395,18 @@ onMounted(loadData)
       <div v-if="showApplyDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showApplyDialog = false">
         <div class="w-full max-w-md rounded-2xl border border-slate-200/60 bg-white/90 p-6 shadow-xl backdrop-blur">
           <div class="mb-4 flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-slate-800">申请使用</h3>
+            <h3 class="text-lg font-semibold text-slate-800">{{ t('market.apply.title') }}</h3>
             <button class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" @click="showApplyDialog = false">
               <X class="h-5 w-5" />
             </button>
           </div>
           <p class="mb-3 text-sm text-slate-500">
-            申请使用「{{ applyTarget?.name }}」，请填写申请理由：
+            {{ t('market.apply.description', { name: applyTarget?.name || '' }) }}
           </p>
           <textarea
             v-model="applyReason"
             rows="4"
-            placeholder="请描述使用场景和理由..."
+            :placeholder="t('market.apply.placeholder')"
             class="w-full rounded-xl border border-slate-200/60 bg-white/70 px-4 py-3 text-sm backdrop-blur placeholder:text-slate-400 focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
           />
           <div class="mt-4 flex justify-end gap-3">
@@ -411,14 +414,14 @@ onMounted(loadData)
               class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
               @click="showApplyDialog = false"
             >
-              取消
+              {{ t('common.action.cancel') }}
             </button>
             <button
               class="rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-50"
               :disabled="!applyReason.trim() || applyingId !== null"
               @click="submitApply"
             >
-              {{ applyingId !== null ? '提交中...' : '提交申请' }}
+              {{ applyingId !== null ? t('market.apply.submitting') : t('market.apply.submit') }}
             </button>
           </div>
         </div>
@@ -455,19 +458,19 @@ onMounted(loadData)
 
               <!-- 安装配置 -->
               <div class="mb-4">
-                <label class="mb-2 block text-xs font-semibold text-slate-700">安装配置</label>
+                <label class="mb-2 block text-xs font-semibold text-slate-700">{{ t('market.install.config') }}</label>
                 <div class="rounded-lg bg-slate-900 p-4">
                   <pre class="whitespace-pre-wrap text-xs leading-relaxed text-green-300">{{ mcpConnectConfig.agent_prompt }}{{ JSON.stringify(mcpConnectConfig.config, null, 2) }}</pre>
                 </div>
                 <button @click="copyMcpConfig"
                   class="mt-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm">
-                  {{ mcpConfigCopied ? '已复制' : '复制安装配置' }}
+                  {{ mcpConfigCopied ? t('market.install.copied') : t('market.install.copyConfig') }}
                 </button>
               </div>
 
               <!-- 包含工具（支持多个） -->
               <div v-if="mcpConnectConfig.tools.length" class="mb-4">
-                <label class="mb-2 block text-xs font-semibold text-slate-700">包含工具（{{ mcpConnectConfig.tools.length }}）</label>
+                <label class="mb-2 block text-xs font-semibold text-slate-700">{{ t('market.install.tools', { count: mcpConnectConfig.tools.length }) }}</label>
                 <div class="space-y-2 rounded-lg bg-slate-50 p-3">
                   <div v-for="tool in mcpConnectConfig.tools" :key="tool.name" class="flex items-baseline gap-2">
                     <span class="inline-block h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full bg-purple-400" />
@@ -481,14 +484,14 @@ onMounted(loadData)
 
               <!-- 使用说明 -->
               <div v-if="mcpConnectConfig.instructions">
-                <label class="mb-2 block text-xs font-semibold text-slate-700">使用说明</label>
+                <label class="mb-2 block text-xs font-semibold text-slate-700">{{ t('market.install.instructions') }}</label>
                 <div class="rounded-lg bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{{ mcpConnectConfig.instructions }}</div>
               </div>
             </template>
           </div>
 
           <div class="flex justify-end border-t border-slate-100 px-6 py-3">
-            <button class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="showMcpAccessDialog = false">关闭</button>
+            <button class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="showMcpAccessDialog = false">{{ t('market.action.close') }}</button>
           </div>
         </div>
       </div>
@@ -523,26 +526,26 @@ onMounted(loadData)
 
               <!-- Agent Prompt -->
               <div class="mb-4">
-                <label class="mb-2 block text-xs font-semibold text-slate-700">Agent 安装提示词</label>
+                <label class="mb-2 block text-xs font-semibold text-slate-700">{{ t('market.skill.agentPrompt') }}</label>
                 <div class="rounded-lg bg-slate-900 p-4">
                   <pre class="whitespace-pre-wrap text-xs leading-relaxed text-green-300">{{ skillInstallInfo.agent_prompt }}</pre>
                 </div>
                 <button @click="copySkillPrompt"
                   class="mt-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm">
-                  {{ skillPromptCopied ? '已复制' : '复制安装提示词' }}
+                  {{ skillPromptCopied ? t('market.install.copied') : t('market.skill.copyPrompt') }}
                 </button>
               </div>
 
               <!-- 使用说明 -->
               <div v-if="skillInstallInfo.usage_instructions">
-                <label class="mb-2 block text-xs font-semibold text-slate-700">使用说明</label>
+                <label class="mb-2 block text-xs font-semibold text-slate-700">{{ t('market.install.instructions') }}</label>
                 <div class="rounded-lg bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{{ skillInstallInfo.usage_instructions }}</div>
               </div>
             </template>
           </div>
 
           <div class="flex justify-end border-t border-slate-100 px-6 py-3">
-            <button class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="showSkillInstallDialog = false">关闭</button>
+            <button class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="showSkillInstallDialog = false">{{ t('market.action.close') }}</button>
           </div>
         </div>
       </div>

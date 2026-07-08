@@ -20,7 +20,11 @@
 [![vLLM](https://img.shields.io/badge/vLLM-FF6F00.svg)](https://docs.vllm.ai/)
 [![SGLang](https://img.shields.io/badge/SGLang-8B5CF6.svg)](https://github.com/sgl-project/sglang)
 
-[简体中文](README.md) · **English** 见 [README.en.md](README.en.md)
+<p align="center">
+| <b>简体中文</b> | <a href="./README.en.md"><b>English</b></a> | 
+</p>
+
+<p align="center">
 
  [核心价值](#核心价值) · [功能展示](#主要功能)  · [快速开始](#快速开始)  · [部署文档](#部署)
 
@@ -240,4 +244,4 @@ docker compose up -d
 
 本项目采用 [GPL-3.0](LICENSE) 开源协议，底座应用 LiteLLM 社区版（MIT License）。
 
-如果您所在组织的政策不允许使用 GPL-3.0 许可的软件，或您希望规避 GPL-3.0 的开源义务，请发送邮件至 [jiangshiwei@microbaton.com](mailto:jiangshiwei@microbaton.com) 咨询商业授权。
+如果您所在组织的政策不允许使用 GPL-3.0 许可的软件，或您希望规避 GPL-3.0 的开源义务，请发送邮件至 [联系邮件](mailto:jiangshiwei@microbaton.com) 咨询商业授权。

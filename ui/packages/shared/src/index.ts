@@ -12,6 +12,8 @@ export type { ApiResponse } from './api/request'
 export type { ExportOptionItem, ExportTask, ExportTaskListResult, ExportTaskQuery, ExportTaskParams, CreateExportTaskParams, CleanupExportTaskResult } from './types/exportTask'
 
 export { request } from './api/request'
+export { createI18nInstance, getCurrentLocale, setLocale, detectInitialLocale, DEFAULT_LOCALE, SUPPORTED_LOCALES } from './i18n'
+export type { AppLocale } from './i18n'
 export { getExportTasks, createExportTask, cancelExportTask, retryExportTask, cleanupExportTasks, downloadExportTask } from './api/exportTask'
 export { login, getMe, changePassword } from './api/auth'
 export { getUsers, getUserById, createUser, updateUser, deleteUser, resetUserPassword, updateUserRoles, updateUserDepartments, updateUserProjects } from './api/user'

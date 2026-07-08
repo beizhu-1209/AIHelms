@@ -1,0 +1,7 @@
+{
+  "error.readResponse": "Failed to read response data",
+  "error.nonJsonResponse": "Server returned non-JSON data: {body}",
+  "error.network": "Network connection failed. Check your connection.",
+  "error.unauthorized": "Incorrect username or password",
+  "error.requestFailed": "Request failed: {status}"
+}

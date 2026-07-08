@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuth, getMyKeys, type ActiveModel } from '@aihelms/shared'
 import { request } from '@aihelms/shared/src/api/request'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
@@ -19,6 +20,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
 const { currentUser } = useAuth()
+const { t } = useI18n()
 const mainKey = ref<AiKey | null>(null)
 const kpi = ref<EfficiencyKpi | null>(null)
 const trend = ref<TrendItem[]>([])
@@ -42,19 +44,19 @@ const fullKey = computed(() => mainKey.value?.key_value || mainKey.value?.litell
 const displayKey = computed(() => showFullKey.value ? fullKey.value : maskedKey.value)
 
 const budgetDisplay = computed(() => {
-  if (!mainKey.value) return '无限制'
+  if (!mainKey.value) return t('identity.budget.unlimited')
   const scope = mainKey.value.budget_scope
   if (scope === 'unified') {
-    return mainKey.value.budget_limit ? `¥${mainKey.value.budget_limit}` : '无限制'
+    return mainKey.value.budget_limit ? `¥${mainKey.value.budget_limit}` : t('identity.budget.unlimited')
   }
   if (scope === 'per_type') {
     const parts: string[] = []
-    if (mainKey.value.budget_models_total) parts.push(`模型 ¥${mainKey.value.budget_models_total}`)
-    if (mainKey.value.budget_mcps_total) parts.push(`MCP ¥${mainKey.value.budget_mcps_total}`)
-    return parts.length ? parts.join(' / ') : '无限制'
+    if (mainKey.value.budget_models_total) parts.push(t('identity.budget.models', { amount: mainKey.value.budget_models_total }))
+    if (mainKey.value.budget_mcps_total) parts.push(t('identity.budget.mcps', { amount: mainKey.value.budget_mcps_total }))
+    return parts.length ? parts.join(' / ') : t('identity.budget.unlimited')
   }
-  if (scope === 'per_resource') return '按资源分配'
-  return '无限制'
+  if (scope === 'per_resource') return t('identity.budget.perResource')
+  return t('identity.budget.unlimited')
 })
 
 const totalBudget = computed(() => {
@@ -130,8 +132,20 @@ async function handleCopy(): Promise<void> {
   }
 }
 
-const typeLabel: Record<string, string> = {
-  model: '模型', mcp: 'MCP', skill: 'Skill', agent: '智能体',
+function getTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    model: t('identity.type.model'),
+    mcp: t('identity.type.mcp'),
+    skill: t('identity.type.skill'),
+    agent: t('identity.type.agent'),
+  }
+  return labels[type] || type
+}
+
+function getStatusLabel(status: string): string {
+  if (status === 'pending') return t('identity.status.pending')
+  if (status === 'approved') return t('identity.status.approved')
+  return t('identity.status.rejected')
 }
 
 function getModelLogoProviderType(modelId: string): string {
@@ -199,13 +213,13 @@ onMounted(async () => {
                   AI
                 </div>
                 <div>
-                  <h3 class="text-sm font-extrabold text-gray-900">AI 身份</h3>
+                  <h3 class="text-sm font-extrabold text-gray-900">{{ t('identity.card.title') }}</h3>
                   <p class="text-[10px] tracking-[1.5px] text-gray-400">ACCESS PASS</p>
                 </div>
               </div>
               <span v-if="mainKey" class="rounded-xl px-3 py-1.5 text-xs font-bold"
                 :class="mainKey.is_active ? 'bg-[#F3F0FF] text-[#6D56FF]' : 'bg-slate-100 text-slate-500'">
-                {{ mainKey.is_active ? '已激活' : '未激活' }}
+                {{ mainKey.is_active ? t('identity.card.active') : t('identity.card.inactive') }}
               </span>
             </div>
 
@@ -238,7 +252,7 @@ onMounted(async () => {
                     class="flex items-center gap-1 rounded-lg border border-purple-200/60 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-50">
                     <Check v-if="copied" class="h-3 w-3 text-green-600" />
                     <Copy v-else class="h-3 w-3" />
-                    {{ copied ? '已复制' : '复制' }}
+                    {{ copied ? t('identity.action.copied') : t('identity.action.copy') }}
                   </button>
                 </div>
               </div>
@@ -246,11 +260,11 @@ onMounted(async () => {
               <!-- 底部 meta -->
               <div class="mt-3 flex gap-6 border-t border-slate-100 pt-3">
                 <div>
-                  <div class="text-[10px] tracking-[1px] text-gray-400">预算</div>
+                  <div class="text-[10px] tracking-[1px] text-gray-400">{{ t('identity.card.budget') }}</div>
                   <div class="mt-0.5 text-xs font-bold text-gray-900">{{ budgetDisplay }}</div>
                 </div>
                 <div>
-                  <div class="text-[10px] tracking-[1px] text-gray-400">模型</div>
+                  <div class="text-[10px] tracking-[1px] text-gray-400">{{ t('identity.card.models') }}</div>
                   <div class="mt-0.5 text-xs font-bold text-gray-900">{{ mainKey.models.length }}</div>
                 </div>
                 <div>
@@ -264,7 +278,7 @@ onMounted(async () => {
               </div>
             </div>
             <div v-else class="mt-5 text-center text-sm text-slate-400">
-              管理员尚未为你分配 AI 身份
+              {{ t('identity.noIdentity') }}
             </div>
           </div>
         </div>
@@ -275,8 +289,8 @@ onMounted(async () => {
         <div class="rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
           <div class="mb-3 flex items-center gap-2">
             <Cpu class="h-4 w-4 text-purple-600" />
-            <span class="text-sm font-medium text-slate-900">模型</span>
-            <span class="ml-auto text-xs text-slate-400">{{ mainKey.models.length }} 个</span>
+            <span class="text-sm font-medium text-slate-900">{{ t('identity.resources.model') }}</span>
+            <span class="ml-auto text-xs text-slate-400">{{ t('identity.resources.count', { count: mainKey.models.length }) }}</span>
           </div>
           <div v-if="mainKey.models.length" class="flex flex-wrap gap-2">
             <span v-for="m in mainKey.models" :key="m"
@@ -285,62 +299,62 @@ onMounted(async () => {
               {{ m }}
             </span>
           </div>
-          <p v-else class="text-xs text-slate-400">暂无，前往模型广场申请</p>
+          <p v-else class="text-xs text-slate-400">{{ t('identity.resources.emptyModels') }}</p>
         </div>
 
         <div class="rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
           <div class="mb-3 flex items-center gap-2">
             <Server class="h-4 w-4 text-emerald-600" />
             <span class="text-sm font-medium text-slate-900">MCP</span>
-            <span class="ml-auto text-xs text-slate-400">{{ mainKey.mcps.length }} 个</span>
+            <span class="ml-auto text-xs text-slate-400">{{ t('identity.resources.count', { count: mainKey.mcps.length }) }}</span>
           </div>
           <div v-if="mainKey.mcps.length" class="flex flex-wrap gap-2">
             <span v-for="id in mainKey.mcps" :key="id"
               class="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">{{ mcpNames[id] || `#${id}` }}</span>
           </div>
-          <p v-else class="text-xs text-slate-400">暂无，前往 AI 市场申请</p>
+          <p v-else class="text-xs text-slate-400">{{ t('identity.resources.emptyMarket') }}</p>
         </div>
 
         <div class="rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
           <div class="mb-3 flex items-center gap-2">
             <Sparkles class="h-4 w-4 text-amber-500" />
             <span class="text-sm font-medium text-slate-900">Skill</span>
-            <span class="ml-auto text-xs text-slate-400">{{ mainKey.skills.length }} 个</span>
+            <span class="ml-auto text-xs text-slate-400">{{ t('identity.resources.count', { count: mainKey.skills.length }) }}</span>
           </div>
           <div v-if="mainKey.skills.length" class="flex flex-wrap gap-2">
             <span v-for="id in mainKey.skills" :key="id"
               class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">{{ skillNames[id] || `#${id}` }}</span>
           </div>
-          <p v-else class="text-xs text-slate-400">暂无，前往 AI 市场申请</p>
+          <p v-else class="text-xs text-slate-400">{{ t('identity.resources.emptyMarket') }}</p>
         </div>
       </section>
 
       <!-- 用量概览 -->
       <section v-if="kpi" class="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
-        <h2 class="mb-4 text-sm font-medium text-slate-900">本月概览</h2>
+        <h2 class="mb-4 text-sm font-medium text-slate-900">{{ t('identity.overview.title') }}</h2>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">本月预算</div>
+            <div class="text-xs text-slate-400">{{ t('identity.overview.monthBudget') }}</div>
             <div class="mt-1 text-lg font-semibold text-slate-900">{{ budgetDisplay }}</div>
           </div>
           <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">已花费</div>
+            <div class="text-xs text-slate-400">{{ t('identity.overview.spent') }}</div>
             <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ (kpi.total_cost ?? 0).toFixed(2) }}</div>
             <div v-if="budgetUsedPercent !== null" class="mt-0.5 text-xs text-slate-400">{{ budgetUsedPercent.toFixed(1) }}%</div>
           </div>
           <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">调用次数</div>
+            <div class="text-xs text-slate-400">{{ t('identity.overview.requests') }}</div>
             <div class="mt-1 text-lg font-semibold text-slate-900">{{ (kpi.total_requests ?? 0).toLocaleString() }}</div>
           </div>
           <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">日均花费</div>
+            <div class="text-xs text-slate-400">{{ t('identity.overview.dailyAvg') }}</div>
             <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ dailyAvgCost.toFixed(2) }}</div>
           </div>
         </div>
         <!-- 预算进度条 -->
         <div v-if="budgetUsedPercent !== null" class="mt-4">
           <div class="flex items-center justify-between text-xs text-slate-400">
-            <span>预算使用</span>
+            <span>{{ t('identity.overview.budgetUsage') }}</span>
             <span>{{ budgetUsedPercent.toFixed(1) }}%</span>
           </div>
           <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
@@ -357,16 +371,16 @@ onMounted(async () => {
 
       <!-- 我的申请 -->
       <section v-if="applications.length" class="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
-        <h2 class="mb-4 text-sm font-medium text-slate-900">我的申请</h2>
+        <h2 class="mb-4 text-sm font-medium text-slate-900">{{ t('identity.applications.title') }}</h2>
         <div class="space-y-2">
           <div v-for="app in applications" :key="app.id"
             class="flex items-center gap-3 rounded-lg bg-slate-50/80 px-4 py-2.5">
             <Clock v-if="app.status === 'pending'" class="h-4 w-4 shrink-0 text-amber-500" />
             <CheckCircle2 v-else-if="app.status === 'approved'" class="h-4 w-4 shrink-0 text-green-500" />
             <XCircle v-else class="h-4 w-4 shrink-0 text-red-400" />
-            <span class="rounded bg-white px-1.5 py-0.5 text-xs text-slate-500">{{ typeLabel[app.resource_type] }}</span>
+            <span class="rounded bg-white px-1.5 py-0.5 text-xs text-slate-500">{{ getTypeLabel(app.resource_type) }}</span>
             <span class="flex-1 truncate text-sm text-slate-900">{{ app.resource_info?.name || `#${app.resource_id}` }}</span>
-            <span class="text-xs text-slate-400">{{ app.status === 'pending' ? '审批中' : app.status === 'approved' ? '已通过' : '已拒绝' }}</span>
+            <span class="text-xs text-slate-400">{{ getStatusLabel(app.status) }}</span>
           </div>
         </div>
       </section>
