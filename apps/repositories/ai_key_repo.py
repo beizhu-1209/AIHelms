@@ -74,6 +74,14 @@ async def find_all_main_keys(session: AsyncSession) -> list[AiKey]:
     return list(result.scalars().all())
 
 
+async def find_keys_referencing_model(session: AsyncSession, model_id_str: str) -> list[AiKey]:
+    """查找 models 列表中引用了指定 model_id 字符串的所有 Key（含场景 Key）。"""
+    result = await session.execute(
+        select(AiKey).where(AiKey.models.contains([model_id_str]))
+    )
+    return list(result.scalars().all())
+
+
 async def find_main_key(session: AsyncSession, owner_type: str, owner_id: int, key_type: str) -> AiKey | None:
     result = await session.execute(
         select(AiKey).where(

@@ -117,12 +117,15 @@ async def update_model(
     if not model:
         raise NotFoundError("model", model_id)
 
+    old_model_id = model.model_id
+    renamed = False
     if model_id_str is not None and model_id_str != model.model_id:
         if model_id_str:
             existing = await model_repo.find_by_model_id(session, model_id_str)
             if existing and existing.id != model.id:
                 raise ConflictError(f"模型 ID '{model_id_str}' 已被其他模型使用")
         model.model_id = model_id_str
+        renamed = bool(old_model_id)
     if name is not None:
         model.name = name
     if category is not None:
@@ -136,9 +139,73 @@ async def update_model(
     if is_active is not None:
         model.is_active = is_active
 
+    if renamed:
+        await _sync_model_rename(session, model, old_model_id)
+
     await session.commit()
     await session.refresh(model)
     return _serialize_model(model)
+
+
+async def _sync_model_rename(session: AsyncSession, model: Model, old_model_id: str) -> None:
+    """模型 model_id 改名后，级联同步 LiteLLM 部署 model_name 与引用旧名的 Key 授权。"""
+    deployments = await model_repo.find_deployments_by_model(session, model.id)
+    for deployment in deployments:
+        if not deployment.litellm_model_id:
+            continue
+        credential = deployment.credential
+        routable = _deployment_routable(deployment, credential)
+        sync_params = await _build_litellm_params_for_sync(deployment.litellm_params or {}, model, credential, session)
+        deployment.litellm_params = sync_params
+        sync_params = _convert_cost_for_litellm(sync_params)
+        sync_model_info = dict(deployment.model_info or {})
+        sync_model_info["active"] = routable
+        try:
+            await litellm_client.update_model(
+                litellm_model_id=deployment.litellm_model_id,
+                model_name=_get_litellm_model_name(model, credential, routable=routable),
+                litellm_params=sync_params,
+                model_info=sync_model_info,
+            )
+        except litellm_client.LiteLLMError:
+            logger.warning("model rename: litellm model sync failed for deployment %s", deployment.id)
+
+    await _sync_keys_after_model_rename(session, old_model_id, model.model_id)
+
+
+async def _sync_keys_after_model_rename(session: AsyncSession, old_model_id: str, new_model_id: str) -> None:
+    """把引用旧 model_id 的 Key 的 models 与 model_budgets 键改为新名并推 LiteLLM。"""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from services import ai_key_service
+
+    keys = await ai_key_repo.find_keys_referencing_model(session, old_model_id)
+    for key in keys:
+        models_changed = False
+        if key.models and old_model_id in key.models:
+            key.models = [new_model_id if m == old_model_id else m for m in key.models]
+            flag_modified(key, "models")
+            models_changed = True
+
+        budgets_changed = False
+        if key.model_budgets and old_model_id in key.model_budgets:
+            budgets = dict(key.model_budgets)
+            budgets[new_model_id] = budgets.pop(old_model_id)
+            key.model_budgets = budgets
+            flag_modified(key, "model_budgets")
+            budgets_changed = True
+
+        if models_changed or budgets_changed:
+            await ai_key_service._sync_key_to_litellm(
+                key,
+                models_changed=models_changed,
+                mcps_changed=False,
+                budget_changed=False,
+                model_budgets_changed=budgets_changed,
+                rate_limits_changed=key.rate_limit_mode == ai_key_service.RATE_LIMIT_MODE_PER_MODEL,
+                session=session,
+            )
+    await session.flush()
 
 
 async def delete_model(session: AsyncSession, model_id: int) -> None:
@@ -274,12 +341,15 @@ async def update_deployment(
         raise NotFoundError("deployment", deployment_id)
 
     # 更新模型的 model_id
+    renamed_from: str | None = None
     if model_id_str:
         model = await model_repo.find_by_id(session, deployment.model_id)
         if model and model.model_id != model_id_str:
             existing = await model_repo.find_by_model_id(session, model_id_str)
             if existing and existing.id != model.id:
                 raise ConflictError(f"模型 ID '{model_id_str}' 已被其他模型使用")
+            if model.model_id:
+                renamed_from = model.model_id
             model.model_id = model_id_str
 
     if litellm_params is not None:
@@ -335,6 +405,9 @@ async def update_deployment(
 
     if synced_to_litellm and model:
         await _sync_model_key_access_after_deployment(session, model, credential)
+
+    if renamed_from and model:
+        await _sync_keys_after_model_rename(session, renamed_from, model.model_id)
 
     await session.commit()
     await session.refresh(deployment)
