@@ -8,7 +8,7 @@
 <p>Built on top of LiteLLM · Model distribution, AI identity, cost control, and governance</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.14-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.14)
+[![Release](https://img.shields.io/badge/Release-v0.1.15-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.15)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.15` | 2026-07-013 | Fix bug . |
 | `0.1.14` | 2026-07-07 | AI Policies adds LLM-based review. |
 | `0.1.13` | 2026-07-03 | New AI Policies security review: scan a Skill in one click, flag malicious instructions, data exfiltration, and excessive permissions, and generate a report. |
 | `0.1.12` | 2026-07-01 | Resource requests support batch approval; Skill / MCP add author info, with usage shown in the user portal. |
