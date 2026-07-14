@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '@aihelms/shared'
+import { useAuth, useBranding } from '@aihelms/shared'
 
 const router = useRouter()
 const { login, currentUser } = useAuth()
+const { branding, logoUrl, refresh: refreshBranding, applyToDocument } = useBranding()
 
 const username = ref('')
 const password = ref('')
@@ -33,6 +34,11 @@ async function handleLogin(): Promise<void> {
     isLoading.value = false
   }
 }
+
+onMounted(async () => {
+  await refreshBranding()
+  applyToDocument()
+})
 </script>
 
 <template>
@@ -54,7 +60,11 @@ async function handleLogin(): Promise<void> {
     >
       <!-- Logo + 欢迎语 -->
       <div class="mb-8 space-y-3 text-center">
-        <img src="/static/img/logo.png" alt="AIHelms" class="mx-auto h-8" />
+        <img
+          :src="logoUrl || '/static/img/logo.png'"
+          :alt="branding?.platform_name || 'AIHelms'"
+          class="mx-auto h-8 max-w-full object-contain"
+        />
         <h1 class="text-2xl font-semibold tracking-tight text-slate-900">欢迎回来</h1>
         <p class="text-sm text-slate-500">承载 AI 数字资产 · 释放AI生产力 · 链接未来</p>
       </div>

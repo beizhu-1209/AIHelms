@@ -2,13 +2,14 @@
 import { onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuth, changePassword } from '@aihelms/shared'
+import { useAuth, changePassword, useBranding } from '@aihelms/shared'
 import { LogOut, Settings, KeyRound, ChevronDown } from 'lucide-vue-next'
 import LanguageSwitcher from '@aihelms/shared/src/components/LanguageSwitcher.vue'
 
 const router = useRouter()
 const { t } = useI18n()
 const { currentUser, fetchCurrentUser, logout } = useAuth()
+const { branding, squareLogoUrl } = useBranding()
 
 onMounted(async () => {
   if (!currentUser.value) {
@@ -126,10 +127,16 @@ async function handleChangePassword(): Promise<void> {
       <!-- 左：Logo -->
       <div class="flex items-center">
         <RouterLink to="/" class="flex items-center gap-2.5">
-          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 text-xs font-bold text-white shadow-md shadow-purple-500/20">
+          <img
+            v-if="squareLogoUrl"
+            :src="squareLogoUrl"
+            :alt="branding?.platform_name || 'AIHelms'"
+            class="h-7 w-7 rounded-md object-contain"
+          />
+          <div v-else class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 text-xs font-bold text-white shadow-md shadow-purple-500/20">
             AI
           </div>
-          <span class="text-lg font-bold text-slate-900">AIHelms</span>
+          <span class="text-lg font-bold text-slate-900">{{ branding?.platform_name || 'AIHelms' }}</span>
         </RouterLink>
       </div>
 

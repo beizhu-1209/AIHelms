@@ -3,10 +3,11 @@ from fastapi import APIRouter
 from api.v1.access_test import router as access_test_router
 from api.v1.agents import router as agents_router
 from api.v1.ai_keys import router as ai_keys_router
+from api.v1.ai_policies import router as ai_policies_router
 from api.v1.api_keys import router as api_keys_router
 from api.v1.audit_logs import router as audit_logs_router
-from api.v1.ai_policies import router as ai_policies_router
 from api.v1.auth import router as auth_router
+from api.v1.branding import router as branding_router
 from api.v1.business_scenarios import router as business_scenarios_router
 from api.v1.credentials import router as credentials_router
 from api.v1.dashboard import router as dashboard_router
@@ -14,6 +15,7 @@ from api.v1.departments import router as departments_router
 from api.v1.efficiency import router as efficiency_router
 from api.v1.export_tasks import router as export_tasks_router
 from api.v1.key_scenarios import router as key_scenarios_router
+from api.v1.license import router as license_router
 from api.v1.mcp import router as mcp_router
 from api.v1.models import router as models_router
 from api.v1.projects import router as projects_router
@@ -53,6 +55,8 @@ router.include_router(export_tasks_router, tags=["资源审计"])
 router.include_router(business_scenarios_router, tags=["AI 身份"])
 router.include_router(efficiency_router, tags=["AI 效能"])
 router.include_router(dashboard_router, tags=["系统"])
+router.include_router(license_router, tags=["系统"])
+router.include_router(branding_router, tags=["系统"])
 
 
 @router.get("/ping", tags=["系统"])
