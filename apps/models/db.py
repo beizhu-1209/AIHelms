@@ -893,3 +893,39 @@ class EfficiencySuggestion(Base):
     status_updated_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("aihelms.users.id"), nullable=True)
     status_updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class License(Base):
+    __tablename__ = "license"
+    __table_args__ = {"schema": "aihelms"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    licensed_to: Mapped[str | None] = mapped_column(Text, nullable=True)
+    features: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    issued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    license_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="invalid")
+    imported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class Branding(Base):
+    __tablename__ = "branding"
+    __table_args__ = {"schema": "aihelms"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    platform_name: Mapped[str] = mapped_column(
+        Text, nullable=False, default="AIHelms"
+    )
+    logo_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    square_logo_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    favicon_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.15` | 2026-07-14 | Update Enterpise-Logo change。 |
 | `0.1.15` | 2026-07-013 | Fix bug . |
 | `0.1.14` | 2026-07-07 | AI Policies adds LLM-based review. |
 | `0.1.13` | 2026-07-03 | New AI Policies security review: scan a Skill in one click, flag malicious instructions, data exfiltration, and excessive permissions, and generate a report. |

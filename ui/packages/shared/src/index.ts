@@ -10,8 +10,12 @@ export type { Credential, CreateCredentialParams, UpdateCredentialParams, Creden
 export type { ModelInfo, Deployment, CreateModelParams, UpdateModelParams, CreateDeploymentParams, UpdateDeploymentParams, ModelListResult, ActiveModel, AccessGroup, CreateAccessGroupParams, UpdateAccessGroupParams, RouterSettings, UpdateRouterSettingsParams, ModelVisibility, UpdateModelPublishParams, ResyncAnthropicResult } from './types/model'
 export type { ApiResponse } from './api/request'
 export type { ExportOptionItem, ExportTask, ExportTaskListResult, ExportTaskQuery, ExportTaskParams, CreateExportTaskParams, CleanupExportTaskResult } from './types/exportTask'
+export type { LicenseStatus } from './types/license'
+export type { BrandingInfo } from './types/branding'
 
 export { request } from './api/request'
+export { getLicense, importLicense } from './api/license'
+export { getBranding, updatePlatformName, uploadLogo, uploadSquareLogo, uploadFavicon } from './api/branding'
 export { createI18nInstance, getCurrentLocale, setLocale, detectInitialLocale, DEFAULT_LOCALE, SUPPORTED_LOCALES } from './i18n'
 export type { AppLocale } from './i18n'
 export { getExportTasks, createExportTask, cancelExportTask, retryExportTask, cleanupExportTasks, downloadExportTask } from './api/exportTask'
@@ -67,6 +71,8 @@ export { getDashboard, refreshDashboard, getDashboardRefreshStatus } from './api
 export type { DashboardQuery, RefreshTaskStatus } from './api/dashboard'
 export { useAuth } from './composables/useAuth'
 export { usePermission } from './composables/usePermission'
+export { useLicense } from './composables/useLicense'
+export { useBranding } from './composables/useBranding'
 export { toast } from './utils/toast'
 export { getLoginUrl } from './utils/auth-redirect'
 export type {

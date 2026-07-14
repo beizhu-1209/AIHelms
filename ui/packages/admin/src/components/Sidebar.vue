@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useAuth, usePermission } from '@aihelms/shared'
+import { useAuth, useBranding, usePermission } from '@aihelms/shared'
 import { useRoute } from 'vue-router'
-import { ref, type Component } from 'vue'
+import { ref, watch, type Component } from 'vue'
 import {
   FolderTree,
   Users,
@@ -33,11 +33,17 @@ import {
   HeartPulse,
   Download,
   ShieldCheck,
+  Settings,
+  Palette,
+  X,
 } from 'lucide-vue-next'
 
+defineProps<{ open: boolean }>()
+const emit = defineEmits<{ close: [] }>()
 const route = useRoute()
 const { hasPermission } = usePermission()
 const { currentUser } = useAuth()
+const { branding, logoUrl } = useBranding()
 
 interface MenuItem {
   label: string
@@ -111,6 +117,14 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
     ],
   },
   {
+    title: '系统',
+    icon: Settings,
+    items: [
+      { label: '品牌', icon: Palette, path: '/system/branding', permission: 'user:read' },
+      { label: 'License', icon: KeyRound, path: '/system/license', permission: 'user:read' },
+    ],
+  },
+  {
     title: 'AI实验室',
     icon: FlaskConical,
     items: [
@@ -125,7 +139,12 @@ const menuGroups = ref<{ title: string; icon?: Component; items: MenuItem[] }[]>
   },
 ])
 
-const expandedGroups = ref<Set<string>>(new Set(['AI身份', '资源审计', '智能体中心', 'AI市场', '模型纳管', 'AI效能', '安全', 'AI实验室']))
+const expandedGroups = ref<Set<string>>(new Set(['AI身份', '资源审计', '智能体中心', 'AI市场', '模型纳管', 'AI效能', '安全', 'AI实验室', '系统']))
+
+watch(
+  () => route.fullPath,
+  () => emit('close'),
+)
 
 function toggleGroup(title: string): void {
   if (expandedGroups.value.has(title)) {
@@ -156,9 +175,25 @@ function isVisible(item: MenuItem): boolean {
 </script>
 
 <template>
-  <aside class="relative z-10 flex w-[13rem] flex-col overflow-hidden border-r border-slate-200/60 bg-white/60 backdrop-blur-xl">
+  <aside
+    class="fixed inset-y-0 left-0 z-40 flex w-[13rem] flex-col overflow-hidden border-r border-slate-200/60 bg-white/95 shadow-xl backdrop-blur-xl transition-transform duration-200 md:relative md:z-10 md:translate-x-0 md:bg-white/60 md:shadow-none"
+    :class="open ? 'translate-x-0' : '-translate-x-full'"
+  >
     <div class="flex h-14 shrink-0 items-center justify-center border-b border-slate-200/60">
-      <img src="/static/img/logo.png" alt="AIHelms" class="h-7" />
+      <img
+        :src="logoUrl || '/static/img/logo.png'"
+        :alt="branding?.platform_name || 'AIHelms'"
+        class="h-7 max-w-[11rem] object-contain"
+      />
+      <button
+        class="absolute right-2 flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 md:hidden"
+        type="button"
+        title="关闭导航"
+        aria-label="关闭导航"
+        @click="emit('close')"
+      >
+        <X class="h-4 w-4" />
+      </button>
     </div>
 
     <nav class="flex-1 overflow-y-auto p-2">
