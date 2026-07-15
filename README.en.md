@@ -27,7 +27,7 @@
 <p align="center">
 
 
-[What Is It](#what-is-it) · [Why AIHelms](#why-aihelms) · [Built on LiteLLM](#built-on-litellm) · [Quick Start](#quick-start) · [Deployment](#deployment)
+[What Is It](#what-is-it) · [Why AIHelms](#why-aihelms) · [Built on LiteLLM](#built-on-litellm) · [Quick Start](#quick-start) · [Deployment](#deployment) · [Cookbook](http://www.aihelms.cn/docs)
 
 </div>
 
