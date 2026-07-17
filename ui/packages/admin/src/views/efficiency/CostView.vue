@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronRight, RefreshCw } from 'lucide-vue-next'
-import { createExportTask, getDepartmentTree, getEfficiencyCost, getEfficiencyCostDetail, getProjects, toast } from '@aihelms/shared'
+import { ChevronDown, RefreshCw } from 'lucide-vue-next'
+import { createExportTask, getEfficiencyCost, getEfficiencyCostDetail, toast } from '@aihelms/shared'
 import ExportTaskNotice from '../../components/ExportTaskNotice.vue'
+import ScopePickerDialog from '../../components/ScopePickerDialog.vue'
 import GlassCard from './components/GlassCard.vue'
 import KpiCard from './components/KpiCard.vue'
 import PresetTabs from './components/PresetTabs.vue'
 import CostCharts from './components/CostCharts.vue'
 import CostDetailSection from './components/CostDetailSection.vue'
 import { formatCost, formatCostShort, formatNumber, formatChange, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
+import { useScopeFilter } from './useScopeFilter'
 
-import type { AttributionRow, CostComposition, CostKpi, CostTrendItem, DateDetailRow, DeptTreeNode, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, PerCapitaItem, ScopeDetailRow, ScopeOption } from './costTypes'
+import type { AttributionRow, CostComposition, CostKpi, CostTrendItem, DateDetailRow, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, PerCapitaItem, ScopeDetailRow } from './costTypes'
 
 const TIME_PRESETS = [
   { key: 'month', label: '本月' },
@@ -30,10 +32,16 @@ const router = useRouter()
 const activePreset = ref('month')
 const resourceType = ref('')
 const dimension = ref<'department' | 'project'>('department')
-const selectedScopeIds = ref<string[]>([])
-const isScopeDropdownOpen = ref(false)
-const departmentOptions = ref<ScopeOption[]>([])
-const projectOptions = ref<ScopeOption[]>([])
+const {
+  departmentTree,
+  handleScopeConfirm,
+  isScopePickerOpen,
+  loadScopeOptions,
+  projectOptions,
+  resetScopeSelection,
+  selectedScopeIds,
+  selectedScopeLabel,
+} = useScopeFilter(dimension, loadOverview)
 const activeDetailTab = ref<DetailTab>('department')
 const customStart = ref('')
 const customEnd = ref('')
@@ -55,24 +63,8 @@ const dateDetail = ref<DateDetailRow[]>([])
 const attributionDetail = ref<AttributionRow[]>([])
 
 const dimensionLabel = computed(() => (dimension.value === 'project' ? '项目' : '部门'))
-const activeScopeOptions = computed(() => (dimension.value === 'project' ? projectOptions.value : departmentOptions.value))
-const selectedScopeLabel = computed(() => {
-  if (selectedScopeIds.value.length === 0) return `全部${dimensionLabel.value}`
-  if (selectedScopeIds.value.length === 1) {
-    const item = activeScopeOptions.value.find((scope) => String(scope.id) === selectedScopeIds.value[0])
-    return item?.name || `已选1个${dimensionLabel.value}`
-  }
-  return `已选${selectedScopeIds.value.length}个${dimensionLabel.value}`
-})
 const scopeRows = computed(() => composition.value.by_scope || composition.value.by_department || [])
 const dimensionCostNote = '跨部门、跨项目归属的成本会在对应维度重复计算。平台总成本仍按调用记录去重统计。'
-
-function scopeIndentClass(depth = 0): string {
-  if (depth <= 0) return 'pl-0'
-  if (depth === 1) return 'pl-3'
-  if (depth === 2) return 'pl-6'
-  return 'pl-9'
-}
 
 const detailTabs = computed(() => [
   { key: 'department' as const, label: `按${dimensionLabel.value}` },
@@ -118,50 +110,6 @@ function getLogDateQuery(): Record<string, string> {
 }
 
 
-function flattenDepartments(nodes: DeptTreeNode[], depth = 0): ScopeOption[] {
-  return nodes.flatMap((node) => [
-    { id: node.id, name: node.name, depth },
-    ...flattenDepartments(node.children || [], depth + 1),
-  ])
-}
-
-async function loadScopeOptions() {
-  try {
-    const [departments, projects] = await Promise.all([
-      getDepartmentTree(),
-      getProjects(1, 100),
-    ])
-    departmentOptions.value = flattenDepartments(departments as DeptTreeNode[])
-    projectOptions.value = projects.items.map((project) => ({ id: project.id, name: project.name }))
-  } catch {
-    departmentOptions.value = []
-    projectOptions.value = []
-  }
-}
-
-
-function isScopeSelected(id: number): boolean {
-  return selectedScopeIds.value.includes(String(id))
-}
-
-function toggleScope(id: number) {
-  const value = String(id)
-  if (selectedScopeIds.value.includes(value)) {
-    selectedScopeIds.value = selectedScopeIds.value.filter((item) => item !== value)
-  } else {
-    selectedScopeIds.value = [...selectedScopeIds.value, value]
-  }
-  handleScopeChange()
-}
-
-function clearScopes() {
-  if (selectedScopeIds.value.length === 0) return
-  selectedScopeIds.value = []
-  handleScopeChange()
-}
-function handleScopeChange() {
-  loadOverview()
-}
 function pushLogs(tab: 'llm' | 'mcp', params: Record<string, string | number | undefined | null>) {
   const query: Record<string, string | number> = { tab, ...getLogDateQuery() }
   Object.entries(params).forEach(([key, value]) => {
@@ -304,8 +252,7 @@ function handleResourceChange(val: string) {
 
 function handleDimensionChange(val: 'department' | 'project') {
   dimension.value = val
-  selectedScopeIds.value = []
-  isScopeDropdownOpen.value = false
+  resetScopeSelection()
   activeDetailTab.value = 'department'
   loadOverview()
 }
@@ -414,37 +361,10 @@ onMounted(() => {
           <button class="rounded-md px-3 py-1 text-xs transition-colors" :class="dimension === 'department' ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="handleDimensionChange('department')">部门</button>
           <button class="rounded-md px-3 py-1 text-xs transition-colors" :class="dimension === 'project' ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="handleDimensionChange('project')">项目</button>
         </div>
-        <div class="relative">
-          <button
-            type="button"
-            class="inline-flex min-w-[152px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-            @click="isScopeDropdownOpen = !isScopeDropdownOpen"
-          >
-            <span class="truncate">{{ selectedScopeLabel }}</span>
-            <ChevronRight class="h-3.5 w-3.5 rotate-90 text-slate-400" />
-          </button>
-          <div v-if="isScopeDropdownOpen" class="absolute left-0 top-full z-30 mt-1 max-h-72 w-64 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
-            <div class="mb-1 flex items-center justify-between border-b border-slate-100 px-2 py-1.5">
-              <span class="text-xs text-slate-500">{{ dimensionLabel }}筛选</span>
-              <button type="button" class="text-xs text-blue-600 hover:text-blue-700 disabled:text-slate-300" :disabled="selectedScopeIds.length === 0" @click="clearScopes">
-                清空
-              </button>
-            </div>
-            <label
-              v-for="scope in activeScopeOptions"
-              :key="scope.id"
-              class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
-            >
-              <input
-                type="checkbox"
-                class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                :checked="isScopeSelected(scope.id)"
-                @change="toggleScope(scope.id)"
-              />
-              <span class="truncate" :class="scopeIndentClass(scope.depth || 0)">{{ scope.name }}</span>
-            </label>
-          </div>
-        </div>
+        <button type="button" class="inline-flex min-w-[152px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50" @click="isScopePickerOpen = true">
+          <span class="truncate">{{ selectedScopeLabel }}</span>
+          <ChevronDown class="h-3.5 w-3.5 text-slate-400" />
+        </button>
         <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
           <span>最后更新时间：{{ formatLastUpdated() }}</span>
           <button type="button" class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isRefreshing" @click.prevent="refreshData">
@@ -496,5 +416,6 @@ onMounted(() => {
         @open-attribution-logs="openAttributionLogs"
       />
     </template>
+    <ScopePickerDialog v-model:open="isScopePickerOpen" v-model="selectedScopeIds" :dimension="dimension" :department-tree="departmentTree" :project-options="projectOptions" @confirm="handleScopeConfirm" />
   </div>
 </template>

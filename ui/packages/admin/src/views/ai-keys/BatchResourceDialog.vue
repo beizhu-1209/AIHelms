@@ -20,6 +20,7 @@ import {
 } from '@aihelms/shared'
 import KeyResourceBudget from './KeyResourceBudget.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+import Pagination from '../../components/Pagination.vue'
 
 interface Props {
   visible: boolean
@@ -35,6 +36,7 @@ const step = ref(1)
 const isSubmitting = ref(false)
 const userSearch = ref('')
 const userPage = ref(1)
+const userPageSize = ref(50)
 const userTotal = ref(0)
 const userItems = ref<IdentityUserItem[]>([])
 const selectedUserIds = ref<Set<number>>(new Set())
@@ -112,12 +114,17 @@ function resetResourceState(): void {
 async function fetchUsers(): Promise<void> {
   isLoadingUsers.value = true
   try {
-    const result = await getIdentityList('user', userPage.value, 50, userSearch.value || undefined)
+    const result = await getIdentityList('user', userPage.value, userPageSize.value, userSearch.value || undefined)
     userItems.value = result.items
     userTotal.value = result.total
   } finally {
     isLoadingUsers.value = false
   }
+}
+
+function handleUserPageChange(newPage: number): void {
+  userPage.value = newPage
+  fetchUsers()
 }
 
 async function fetchResources(): Promise<void> {
@@ -367,13 +374,13 @@ async function handleSubmit(): Promise<void> {
             </table>
             <div v-if="!isLoadingUsers && !userItems.length" class="py-12 text-center text-sm text-slate-400">暂无数据</div>
           </div>
-          <div v-if="userTotal > 50" class="flex items-center justify-between pt-3">
-            <span class="text-xs text-slate-500">共 {{ userTotal }} 人</span>
-            <div class="flex gap-1">
-              <button :disabled="userPage <= 1" class="rounded-lg border border-slate-200/60 bg-white/70 px-3 py-1 text-xs disabled:opacity-40" @click="userPage--; fetchUsers()">上一页</button>
-              <button :disabled="userPage * 50 >= userTotal" class="rounded-lg border border-slate-200/60 bg-white/70 px-3 py-1 text-xs disabled:opacity-40" @click="userPage++; fetchUsers()">下一页</button>
-            </div>
-          </div>
+          <Pagination
+            v-if="userTotal > 0"
+            :page="userPage"
+            v-model:page-size="userPageSize"
+            :total="userTotal"
+            @change="handleUserPageChange"
+          />
         </div>
 
         <!-- Step 2: Configure Resources -->

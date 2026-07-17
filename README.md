@@ -8,7 +8,7 @@
 <p>承载 AI 数字资产 · 释放 AI 生产力 · 链接未来</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.15-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.15)
+[![Release](https://img.shields.io/badge/Release-v0.1.17-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.17)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -85,7 +85,8 @@ AIHelms 是面向企业的 AI 资源纳管平台。帮助企业**管理 AI 资�
 
 | 版本 | 发布时间 | 一句话更新 |
 |------|----------|----------|
-| `0.1.15` | 2026-07-14 | 更新企业版功能-Logo替换。 |
+| `0.1.17` | 2026-07-17 | 统一 AI 效能部门/项目筛选并修复成本明细；日志及管理页增加模糊搜索，完善人员与 Key 联动；用户端接入说明补充 Workbuddy。 |
+| `0.1.16` | 2026-07-14 | 新增企业版许可证管理和平台品牌自定义能力。 |
 | `0.1.15` | 2026-07-13 | 修复部分bug。 |
 | `0.1.14` | 2026-07-07 | AI Policies 增加大模型审查。 |
 | `0.1.13` | 2026-07-03 | 新增 AI Policies 安全审查：一键扫描 Skill，自动识别恶意指令、数据外传、权限过大等风险并生成报告。 |

@@ -9,6 +9,7 @@ import {
   type AuditLogFilters,
 } from '@aihelms/shared'
 import Pagination from '../../components/Pagination.vue'
+import SearchableSelect from '../../components/SearchableSelect.vue'
 
 const logs = ref<AuditLog[]>([])
 const total = ref(0)
@@ -37,6 +38,24 @@ const METHOD_COLOR: Record<string, string> = {
   DELETE: 'bg-red-50 text-red-700',
   PATCH: 'bg-amber-50 text-amber-700',
 }
+
+const actorOptions = computed(() => {
+  const actors = new Map(
+    filters.value.actors
+      .filter((actor) => actor.user_id > 0)
+      .map((actor) => [actor.user_id, actor]),
+  )
+  return [...actors.values()].map((actor) => ({
+    value: actor.user_id,
+    label: actor.username || `#${actor.user_id}`,
+    searchText: String(actor.user_id),
+  }))
+})
+
+const actionOptions = computed(() => filters.value.actions.map((action) => ({
+  value: action,
+  label: action,
+})))
 
 const prettySummary = computed<string>(() => {
   if (!detail.value) return ''
@@ -162,22 +181,20 @@ onMounted(() => {
         type="datetime-local"
         class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
       />
-      <select
+      <SearchableSelect
         v-model="filterUserId"
-        class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
-      >
-        <option value="">全部操作人</option>
-        <option v-for="a in filters.actors" :key="a.user_id" :value="a.user_id">
-          {{ a.username }}
-        </option>
-      </select>
-      <select
+        :options="actorOptions"
+        placeholder="全部操作人"
+        search-placeholder="搜索操作人"
+        class="w-44"
+      />
+      <SearchableSelect
         v-model="filterAction"
-        class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
-      >
-        <option value="">全部操作</option>
-        <option v-for="a in filters.actions" :key="a" :value="a">{{ a }}</option>
-      </select>
+        :options="actionOptions"
+        placeholder="全部操作"
+        search-placeholder="搜索操作"
+        class="w-56"
+      />
       <select
         v-model="filterMethod"
         class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
@@ -271,7 +288,7 @@ onMounted(() => {
     <Pagination
       v-if="total > 0"
       :page="page"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
       :total="total"
       @change="handlePageChange"
     />
@@ -378,4 +395,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-

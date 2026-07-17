@@ -278,7 +278,7 @@ onMounted(loadKeys)
     <Pagination
       v-if="total > 0"
       :page="page"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
       :total="total"
       @change="handlePageChange"
     />

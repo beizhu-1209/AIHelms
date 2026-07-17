@@ -9,6 +9,8 @@ import { Cpu, CheckCircle2, Search, Copy, Check, X, MessageSquare, Box, Eye, Eye
 import ProviderIcon from '../components/ProviderIcon.vue'
 
 const { t } = useI18n()
+const openAiClients = ['Workbuddy', 'Qcoder', 'Openclaw', 'Dify', 'FastGPT', 'LobeChat', 'Cherry Studio']
+const anthropicClients = ['Claude Code', 'Claude Desktop']
 
 interface ModelItem {
   id: number
@@ -238,7 +240,12 @@ onMounted(async () => {
               <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
                 <div>
                   <code class="text-sm font-medium text-slate-800">{{ activeModel.model_id }}</code>
-                  <p class="mt-0.5 text-xs text-slate-400">{{ t('modelSquare.access.openaiClients') }}</p>
+                  <p class="mt-0.5 text-xs text-slate-400">
+                    {{ t('modelSquare.access.openaiClientsPrefix') }}
+                    <template v-for="(client, index) in openAiClients" :key="client">
+                      <span v-if="index > 0">, </span><strong class="font-bold text-slate-500">{{ client }}</strong>
+                    </template>{{ t('modelSquare.access.openaiClientsSuffix') }}
+                  </p>
                 </div>
                 <button @click="copyText(activeModel.model_id, 'model')" class="shrink-0 text-xs text-purple-600 hover:text-purple-700">
                   {{ copied === 'model' ? t('modelSquare.action.copied') : t('modelSquare.action.copy') }}
@@ -247,7 +254,12 @@ onMounted(async () => {
               <div v-if="activeModel.has_anthropic_deployment && activeModel.category === 'chat'" class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
                 <div>
                   <code class="text-sm font-medium text-slate-800">{{ activeModel.model_id }}(Anthropic)</code>
-                  <p class="mt-0.5 text-xs text-slate-400">{{ t('modelSquare.access.anthropicClients') }}</p>
+                  <p class="mt-0.5 text-xs text-slate-400">
+                    {{ t('modelSquare.access.anthropicClientsPrefix') }}
+                    <template v-for="(client, index) in anthropicClients" :key="client">
+                      <span v-if="index > 0">, </span><strong class="font-bold text-slate-500">{{ client }}</strong>
+                    </template>{{ t('modelSquare.access.anthropicClientsSuffix') }}
+                  </p>
                 </div>
                 <button @click="copyText(activeModel.model_id + '(Anthropic)', 'model-cc')" class="shrink-0 text-xs text-purple-600 hover:text-purple-700">
                   {{ copied === 'model-cc' ? t('modelSquare.action.copied') : t('modelSquare.action.copy') }}

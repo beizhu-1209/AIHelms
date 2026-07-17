@@ -11,6 +11,11 @@ export interface UsageLogAiKey {
   key_token?: string
 }
 
+export interface UsageLogUserKeyPair {
+  user_id: number
+  ai_key_id: number
+}
+
 export interface UsageLogMcpServer {
   id: number
   name: string
@@ -120,6 +125,7 @@ export interface LlmLogFilters {
   ai_keys: UsageLogAiKey[]
   models: { value: string; active: boolean }[]
   providers: string[]
+  user_key_pairs: UsageLogUserKeyPair[]
 }
 
 export interface McpLogFilters {
@@ -127,6 +133,7 @@ export interface McpLogFilters {
   servers: UsageLogMcpServer[]
   ai_keys: UsageLogAiKey[]
   tool_names: string[]
+  user_key_pairs: UsageLogUserKeyPair[]
 }
 
 export interface SkillLogFilters {

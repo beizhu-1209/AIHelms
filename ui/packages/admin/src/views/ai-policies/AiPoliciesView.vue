@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-vue-next'
+import SearchableSelect from '../../components/SearchableSelect.vue'
 
 type StatusFilter = 'all' | 'running' | 'high_risk' | 'attention_required' | 'passed' | 'failed'
 type EndTimeFilter = 'all' | 'today' | 'yesterday' | 'last7' | 'unfinished'
@@ -48,7 +49,7 @@ const showSettings = ref(false)
 const savingSettings = ref(false)
 const loadingReviewModels = ref(false)
 const llmEnabled = ref(false)
-const selectedModelId = ref<number | null>(null)
+const selectedModelId = ref<number | ''>('')
 const reviewModelOptions = ref<ReviewModelOption[]>([])
 const reviewModelLoadError = ref('')
 const statusFilter = ref<StatusFilter>('all')
@@ -91,6 +92,12 @@ const endTimeFilters: { key: EndTimeFilter; label: string }[] = [
 const selectedReviewModel = computed(() =>
   reviewModelOptions.value.find((item) => item.id === selectedModelId.value) || null,
 )
+
+const reviewModelSelectOptions = computed(() => reviewModelOptions.value.map((model) => ({
+  value: model.id,
+  label: model.name,
+  searchText: `${model.model_id} ${model.deployments.join(' ')}`,
+})))
 
 const modelPlaceholder = computed(() => (llmEnabled.value ? '请选择审查模型' : '启用后选择审查模型'))
 
@@ -182,7 +189,7 @@ async function loadSettings(): Promise<void> {
   try {
     const settings = await getAiPolicySettings()
     llmEnabled.value = settings.llm_review_enabled
-    selectedModelId.value = settings.llm_review_model_id
+    selectedModelId.value = settings.llm_review_model_id || ''
   } catch {
     // 配置读取失败不影响审计结果浏览。
   }
@@ -283,7 +290,7 @@ watch(llmEnabled, (enabled) => {
   if (enabled) {
     void loadReviewModelOptions()
   } else {
-    selectedModelId.value = null
+    selectedModelId.value = ''
     reviewModelLoadError.value = ''
   }
 })
@@ -320,7 +327,7 @@ onMounted(() => {
     </div>
     <div v-if="showSettings" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
       <div class="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl"><div class="flex items-start justify-between border-b border-slate-100 p-5"><div><h2 class="text-lg font-semibold text-slate-900">LLM 审查引擎配置</h2><p class="mt-1 text-sm text-slate-500">启用后由平台调用所选模型，对规则扫描结果和受控摘录做语义研判。</p></div><button class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" @click="showSettings = false"><X class="h-5 w-5" /></button></div>
-        <div class="space-y-4 p-5"><label class="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4"><span><span class="block text-sm font-semibold text-slate-900">启用 LLM 审查引擎</span><span class="mt-1 block text-xs text-slate-500">默认关闭；失败或超时不影响静态审查任务落库。</span></span><input v-model="llmEnabled" type="checkbox" class="mt-1 h-5 w-5 accent-purple-600" /></label><div><label class="mb-1 block text-sm font-medium text-slate-700">审查模型</label><select v-model="selectedModelId" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400" :disabled="!llmEnabled || loadingReviewModels"><option :value="null">{{ modelPlaceholder }}</option><option v-for="model in reviewModelOptions" :key="model.id" :value="model.id">{{ model.name }}</option></select><p v-if="reviewModelLoadError" class="mt-2 text-xs text-red-500">{{ reviewModelLoadError }}</p></div></div>
+        <div class="space-y-4 p-5"><label class="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4"><span><span class="block text-sm font-semibold text-slate-900">启用 LLM 审查引擎</span><span class="mt-1 block text-xs text-slate-500">默认关闭；失败或超时不影响静态审查任务落库。</span></span><input v-model="llmEnabled" type="checkbox" class="mt-1 h-5 w-5 accent-purple-600" /></label><div><label class="mb-1 block text-sm font-medium text-slate-700">审查模型</label><SearchableSelect v-model="selectedModelId" :options="reviewModelSelectOptions" :placeholder="modelPlaceholder" search-placeholder="搜索模型、模型 ID 或渠道" :disabled="!llmEnabled" :loading="loadingReviewModels" class="w-full" /><p v-if="reviewModelLoadError" class="mt-2 text-xs text-red-500">{{ reviewModelLoadError }}</p></div></div>
         <div class="flex justify-end gap-2 border-t border-slate-100 p-5"><button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="showSettings = false">取消</button><button class="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50" :disabled="savingSettings" @click="saveSettings"><Settings2 class="h-4 w-4" />{{ savingSettings ? '保存中...' : '保存配置' }}</button></div>
       </div>
     </div>

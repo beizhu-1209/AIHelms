@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   getResourceApplications,
   approveResourceApplication,
@@ -13,6 +13,7 @@ import {
 } from '@aihelms/shared'
 import { toast } from '@aihelms/shared'
 import Pagination from '../../components/Pagination.vue'
+import SearchableSelect from '../../components/SearchableSelect.vue'
 
 const applications = ref<ResourceApplication[]>([])
 const users = ref<User[]>([])
@@ -24,7 +25,11 @@ const submitting = ref(false)
 const filterStatus = ref<string>('pending')
 const filterType = ref<string>('')
 const filterUserId = ref<number | ''>('')
+const selectedApplicantLabel = ref('')
+const usersLoading = ref(false)
 const selectedIds = ref<Set<number>>(new Set())
+let userSearchTimer: ReturnType<typeof setTimeout> | undefined
+let userRequestId = 0
 
 const reviewing = ref<ResourceApplication | null>(null)
 const reviewAction = ref<'approve' | 'reject'>('approve')
@@ -47,6 +52,11 @@ const allPendingSelected = computed(
     pendingApplications.value.length > 0 &&
     pendingApplications.value.every(app => selectedIds.value.has(app.id)),
 )
+const userOptions = computed(() => users.value.map((user) => ({
+  value: user.id,
+  label: userName(user),
+  searchText: `${user.username} ${user.email || ''}`,
+})))
 
 async function loadApplications(): Promise<void> {
   loading.value = true
@@ -68,13 +78,37 @@ async function loadApplications(): Promise<void> {
   }
 }
 
-async function loadUsers(): Promise<void> {
+async function loadUsers(keyword = ''): Promise<void> {
+  const requestId = ++userRequestId
+  usersLoading.value = true
   try {
-    const res = await getUsers(1, 200)
+    const res = await getUsers(1, 50, keyword.trim() || undefined)
+    if (requestId !== userRequestId) return
     users.value = res.items
+    const selectedUser = users.value.find((user) => user.id === filterUserId.value)
+    if (selectedUser) selectedApplicantLabel.value = userName(selectedUser)
   } catch (e) {
-    toast.error((e as { message?: string }).message || '申请人列表加载失败')
+    if (requestId === userRequestId) {
+      toast.error((e as { message?: string }).message || '申请人列表加载失败')
+    }
+  } finally {
+    if (requestId === userRequestId) usersLoading.value = false
   }
+}
+
+function handleUserSearch(keyword: string): void {
+  clearTimeout(userSearchTimer)
+  userSearchTimer = setTimeout(() => loadUsers(keyword), 250)
+}
+
+function handleApplicantChange(value: number | ''): void {
+  if (value === '') {
+    selectedApplicantLabel.value = ''
+  } else {
+    const selectedUser = users.value.find((user) => user.id === value)
+    if (selectedUser) selectedApplicantLabel.value = userName(selectedUser)
+  }
+  handleFilterChange()
 }
 
 function openReview(app: ResourceApplication, action: 'approve' | 'reject'): void {
@@ -233,6 +267,8 @@ onMounted(() => {
   loadApplications()
   loadUsers()
 })
+
+onBeforeUnmount(() => clearTimeout(userSearchTimer))
 </script>
 
 <template>
@@ -266,16 +302,18 @@ onMounted(() => {
         <option value="approved">已批准</option>
         <option value="rejected">已拒绝</option>
       </select>
-      <select
+      <SearchableSelect
         v-model="filterUserId"
-        class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
-        @change="handleFilterChange"
-      >
-        <option value="">全部申请人</option>
-        <option v-for="user in users" :key="user.id" :value="user.id">
-          {{ userName(user) }}
-        </option>
-      </select>
+        :options="userOptions"
+        :selected-label="selectedApplicantLabel"
+        :loading="usersLoading"
+        remote
+        placeholder="全部申请人"
+        search-placeholder="输入姓名或账号搜索"
+        class="w-52"
+        @search="handleUserSearch"
+        @change="handleApplicantChange"
+      />
       <div class="ml-auto flex items-center gap-2">
         <span class="text-xs text-slate-500">已选 {{ selectedCount }} 项</span>
         <button
@@ -380,7 +418,7 @@ onMounted(() => {
     <Pagination
       v-if="total > 0"
       :page="page"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
       :total="total"
       @change="handlePageChange"
     />

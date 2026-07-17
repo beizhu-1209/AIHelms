@@ -36,12 +36,26 @@ def _parse_budget_month(month: str | None) -> tuple[date, date, date, int, int, 
     return month_start, month_end, usage_end, days_in_month, days_passed, is_current_month, f"{year:04d}-{month_num:02d}"
 
 
-async def get_budget(session: AsyncSession, month: str | None = None) -> dict:
+async def get_budget(
+    session: AsyncSession,
+    month: str | None = None,
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
+) -> dict:
     month_start, month_end, usage_end, days_in_month, days_passed, is_current_month, month_key = _parse_budget_month(month)
 
     keys = await efficiency_repo.get_all_keys_with_budget(session)
+    selected_key_ids = await efficiency_repo.get_scope_budget_key_ids(
+        session, department_ids, project_ids
+    )
+    if selected_key_ids is not None:
+        keys = [key for key in keys if int(key.id) in selected_key_ids]
     total_budget = sum(float(k.budget_limit) for k in keys)
-    total_used = await efficiency_repo.get_budget_used_for_keys(session, month_start, usage_end)
+    key_ids = [int(key.id) for key in keys] if selected_key_ids is not None else None
+    has_scope_filter = bool(department_ids or project_ids)
+    total_used = await efficiency_repo.get_total_cost(
+        session, month_start, usage_end, department_ids, project_ids
+    )
     execution_rate = (
         round(total_used / total_budget * 100, 1) if total_budget > 0 else 0
     )
@@ -52,9 +66,26 @@ async def get_budget(session: AsyncSession, month: str | None = None) -> dict:
         else total_used
     )
 
-    cumulative_raw = await efficiency_repo.get_cumulative_cost_by_date(
-        session, month_start, usage_end
-    )
+    if has_scope_filter:
+        daily_usage = await efficiency_repo.get_daily_cost_and_users(
+            session,
+            month_start,
+            usage_end,
+            "day",
+            department_ids,
+            project_ids,
+        )
+        cumulative_raw = []
+        cumulative_cost = 0.0
+        for item in daily_usage:
+            cumulative_cost += float(item["cost"])
+            cumulative_raw.append(
+                {"date": item["date"], "actual": round(cumulative_cost, 2)}
+            )
+    else:
+        cumulative_raw = await efficiency_repo.get_cumulative_cost_by_date(
+            session, month_start, usage_end
+        )
     daily_budget = round(total_budget / days_in_month, 2) if days_in_month > 0 else 0
     trend = [
         {
@@ -67,7 +98,7 @@ async def get_budget(session: AsyncSession, month: str | None = None) -> dict:
     ]
 
     dept_rows = await efficiency_repo.get_dept_budget_usage(
-        session, month_start, usage_end
+        session, month_start, usage_end, department_ids, project_ids
     )
     departments = []
     for row in dept_rows:
@@ -95,7 +126,9 @@ async def get_budget(session: AsyncSession, month: str | None = None) -> dict:
             }
         )
 
-    project_rows = await efficiency_repo.get_project_budget_usage(session, month_start, usage_end)
+    project_rows = await efficiency_repo.get_project_budget_usage(
+        session, month_start, usage_end, project_ids, department_ids
+    )
     projects = []
     for row in project_rows:
         b, u = row["budget"], row["used"]
@@ -121,7 +154,9 @@ async def get_budget(session: AsyncSession, month: str | None = None) -> dict:
             }
         )
 
-    key_raw = await efficiency_repo.get_key_top10_budget(session, month_start, usage_end)
+    key_raw = await efficiency_repo.get_key_top10_budget(
+        session, month_start, usage_end, key_ids
+    )
     keys_list = [
         {
             "key_name": i["name"],
@@ -158,13 +193,30 @@ async def get_budget(session: AsyncSession, month: str | None = None) -> dict:
     }
 
 
-async def get_budget_alerts(session: AsyncSession, month: str | None = None) -> list[dict]:
+async def get_budget_alerts(
+    session: AsyncSession,
+    month: str | None = None,
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
+) -> list[dict]:
     month_start, _month_end, usage_end, days_in_month, days_passed, is_current_month, _month_key = _parse_budget_month(month)
 
+    selected_key_ids = await efficiency_repo.get_scope_budget_key_ids(
+        session, department_ids, project_ids
+    )
+    keys = await efficiency_repo.get_all_keys_with_budget(session)
+    if selected_key_ids is not None:
+        keys = [key for key in keys if int(key.id) in selected_key_ids]
+    usage_by_key = await efficiency_repo.get_budget_usage_by_key(
+        session,
+        [int(key.id) for key in keys],
+        month_start,
+        usage_end,
+    )
     alerts = []
-    for k in await efficiency_repo.get_all_keys_with_budget(session):
+    for k in keys:
         budget = float(k.budget_limit)
-        used = await efficiency_repo.get_budget_used_for_key(session, int(k.id), month_start, usage_end)
+        used = usage_by_key.get(int(k.id), 0.0)
         if budget <= 0:
             continue
         rate = round(used / budget * 100, 1)
@@ -185,5 +237,3 @@ async def get_budget_alerts(session: AsyncSession, month: str | None = None) -> 
                 }
             )
     return alerts
-
-

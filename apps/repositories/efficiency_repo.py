@@ -4,79 +4,50 @@ import logging
 import datetime
 from datetime import date, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.db import AiKey, CostSummaryDaily, EfficiencyReport, EfficiencySuggestion, User
+from repositories.efficiency_budget_repo import (
+    get_all_keys_with_budget,
+    get_budget_usage_by_key,
+    get_budget_used_for_key,
+    get_budget_used_for_keys,
+    get_cumulative_cost_by_date,
+    get_dept_budget_usage,
+    get_key_top10_budget,
+    get_project_budget_usage,
+    get_scope_budget_key_ids,
+)
+from repositories.efficiency_cost_repo import (
+    get_cost_attribution_detail,
+    get_cost_by_dept,
+    get_cost_by_dimension,
+    get_cost_by_type,
+    get_cost_detail_by_date,
+    get_cost_detail_by_department,
+    get_cost_detail_by_dimension,
+    get_cost_detail_by_mcp,
+    get_cost_detail_by_model,
+    get_cost_trend,
+    get_dept_per_capita_cost,
+    get_per_capita_cost_by_dimension,
+)
+from repositories.efficiency_report_repo import (
+    create_report,
+    get_report_by_id,
+    list_reports,
+    list_suggestions_by_report,
+    update_suggestion_status,
+)
+from repositories.efficiency_scope_filter import build_id_filter, build_scope_filter
+from repositories.efficiency_scope_metrics_repo import (
+    get_active_user_ids,
+    get_daily_cost_and_users,
+    get_total_cost,
+    get_total_user_count,
+)
 
 logger = logging.getLogger(__name__)
-
-
-async def get_total_user_count(session: AsyncSession) -> int:
-    result = await session.execute(
-        select(func.count(User.id)).where(User.is_active.is_(True))
-    )
-    return result.scalar() or 0
-
-
-async def get_active_user_ids(
-    session: AsyncSession, start_date: date, end_date: date
-) -> set[int]:
-    result = await session.execute(
-        select(func.distinct(CostSummaryDaily.user_id)).where(
-            CostSummaryDaily.summary_date >= start_date,
-            CostSummaryDaily.summary_date <= end_date,
-            CostSummaryDaily.user_id.isnot(None),
-        )
-    )
-    return {row[0] for row in result.fetchall()}
-
-
-async def get_total_cost(
-    session: AsyncSession, start_date: date, end_date: date
-) -> float:
-    result = await session.execute(
-        select(func.coalesce(func.sum(CostSummaryDaily.internal_cost), 0)).where(
-            CostSummaryDaily.summary_date >= start_date,
-            CostSummaryDaily.summary_date <= end_date,
-        )
-    )
-    return float(result.scalar() or 0)
-
-
-async def get_daily_cost_and_users(
-    session: AsyncSession, start_date: date, end_date: date, granularity: str = "day"
-) -> list[dict]:
-    if granularity == "week":
-        trunc = "date_trunc('week', summary_date)::date"
-        current = start_date - datetime.timedelta(days=start_date.weekday())
-        step = datetime.timedelta(days=7)
-    elif granularity == "month":
-        trunc = "date_trunc('month', summary_date)::date"
-        current = start_date.replace(day=1)
-        step = None
-    else:
-        trunc = "summary_date::date"
-        current = start_date
-        step = datetime.timedelta(days=1)
-    sql = text(
-        f"SELECT {trunc} AS d, COUNT(DISTINCT user_id) AS active_users,"
-        " COALESCE(SUM(internal_cost), 0) AS cost"
-        " FROM aihelms.cost_summary_daily"
-        " WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL"
-        " GROUP BY 1 ORDER BY 1"
-    )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
-    raw = {r[0]: {"active_users": int(r[1]), "cost": float(r[2])} for r in result.fetchall()}
-    rows = []
-    while current <= end_date:
-        item = raw.get(current, {"active_users": 0, "cost": 0.0})
-        rows.append({"date": str(current), **item})
-        if granularity == "month":
-            current = (current.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        else:
-            current += step
-    return rows
 
 
 async def get_summary_trend(
@@ -130,23 +101,29 @@ async def get_scope_overview(
     start_date: date,
     end_date: date,
     dimension: str = "department",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
+    params: dict = {"start": start_date, "end": end_date}
     if dimension == "project":
+        id_filter = build_id_filter("p.id", project_ids, params, "overview_project")
         sql = text(
-            "SELECT p.id, p.name, p.name AS path, COUNT(DISTINCT up.user_id) AS total_users,"
-            " COUNT(DISTINCT c.user_id) AS active_users,"
+            "SELECT p.id, p.name, p.name AS path,"
+            " COUNT(DISTINCT up.user_id) FILTER (WHERE u.is_active = true) AS total_users,"
+            " COUNT(DISTINCT c.user_id) FILTER (WHERE u.is_active = true) AS active_users,"
             " COALESCE(SUM(c.internal_cost), 0) AS total_cost,"
             " COALESCE(string_agg(DISTINCT NULLIF(u.display_name, ''), '、')"
-            " FILTER (WHERE c.user_id IS NOT NULL), '') AS active_people"
+            " FILTER (WHERE c.user_id IS NOT NULL AND u.is_active = true), '') AS active_people"
             " FROM aihelms.projects p"
             " LEFT JOIN aihelms.user_projects up ON up.project_id = p.id"
             " LEFT JOIN aihelms.users u ON u.id = up.user_id"
             " LEFT JOIN aihelms.cost_summary_daily c ON c.user_id = up.user_id"
             " AND c.summary_date >= :start AND c.summary_date <= :end"
-            " WHERE p.is_active = true"
+            f" WHERE p.is_active = true{id_filter}"
             " GROUP BY p.id, p.name ORDER BY total_cost DESC"
         )
     else:
+        id_filter = build_id_filter("d.id", department_ids, params, "overview_department")
         sql = text(
             "WITH RECURSIVE dept_tree AS ("
             " SELECT id, name, parent_id, name::text AS path"
@@ -156,21 +133,21 @@ async def get_scope_overview(
             " FROM aihelms.departments d JOIN dept_tree dt ON dt.id = d.parent_id"
             ")"
             " SELECT d.id, d.name, COALESCE(dt.path, d.name) AS path,"
-            " COUNT(DISTINCT ud.user_id) AS total_users,"
-            " COUNT(DISTINCT c.user_id) AS active_users,"
+            " COUNT(DISTINCT ud.user_id) FILTER (WHERE u.is_active = true) AS total_users,"
+            " COUNT(DISTINCT c.user_id) FILTER (WHERE u.is_active = true) AS active_users,"
             " COALESCE(SUM(c.internal_cost), 0) AS total_cost,"
             " COALESCE(string_agg(DISTINCT NULLIF(u.display_name, ''), '、')"
-            " FILTER (WHERE c.user_id IS NOT NULL), '') AS active_people"
+            " FILTER (WHERE c.user_id IS NOT NULL AND u.is_active = true), '') AS active_people"
             " FROM aihelms.departments d"
             " LEFT JOIN dept_tree dt ON dt.id = d.id"
             " LEFT JOIN aihelms.user_departments ud ON ud.department_id = d.id"
             " LEFT JOIN aihelms.users u ON u.id = ud.user_id"
             " LEFT JOIN aihelms.cost_summary_daily c ON c.user_id = ud.user_id"
             " AND c.summary_date >= :start AND c.summary_date <= :end"
-            " WHERE d.is_active = true"
+            f" WHERE d.is_active = true{id_filter}"
             " GROUP BY d.id, d.name, dt.path ORDER BY total_cost DESC"
         )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    result = await session.execute(sql, params)
     rows = []
     for r in result.fetchall():
         active_people = [name for name in str(r[6] or "").split("、") if name]
@@ -189,15 +166,25 @@ async def get_scope_overview(
 
 
 async def get_daily_active_users(
-    session: AsyncSession, start_date: date, end_date: date
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
+    params: dict = {"start": start_date, "end": end_date}
+    scope_filter = build_scope_filter(
+        "c.user_id", department_ids, project_ids, params, "daily_active"
+    )
     sql = text(
-        "SELECT summary_date::date AS d, COUNT(DISTINCT user_id) AS dau"
-        " FROM aihelms.cost_summary_daily"
-        " WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL"
+        "SELECT c.summary_date::date AS d, COUNT(DISTINCT c.user_id) AS dau"
+        " FROM aihelms.cost_summary_daily c"
+        " JOIN aihelms.users u ON u.id = c.user_id AND u.is_active = true"
+        " WHERE c.summary_date >= :start AND c.summary_date <= :end AND c.user_id IS NOT NULL"
+        f"{scope_filter}"
         " GROUP BY 1 ORDER BY 1"
     )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    result = await session.execute(sql, params)
     raw = {r[0]: int(r[1]) for r in result.fetchall()}
     days = (end_date - start_date).days + 1
     return [
@@ -207,33 +194,51 @@ async def get_daily_active_users(
 
 
 async def get_user_call_counts(
-    session: AsyncSession, start_date: date, end_date: date
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
-    sql = text(
-        "SELECT user_id, SUM(total_requests) AS calls FROM aihelms.cost_summary_daily"
-        " WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL"
-        " GROUP BY user_id"
+    params: dict = {"start": start_date, "end": end_date}
+    scope_filter = build_scope_filter(
+        "c.user_id", department_ids, project_ids, params, "user_calls"
     )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    sql = text(
+        "SELECT c.user_id, SUM(c.total_requests) AS calls FROM aihelms.cost_summary_daily c"
+        " JOIN aihelms.users u ON u.id = c.user_id AND u.is_active = true"
+        " WHERE c.summary_date >= :start AND c.summary_date <= :end AND c.user_id IS NOT NULL"
+        f"{scope_filter} GROUP BY c.user_id"
+    )
+    result = await session.execute(sql, params)
     return [{"user_id": int(r[0]), "calls": int(r[1])} for r in result.fetchall()]
 
 
 async def get_daily_heavy_user_ratio(
-    session: AsyncSession, start_date: date, end_date: date, heavy_threshold: int = 10
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    heavy_threshold: int = 10,
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
+    params: dict = {"start": start_date, "end": end_date, "threshold": heavy_threshold}
+    scope_filter = build_scope_filter(
+        "c.user_id", department_ids, project_ids, params, "heavy_users"
+    )
     sql = text(
         "SELECT d, COUNT(*) FILTER (WHERE calls >= :threshold)::float"
         " / NULLIF(COUNT(*), 0) * 100 AS ratio"
         " FROM ("
-        "   SELECT summary_date::date AS d, user_id, SUM(total_requests) AS calls"
-        "   FROM aihelms.cost_summary_daily"
-        "   WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL"
+        "   SELECT c.summary_date::date AS d, c.user_id, SUM(c.total_requests) AS calls"
+        "   FROM aihelms.cost_summary_daily c"
+        "   JOIN aihelms.users u ON u.id = c.user_id AND u.is_active = true"
+        "   WHERE c.summary_date >= :start AND c.summary_date <= :end AND c.user_id IS NOT NULL"
+        f"{scope_filter}"
         "   GROUP BY 1, 2"
         " ) t GROUP BY d ORDER BY d"
     )
-    result = await session.execute(
-        sql, {"start": start_date, "end": end_date, "threshold": heavy_threshold}
-    )
+    result = await session.execute(sql, params)
     raw = {r[0]: round(float(r[1] or 0), 1) for r in result.fetchall()}
     days = (end_date - start_date).days + 1
     return [
@@ -243,19 +248,27 @@ async def get_daily_heavy_user_ratio(
 
 
 async def get_dept_adoption_table(
-    session: AsyncSession, start_date: date, end_date: date
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    department_ids: list[int] | None = None,
 ) -> list[dict]:
     days = max((end_date - start_date).days + 1, 1)
+    params: dict = {"start": start_date, "end": end_date}
+    id_filter = build_id_filter("d.id", department_ids, params, "adoption_department")
     sql = text(
-        "SELECT d.id, d.name, COUNT(DISTINCT ud.user_id) AS total,"
-        " COUNT(DISTINCT c.user_id) AS active, COALESCE(SUM(c.total_requests), 0) AS total_calls"
+        "SELECT d.id, d.name,"
+        " COUNT(DISTINCT ud.user_id) FILTER (WHERE u.is_active = true) AS total,"
+        " COUNT(DISTINCT c.user_id) FILTER (WHERE u.is_active = true) AS active,"
+        " COALESCE(SUM(c.total_requests) FILTER (WHERE u.is_active = true), 0) AS total_calls"
         " FROM aihelms.departments d"
         " LEFT JOIN aihelms.user_departments ud ON ud.department_id = d.id"
+        " LEFT JOIN aihelms.users u ON u.id = ud.user_id"
         " LEFT JOIN aihelms.cost_summary_daily c ON c.user_id = ud.user_id"
         " AND c.summary_date >= :start AND c.summary_date <= :end"
-        " WHERE d.is_active = true GROUP BY d.id, d.name ORDER BY active DESC"
+        f" WHERE d.is_active = true{id_filter} GROUP BY d.id, d.name ORDER BY active DESC"
     )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    result = await session.execute(sql, params)
     rows = []
     for r in result.fetchall():
         total = int(r[2])
@@ -269,19 +282,27 @@ async def get_dept_adoption_table(
 
 
 async def get_project_adoption_table(
-    session: AsyncSession, start_date: date, end_date: date
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
     days = max((end_date - start_date).days + 1, 1)
+    params: dict = {"start": start_date, "end": end_date}
+    id_filter = build_id_filter("p.id", project_ids, params, "adoption_project")
     sql = text(
-        "SELECT p.id, p.name, COUNT(DISTINCT up.user_id) AS total,"
-        " COUNT(DISTINCT c.user_id) AS active, COALESCE(SUM(c.total_requests), 0) AS total_calls"
+        "SELECT p.id, p.name,"
+        " COUNT(DISTINCT up.user_id) FILTER (WHERE u.is_active = true) AS total,"
+        " COUNT(DISTINCT c.user_id) FILTER (WHERE u.is_active = true) AS active,"
+        " COALESCE(SUM(c.total_requests) FILTER (WHERE u.is_active = true), 0) AS total_calls"
         " FROM aihelms.projects p"
         " LEFT JOIN aihelms.user_projects up ON up.project_id = p.id"
+        " LEFT JOIN aihelms.users u ON u.id = up.user_id"
         " LEFT JOIN aihelms.cost_summary_daily c ON c.user_id = up.user_id"
         " AND c.summary_date >= :start AND c.summary_date <= :end"
-        " WHERE p.is_active = true GROUP BY p.id, p.name ORDER BY active DESC"
+        f" WHERE p.is_active = true{id_filter} GROUP BY p.id, p.name ORDER BY active DESC"
     )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    result = await session.execute(sql, params)
     rows = []
     for r in result.fetchall():
         total = int(r[2])
@@ -340,8 +361,17 @@ async def get_adoption_scope_users(
 
 
 async def get_agent_hotness(
-    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    dimension: str = "department",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
+    params: dict = {"start": start_date, "end_next": end_date + datetime.timedelta(days=1)}
+    log_filter = build_scope_filter(
+        "l.user_id", department_ids, project_ids, params, "agent_usage"
+    )
     if dimension == "project":
         scope_join = "LEFT JOIN aihelms.user_projects uscope ON uscope.user_id = l.user_id LEFT JOIN aihelms.projects scope ON scope.id = uscope.project_id"
     else:
@@ -353,12 +383,13 @@ async def get_agent_hotness(
         f" FROM aihelms.agents a"
         f" LEFT JOIN aihelms.agent_usage_logs l ON l.agent_id = a.id"
         f" AND l.created_at >= :start AND l.created_at < :end_next"
+        f" {log_filter}"
         f" {scope_join}"
         f" WHERE a.is_active = true"
         f" GROUP BY a.id, a.name, a.platform, a.created_at"
         f" ORDER BY monthly_calls DESC"
     )
-    result = await session.execute(sql, {"start": start_date, "end_next": end_date + datetime.timedelta(days=1)})
+    result = await session.execute(sql, params)
     today = date.today()
     return [
         {
@@ -371,8 +402,17 @@ async def get_agent_hotness(
 
 
 async def get_mcp_hotness(
-    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    dimension: str = "department",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
+    params: dict = {"start": start_date, "end_next": end_date + datetime.timedelta(days=1)}
+    log_filter = build_scope_filter(
+        "l.user_id", department_ids, project_ids, params, "mcp_usage"
+    )
     if dimension == "project":
         scope_join = "LEFT JOIN aihelms.user_projects uscope ON uscope.user_id = l.user_id LEFT JOIN aihelms.projects scope ON scope.id = uscope.project_id"
     else:
@@ -384,10 +424,11 @@ async def get_mcp_hotness(
         f" FROM aihelms.mcp_servers s"
         f" LEFT JOIN aihelms.mcp_call_logs l ON l.server_id = s.id"
         f" AND l.called_at >= :start AND l.called_at < :end_next"
+        f" {log_filter}"
         f" {scope_join}"
         f" WHERE s.is_active = true GROUP BY s.id, s.name ORDER BY monthly_calls DESC"
     )
-    result = await session.execute(sql, {"start": start_date, "end_next": end_date + datetime.timedelta(days=1)})
+    result = await session.execute(sql, params)
     return [
         {"id": r[0], "name": r[1], "user_count": int(r[2]), "monthly_calls": int(r[3]), "cost": float(r[4]), "scope_names": r[5] or ""}
         for r in result.fetchall()
@@ -395,8 +436,17 @@ async def get_mcp_hotness(
 
 
 async def get_skill_hotness(
-    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    dimension: str = "department",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
+    params: dict = {"start": start_date, "end_next": end_date + datetime.timedelta(days=1)}
+    log_filter = build_scope_filter(
+        "l.user_id", department_ids, project_ids, params, "skill_usage"
+    )
     if dimension == "project":
         scope_join = "LEFT JOIN aihelms.user_projects uscope ON uscope.user_id = l.user_id LEFT JOIN aihelms.projects scope ON scope.id = uscope.project_id"
     else:
@@ -407,11 +457,12 @@ async def get_skill_hotness(
         f" FROM aihelms.skills s"
         f" LEFT JOIN aihelms.skill_usage_logs l ON l.skill_id = s.id"
         f" AND l.created_at >= :start AND l.created_at < :end_next"
+        f" {log_filter}"
         f" {scope_join}"
         f" WHERE s.is_active = true GROUP BY s.id, s.name"
         f" ORDER BY monthly_downloads DESC"
     )
-    result = await session.execute(sql, {"start": start_date, "end_next": end_date + datetime.timedelta(days=1)})
+    result = await session.execute(sql, params)
     return [
         {"id": r[0], "name": r[1], "install_count": int(r[2]), "monthly_downloads": int(r[3]), "scope_names": r[4] or ""}
         for r in result.fetchall()
@@ -419,24 +470,37 @@ async def get_skill_hotness(
 
 
 async def get_unused_users(
-    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    dimension: str = "department",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> list[dict]:
     if dimension == "project":
         scope_join = "JOIN aihelms.user_projects uscope ON uscope.user_id = u.id JOIN aihelms.projects scope ON scope.id = uscope.project_id"
     else:
         scope_join = "JOIN aihelms.user_departments uscope ON uscope.user_id = u.id JOIN aihelms.departments scope ON scope.id = uscope.department_id"
+    params: dict = {"start": start_date, "end": end_date}
+    scope_filter = build_id_filter(
+        "scope.id",
+        project_ids if dimension == "project" else department_ids,
+        params,
+        "unused_scope",
+    )
     sql = text(
         f"SELECT u.id, u.display_name, COALESCE(STRING_AGG(DISTINCT scope.name, ' / '), '') AS scope_names, u.position,"
         f" true AS has_key,"
         f" (SELECT MAX(c.summary_date) FROM aihelms.cost_summary_daily c WHERE c.user_id = u.id) AS last_active"
         f" FROM aihelms.users u {scope_join}"
         f" WHERE u.is_active = true"
+        f" {scope_filter}"
         f" AND EXISTS (SELECT 1 FROM aihelms.ai_keys k WHERE k.owner_type = 'user' AND k.owner_id = u.id AND k.is_active = true)"
         f" AND u.id NOT IN (SELECT DISTINCT user_id FROM aihelms.cost_summary_daily"
         f" WHERE summary_date >= :start AND summary_date <= :end AND user_id IS NOT NULL)"
         f" GROUP BY u.id, u.display_name, u.position ORDER BY u.display_name"
     )
-    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    result = await session.execute(sql, params)
     return [
         {
             "display_name": r[1], "department": r[2], "position": r[3],
@@ -444,34 +508,3 @@ async def get_unused_users(
         }
         for r in result.fetchall()
     ]
-
-from repositories.efficiency_cost_repo import (
-    get_cost_attribution_detail,
-    get_cost_by_dept,
-    get_cost_by_dimension,
-    get_cost_by_type,
-    get_cost_detail_by_date,
-    get_cost_detail_by_department,
-    get_cost_detail_by_dimension,
-    get_cost_detail_by_mcp,
-    get_cost_detail_by_model,
-    get_cost_trend,
-    get_dept_per_capita_cost,
-    get_per_capita_cost_by_dimension,
-)
-from repositories.efficiency_budget_repo import (
-    get_all_keys_with_budget,
-    get_budget_used_for_key,
-    get_budget_used_for_keys,
-    get_cumulative_cost_by_date,
-    get_dept_budget_usage,
-    get_key_top10_budget,
-    get_project_budget_usage,
-)
-from repositories.efficiency_report_repo import (
-    create_report,
-    get_report_by_id,
-    list_reports,
-    list_suggestions_by_report,
-    update_suggestion_status,
-)

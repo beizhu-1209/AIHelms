@@ -289,6 +289,6 @@ onUnmounted(() => {
       </table>
     </div>
 
-    <Pagination v-if="total > 0" :page="page" :page-size="pageSize" :total="total" @change="handlePageChange" />
+    <Pagination v-if="total > 0" :page="page" v-model:page-size="pageSize" :total="total" @change="handlePageChange" />
   </div>
 </template>

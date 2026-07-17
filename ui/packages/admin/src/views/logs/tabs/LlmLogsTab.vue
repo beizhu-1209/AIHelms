@@ -13,6 +13,7 @@ import {
   type LlmLogFilters,
 } from '@aihelms/shared'
 import Pagination from '../../../components/Pagination.vue'
+import SearchableSelect from '../../../components/SearchableSelect.vue'
 import LogDrawer from '../components/LogDrawer.vue'
 
 const logs = ref<LlmLog[]>([])
@@ -24,7 +25,7 @@ const loading = ref(false)
 const exporting = ref(false)
 const exportNotice = ref('')
 
-const filters = ref<LlmLogFilters>({ users: [], ai_keys: [], models: [], providers: [] })
+const filters = ref<LlmLogFilters>({ users: [], ai_keys: [], models: [], providers: [], user_key_pairs: [] })
 const filterStartTime = ref('')
 const filterEndTime = ref('')
 const filterUserId = ref<number | ''>('')
@@ -42,6 +43,56 @@ const visibleModelOptions = computed(() => {
   if (!filterOnlyActive.value) return filters.value.models
   return filters.value.models.filter((m) => m.active)
 })
+
+const userOptions = computed(() => filters.value.users.map((user) => ({
+  value: user.id,
+  label: user.display_name || user.username,
+  searchText: `${user.username} ${user.department_name || ''}`,
+})))
+
+const userById = computed(() => new Map(filters.value.users.map((user) => [user.id, user])))
+
+const keyUserIdsMap = computed(() => {
+  const result = new Map<number, Set<number>>()
+  for (const pair of filters.value.user_key_pairs) {
+    const userIds = result.get(pair.ai_key_id) || new Set<number>()
+    userIds.add(pair.user_id)
+    result.set(pair.ai_key_id, userIds)
+  }
+  return result
+})
+
+const availableAiKeys = computed(() => {
+  if (filterUserId.value === '') return filters.value.ai_keys
+  return filters.value.ai_keys.filter((key) => (
+    keyUserIdsMap.value.get(key.id)?.has(Number(filterUserId.value))
+  ))
+})
+
+const aiKeyOptions = computed(() => availableAiKeys.value.map((key) => {
+  const userIds = [...(keyUserIdsMap.value.get(key.id) || [])]
+  const selectedUser = filterUserId.value === '' ? undefined : userById.value.get(Number(filterUserId.value))
+  const userLabel = selectedUser
+    ? (selectedUser.display_name || selectedUser.username)
+    : userIds.length === 1
+      ? (userById.value.get(userIds[0])?.display_name || userById.value.get(userIds[0])?.username || '未知人员')
+      : `${userIds.length}人使用`
+  const relatedUsers = userIds.map((userId) => {
+    const user = userById.value.get(userId)
+    return user ? `${user.display_name} ${user.username} ${user.department_name}` : ''
+  }).join(' ')
+  const token = key.key_token || '无 Token'
+  return {
+    value: key.id,
+    label: `${userLabel} / ${key.name} / ${token}`,
+    searchText: `${relatedUsers} ${key.name} ${token}`,
+  }
+}))
+
+const modelOptions = computed(() => visibleModelOptions.value.map((model) => ({
+  value: model.value,
+  label: model.value,
+})))
 
 watch(visibleModelOptions, (options) => {
   if (filterModel.value && !options.some((m) => m.value === filterModel.value)) {
@@ -76,8 +127,15 @@ async function loadLogs(): Promise<void> {
 async function loadFilters(): Promise<void> {
   try {
     filters.value = await getLlmLogFilters()
+    resetKeyIfMismatched()
   } catch {
     /* ignore */
+  }
+}
+
+function resetKeyIfMismatched(): void {
+  if (filterAiKeyId.value !== '' && !availableAiKeys.value.some((key) => key.id === filterAiKeyId.value)) {
+    filterAiKeyId.value = ''
   }
 }
 
@@ -194,22 +252,21 @@ onMounted(() => {
         type="datetime-local"
         class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
       />
-      <select
+      <SearchableSelect
         v-model="filterUserId"
-        class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
-      >
-        <option value="">全部用户</option>
-        <option v-for="u in filters.users" :key="u.id" :value="u.id">
-          {{ u.display_name || u.username }}
-        </option>
-      </select>
-      <select
+        :options="userOptions"
+        placeholder="全部人员"
+        search-placeholder="搜索姓名、账号或部门"
+        class="w-44"
+        @change="resetKeyIfMismatched"
+      />
+      <SearchableSelect
         v-model="filterAiKeyId"
-        class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
-      >
-        <option value="">全部 Key</option>
-        <option v-for="k in filters.ai_keys" :key="k.id" :value="k.id">{{ k.name }}</option>
-      </select>
+        :options="aiKeyOptions"
+        placeholder="全部 Key"
+        search-placeholder="搜索人员、Key 或 Token"
+        class="w-[26rem]"
+      />
       <label class="inline-flex items-center gap-1.5 text-sm text-slate-600">
         <input
           v-model="filterOnlyActive"
@@ -218,20 +275,18 @@ onMounted(() => {
         />
         仅看在用
       </label>
-      <select
+      <SearchableSelect
         v-model="filterModel"
-        class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
-      >
-        <option value="">全部模型</option>
-        <option v-for="m in visibleModelOptions" :key="m.value" :value="m.value">
-          {{ m.value }}
-        </option>
-      </select>
+        :options="modelOptions"
+        placeholder="全部模型"
+        search-placeholder="搜索模型"
+        class="w-52"
+      />
       <select
         v-model="filterProvider"
         class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
       >
-        <option value="">全部 Provider</option>
+        <option value="">全部供应商</option>
         <option v-for="p in filters.providers" :key="p" :value="p">{{ p }}</option>
       </select>
       <select
@@ -327,7 +382,7 @@ onMounted(() => {
     <Pagination
       v-if="total > 0"
       :page="page"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
       :total="total"
       @change="handlePageChange"
     />

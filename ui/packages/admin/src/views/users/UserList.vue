@@ -211,7 +211,7 @@ onMounted(fetchUsers)
 
     <Pagination
       :page="page"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
       :total="total"
       @change="handlePageChange"
     />
