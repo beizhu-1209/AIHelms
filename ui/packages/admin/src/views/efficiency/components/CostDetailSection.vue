@@ -3,6 +3,7 @@ import { computed, ref, toRefs, watch } from 'vue'
 import { ChevronRight, Download } from 'lucide-vue-next'
 import GlassCard from './GlassCard.vue'
 import TooltipIcon from '../../../components/TooltipIcon.vue'
+import Pagination from '../../../components/Pagination.vue'
 import { formatCost, formatNumber, formatChange } from '../utils'
 import type { AttributionRow, DateDetailRow, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, ScopeDetailRow } from '../costTypes'
 
@@ -31,8 +32,9 @@ const emit = defineEmits<{
 }>()
 
 const { activeDetailTab, detailTabs, isDetailLoading, exporting, dimensionLabel, scopeDetail, modelDetail, mcpDetail, dateDetail, attributionDetail } = toRefs(props)
-const pageSize = 20
+const pageSize = ref(20)
 const detailPage = ref(1)
+watch(pageSize, () => { detailPage.value = 1 })
 const expandedModelRows = ref<Set<string>>(new Set())
 const expandedMcpRows = ref<Set<string>>(new Set())
 
@@ -45,13 +47,12 @@ const activeRows = computed(() => {
   if (activeDetailTab.value === 'attribution') return attributionDetail.value
   return scopeDetail.value
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(activeRows.value.length / pageSize)))
-const pageStart = computed(() => (detailPage.value - 1) * pageSize)
-const pagedScopeDetail = computed(() => scopeDetail.value.slice(pageStart.value, pageStart.value + pageSize))
-const pagedModelDetail = computed(() => modelDetail.value.slice(pageStart.value, pageStart.value + pageSize))
-const pagedMcpDetail = computed(() => mcpDetail.value.slice(pageStart.value, pageStart.value + pageSize))
-const pagedDateDetail = computed(() => dateDetail.value.slice(pageStart.value, pageStart.value + pageSize))
-const pagedAttributionDetail = computed(() => attributionDetail.value.slice(pageStart.value, pageStart.value + pageSize))
+const pageStart = computed(() => (detailPage.value - 1) * pageSize.value)
+const pagedScopeDetail = computed(() => scopeDetail.value.slice(pageStart.value, pageStart.value + pageSize.value))
+const pagedModelDetail = computed(() => modelDetail.value.slice(pageStart.value, pageStart.value + pageSize.value))
+const pagedMcpDetail = computed(() => mcpDetail.value.slice(pageStart.value, pageStart.value + pageSize.value))
+const pagedDateDetail = computed(() => dateDetail.value.slice(pageStart.value, pageStart.value + pageSize.value))
+const pagedAttributionDetail = computed(() => attributionDetail.value.slice(pageStart.value, pageStart.value + pageSize.value))
 
 function handleDetailTabChange(tab: DetailTab) { emit('tabChange', tab) }
 function exportDetail() { emit('exportDetail') }
@@ -393,14 +394,13 @@ function toggleMcpExpanded(row: McpDetailRow) {
             </table>
           </div>
 
-          <div v-if="activeRows.length > pageSize" class="mt-3 flex items-center justify-between text-xs text-slate-500">
-            <span>共 {{ activeRows.length }} 条，每页 {{ pageSize }} 条</span>
-            <div class="flex items-center gap-2">
-              <button class="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50" :disabled="detailPage <= 1" @click="detailPage--">上一页</button>
-              <span>{{ detailPage }} / {{ totalPages }}</span>
-              <button class="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50" :disabled="detailPage >= totalPages" @click="detailPage++">下一页</button>
-            </div>
-          </div>
+          <Pagination
+            v-if="activeRows.length > 0"
+            :page="detailPage"
+            v-model:page-size="pageSize"
+            :total="activeRows.length"
+            @change="detailPage = $event"
+          />
         </div>
       </GlassCard>
 </template>

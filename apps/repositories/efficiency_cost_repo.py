@@ -43,7 +43,7 @@ def _build_cost_filters(
     table_alias: str = "", project_id=None,
 ) -> tuple[str, dict]:
     prefix = f"{table_alias}." if table_alias else ""
-    user_col = f"{prefix}user_id"
+    user_col = f"{prefix}user_id" if prefix else "cost_summary_daily.user_id"
     filters = f"WHERE {prefix}summary_date >= :start AND {prefix}summary_date <= :end"
     params: dict = {"start": start_date, "end": end_date}
     if cost_type and cost_type != "all":
@@ -157,17 +157,42 @@ async def get_dept_per_capita_cost(session: AsyncSession, start_date: date, end_
     ]
 
 
-def _cost_dimension_config(dimension: str) -> tuple[str, str, str]:
+def _dimension_membership_join_filter(
+    dimension: str,
+    params: dict,
+    department_id=None,
+    project_id=None,
+) -> str:
+    if dimension == "project":
+        return _append_id_filter(
+            "", params, "up_dim.project_id", "dimension_project", project_id
+        )
+    return _append_id_filter(
+        "", params, "ud_dim.department_id", "dimension_department", department_id
+    )
+
+
+def _cost_dimension_config(
+    dimension: str,
+    params: dict,
+    department_id=None,
+    project_id=None,
+) -> tuple[str, str, str]:
+    membership_filter = _dimension_membership_join_filter(
+        dimension, params, department_id, project_id
+    )
     if dimension == "project":
         return (
             "p.name",
-            "JOIN aihelms.user_projects up_dim ON up_dim.user_id = c.user_id "
+            "JOIN aihelms.user_projects up_dim ON up_dim.user_id = c.user_id"
+            f"{membership_filter} "
             "JOIN aihelms.projects p ON p.id = up_dim.project_id",
             "项目",
         )
     return (
         "d.name",
-        "JOIN aihelms.user_departments ud_dim ON ud_dim.user_id = c.user_id "
+        "JOIN aihelms.user_departments ud_dim ON ud_dim.user_id = c.user_id"
+        f"{membership_filter} "
         "JOIN aihelms.departments d ON d.id = ud_dim.department_id",
         "部门",
     )
@@ -182,8 +207,12 @@ async def get_cost_by_dimension(
     department_id: int | None = None,
     project_id: int | None = None,
 ) -> list[dict]:
-    name_expr, join_sql, _ = _cost_dimension_config(dimension)
-    filters, params = _build_cost_filters(start_date, end_date, cost_type, department_id, "c", project_id)
+    filters, params = _build_cost_filters(
+        start_date, end_date, cost_type, department_id, "c", project_id
+    )
+    name_expr, join_sql, _ = _cost_dimension_config(
+        dimension, params, department_id, project_id
+    )
     sql = text(
         f"SELECT {name_expr} AS name,"
         f" COALESCE(SUM(c.internal_cost), 0) AS internal_cost,"
@@ -207,8 +236,12 @@ async def get_per_capita_cost_by_dimension(
     department_id: int | None = None,
     project_id: int | None = None,
 ) -> list[dict]:
-    name_expr, join_sql, _ = _cost_dimension_config(dimension)
-    filters, params = _build_cost_filters(start_date, end_date, cost_type, department_id, "c", project_id)
+    filters, params = _build_cost_filters(
+        start_date, end_date, cost_type, department_id, "c", project_id
+    )
+    name_expr, join_sql, _ = _cost_dimension_config(
+        dimension, params, department_id, project_id
+    )
     sql = text(
         f"SELECT {name_expr} AS name, COALESCE(SUM(c.internal_cost), 0) AS cost,"
         f" COUNT(DISTINCT c.user_id) AS users"
@@ -232,8 +265,12 @@ async def get_cost_detail_by_dimension(
     department_id: int | None = None,
     project_id: int | None = None,
 ) -> list[dict]:
-    name_expr, join_sql, _ = _cost_dimension_config(dimension)
-    filters, params = _build_cost_filters(start_date, end_date, cost_type, department_id, "c", project_id)
+    filters, params = _build_cost_filters(
+        start_date, end_date, cost_type, department_id, "c", project_id
+    )
+    name_expr, join_sql, _ = _cost_dimension_config(
+        dimension, params, department_id, project_id
+    )
     sql = text(
         f"SELECT {name_expr} AS name,"
         f" COALESCE(SUM(CASE WHEN c.cost_type = 'llm' THEN c.internal_cost ELSE 0 END), 0) AS llm_cost,"
@@ -465,15 +502,20 @@ async def get_cost_attribution_detail(
     project_id: int | None = None,
 ) -> list[dict]:
     filters, params = _build_cost_filters(start_date, end_date, cost_type, department_id, "c", project_id)
+    membership_filter = _dimension_membership_join_filter(
+        dimension, params, department_id, project_id
+    )
     if dimension == "project":
         scope_join = (
-            "LEFT JOIN aihelms.user_projects up_dim ON up_dim.user_id = c.user_id "
+            "LEFT JOIN aihelms.user_projects up_dim ON up_dim.user_id = c.user_id"
+            f"{membership_filter} "
             "LEFT JOIN aihelms.projects p ON p.id = up_dim.project_id"
         )
         scope_expr = "p.name"
     else:
         scope_join = (
-            "LEFT JOIN aihelms.user_departments ud_dim ON ud_dim.user_id = c.user_id "
+            "LEFT JOIN aihelms.user_departments ud_dim ON ud_dim.user_id = c.user_id"
+            f"{membership_filter} "
             "LEFT JOIN aihelms.departments d ON d.id = ud_dim.department_id"
         )
         scope_expr = "d.name"

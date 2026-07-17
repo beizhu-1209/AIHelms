@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { AlertTriangle, Download, RefreshCw } from 'lucide-vue-next'
+import { ref, computed, onMounted, watch } from 'vue'
+import { AlertTriangle, ChevronDown, Download, RefreshCw } from 'lucide-vue-next'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -9,10 +9,13 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 import { createExportTask, getEfficiencyOverview, toast } from '@aihelms/shared'
 import TooltipIcon from '../../components/TooltipIcon.vue'
 import ExportTaskNotice from '../../components/ExportTaskNotice.vue'
+import ScopePickerDialog from '../../components/ScopePickerDialog.vue'
 import GlassCard from './components/GlassCard.vue'
 import KpiCard from './components/KpiCard.vue'
 import PresetTabs from './components/PresetTabs.vue'
+import Pagination from '../../components/Pagination.vue'
 import { submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
+import { useScopeFilter } from './useScopeFilter'
 
 use([CanvasRenderer, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
@@ -99,13 +102,24 @@ const isRefreshing = ref(false)
 const exporting = ref(false)
 const exportNotice = ref('')
 const dimension = ref<Dimension>('department')
+const {
+  departmentTree,
+  handleScopeConfirm,
+  isScopePickerOpen,
+  loadScopeOptions,
+  projectOptions,
+  resetScopeSelection,
+  selectedScopeIds,
+  selectedScopeLabel,
+} = useScopeFilter(dimension, loadData)
 const sortKey = ref<SortKey>('coverage_rate')
 const sortAsc = ref(false)
 const timePreset = ref('month')
 const customStart = ref('')
 const customEnd = ref('')
 const page = ref(1)
-const pageSize = 20
+const pageSize = ref(20)
+watch(pageSize, () => { page.value = 1 })
 
 const dimensionText = computed(() => (dimension.value === 'project' ? '项目' : '部门'))
 
@@ -116,10 +130,16 @@ function getDateParams(): Record<string, string> {
   return { period: timePreset.value }
 }
 
+function getBaseParams(): Record<string, string> {
+  const params: Record<string, string> = { ...getDateParams(), dimension: dimension.value }
+  if (selectedScopeIds.value.length) params.scope_ids = selectedScopeIds.value.join(',')
+  return params
+}
+
 async function loadData() {
   isLoading.value = true
   try {
-    data.value = await getEfficiencyOverview<OverviewData>({ ...getDateParams(), dimension: dimension.value })
+    data.value = await getEfficiencyOverview<OverviewData>(getBaseParams())
     page.value = 1
   } finally {
     isLoading.value = false
@@ -140,6 +160,7 @@ function applyCustomRange() {
 
 function changeDimension(value: Dimension) {
   dimension.value = value
+  resetScopeSelection()
   loadData()
 }
 
@@ -199,8 +220,7 @@ const sortedTable = computed(() => {
   return rows
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(sortedTable.value.length / pageSize)))
-const visibleRows = computed(() => sortedTable.value.slice((page.value - 1) * pageSize, page.value * pageSize))
+const visibleRows = computed(() => sortedTable.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 
 const trendChartOption = computed(() => {
   if (!data.value) return {}
@@ -252,7 +272,7 @@ async function exportRows() {
       source: 'efficiency',
       export_type: 'overview_scope',
       task_name: `AI效能总览-${dimensionText.value}明细`,
-      params: { ...getDateParams(), dimension: dimension.value },
+      params: getBaseParams(),
     })
     exportNotice.value = '导出任务已创建，请到资源审计 > 导出任务下载表格'
   } catch (e) {
@@ -263,7 +283,10 @@ async function exportRows() {
 }
 
 
-onMounted(loadData)
+onMounted(() => {
+  loadScopeOptions()
+  loadData()
+})
 </script>
 
 <template>
@@ -291,6 +314,10 @@ onMounted(loadData)
             {{ item.label }}
           </button>
         </div>
+        <button type="button" class="inline-flex min-w-[152px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50" @click="isScopePickerOpen = true">
+          <span class="truncate">{{ selectedScopeLabel }}</span>
+          <ChevronDown class="h-3.5 w-3.5 text-slate-400" />
+        </button>
         <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
           <span>最后更新时间：{{ lastUpdatedLabel }}</span>
           <button type="button" class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isRefreshing" @click.prevent="refreshData">
@@ -400,17 +427,13 @@ onMounted(loadData)
           </table>
           <div v-if="sortedTable.length === 0" class="py-10 text-center text-sm text-slate-400">暂无数据</div>
         </div>
-        <div v-if="sortedTable.length > pageSize" class="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
-          <span>共 {{ sortedTable.length }} 条，每页 {{ pageSize }} 条</span>
-          <div class="flex items-center gap-2">
-            <button class="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50" :disabled="page <= 1" @click="page -= 1">上一页</button>
-            <span>{{ page }} / {{ totalPages }}</span>
-            <button class="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50" :disabled="page >= totalPages" @click="page += 1">下一页</button>
-          </div>
+        <div v-if="sortedTable.length > 0" class="border-t border-slate-100 px-5 pb-3">
+          <Pagination :page="page" v-model:page-size="pageSize" :total="sortedTable.length" @change="page = $event" />
         </div>
       </GlassCard>
     </template>
 
     <div v-else class="py-20 text-center text-sm text-slate-400">加载失败，请刷新重试</div>
+    <ScopePickerDialog v-model:open="isScopePickerOpen" v-model="selectedScopeIds" :dimension="dimension" :department-tree="departmentTree" :project-options="projectOptions" @confirm="handleScopeConfirm" />
   </div>
 </template>

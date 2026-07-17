@@ -11,6 +11,12 @@ from celery_app import celery_app
 from core.config import settings
 
 from repositories import dashboard_repo, efficiency_repo
+from services.efficiency_adoption_service import (
+    get_adoption_agents,
+    get_adoption_resources,
+    get_adoption_scope_users,
+    get_unused_users,
+)
 from services.efficiency_budget_service import get_budget, get_budget_alerts
 from services.efficiency_cost_service import get_cost, get_cost_detail
 from services.efficiency_health_service import get_ai_health
@@ -58,6 +64,7 @@ def _task_update_status(task_id: str) -> str:
         return "failed"
     return "idle"
 
+
 def _iso_or_none(value) -> str | None:
     return value.isoformat() if value else None
 
@@ -84,6 +91,7 @@ async def get_freshness(session: AsyncSession) -> dict:
         "update_status": _task_update_status(refresh_task_id),
         "task_id": refresh_task_id or None,
     }
+
 
 async def request_refresh(scope: str = "all") -> dict:
     """Submit aggregation and expose one shared refresh state for all admins."""
@@ -121,14 +129,6 @@ def _calc_change(current: float, previous: float) -> float | None:
     return round((current - previous) / previous * 100, 1)
 
 
-def _risk_level(rate: float) -> str:
-    if rate > 100:
-        return "danger"
-    if rate >= 80:
-        return "warning"
-    return "safe"
-
-
 # ---------------------------------------------------------------------------
 # Overview
 # ---------------------------------------------------------------------------
@@ -146,23 +146,31 @@ async def get_overview(
     end_date: date,
     granularity: str = "day",
     dimension: str = "department",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> dict:
     dimension = "project" if dimension == "project" else "department"
     dimension_label = "项目" if dimension == "project" else "部门"
-    total_users = await efficiency_repo.get_total_user_count(session)
+    total_users = await efficiency_repo.get_total_user_count(
+        session, department_ids, project_ids
+    )
     active_ids = await efficiency_repo.get_active_user_ids(
-        session, start_date, end_date
+        session, start_date, end_date, department_ids, project_ids
     )
     active_count = len(active_ids)
-    total_cost = await efficiency_repo.get_total_cost(session, start_date, end_date)
+    total_cost = await efficiency_repo.get_total_cost(
+        session, start_date, end_date, department_ids, project_ids
+    )
     coverage_rate = round(active_count / total_users * 100, 1) if total_users > 0 else 0
     active_per_capita = round(total_cost / active_count, 2) if active_count > 0 else 0
 
     prev_start, prev_end = _prev_period(start_date, end_date)
     prev_active_ids = await efficiency_repo.get_active_user_ids(
-        session, prev_start, prev_end
+        session, prev_start, prev_end, department_ids, project_ids
     )
-    prev_total_cost = await efficiency_repo.get_total_cost(session, prev_start, prev_end)
+    prev_total_cost = await efficiency_repo.get_total_cost(
+        session, prev_start, prev_end, department_ids, project_ids
+    )
     prev_coverage = (
         round(len(prev_active_ids) / total_users * 100, 1) if total_users > 0 else 0
     )
@@ -171,13 +179,13 @@ async def get_overview(
     )
 
     trend = await efficiency_repo.get_daily_cost_and_users(
-        session, start_date, end_date, granularity
+        session, start_date, end_date, granularity, department_ids, project_ids
     )
     current_rows = await efficiency_repo.get_scope_overview(
-        session, start_date, end_date, dimension
+        session, start_date, end_date, dimension, department_ids, project_ids
     )
     previous_rows = await efficiency_repo.get_scope_overview(
-        session, prev_start, prev_end, dimension
+        session, prev_start, prev_end, dimension, department_ids, project_ids
     )
     previous_map = {row["id"]: row for row in previous_rows}
 
@@ -305,10 +313,14 @@ async def get_adoption(
     end_date: date,
     dimension: str = "department",
     metric: str = "dau",
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
 ) -> dict:
-    total_users = await efficiency_repo.get_total_user_count(session)
+    total_users = await efficiency_repo.get_total_user_count(
+        session, department_ids, project_ids
+    )
     active_ids = await efficiency_repo.get_active_user_ids(
-        session, start_date, end_date
+        session, start_date, end_date, department_ids, project_ids
     )
     active_count = len(active_ids)
     coverage_rate = round(active_count / total_users * 100, 1) if total_users > 0 else 0
@@ -316,12 +328,12 @@ async def get_adoption(
 
     prev_start, prev_end = _prev_period(start_date, end_date)
     prev_active_ids = await efficiency_repo.get_active_user_ids(
-        session, prev_start, prev_end
+        session, prev_start, prev_end, department_ids, project_ids
     )
     new_active = len(active_ids - prev_active_ids)
 
     user_calls = await efficiency_repo.get_user_call_counts(
-        session, start_date, end_date
+        session, start_date, end_date, department_ids, project_ids
     )
     daily_avg_frequency = 0.0
     heavy_user_count = 0
@@ -341,20 +353,20 @@ async def get_adoption(
     heavy = sum(1 for u in user_calls if u["calls"] >= heavy_t)
 
     active_trend_raw = await efficiency_repo.get_daily_active_users(
-        session, start_date, end_date
+        session, start_date, end_date, department_ids, project_ids
     )
 
     heavy_trend_raw = await efficiency_repo.get_daily_heavy_user_ratio(
-        session, start_date, end_date
+        session, start_date, end_date, 10, department_ids, project_ids
     )
 
     if dimension == "project":
         raw_table = await efficiency_repo.get_project_adoption_table(
-            session, start_date, end_date
+            session, start_date, end_date, project_ids
         )
     else:
         raw_table = await efficiency_repo.get_dept_adoption_table(
-            session, start_date, end_date
+            session, start_date, end_date, department_ids
         )
 
     department_table = [
@@ -389,86 +401,3 @@ async def get_adoption(
         },
         "department_table": department_table,
     }
-
-
-async def get_adoption_scope_users(
-    session: AsyncSession,
-    start_date: date,
-    end_date: date,
-    dimension: str,
-    scope_id: int,
-) -> list[dict]:
-    return await efficiency_repo.get_adoption_scope_users(
-        session, start_date, end_date, dimension, scope_id
-    )
-
-
-async def get_adoption_agents(
-    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
-) -> list[dict]:
-    raw = await efficiency_repo.get_agent_hotness(session, start_date, end_date, dimension)
-    result = []
-    for i, agent in enumerate(raw):
-        result.append(
-            {
-                "id": agent["id"],
-                "rank": i + 1,
-                "name": agent["name"],
-                "platform": agent["platform"],
-                "department": agent["department"],
-                "user_count": agent["user_count"],
-                "monthly_calls": agent["monthly_calls"],
-                "trend": [],
-            }
-        )
-    return result
-
-
-async def get_adoption_resources(
-    session: AsyncSession,
-    start_date: date,
-    end_date: date,
-    resource_type: str = "mcp",
-    dimension: str = "department",
-) -> list[dict]:
-    if resource_type == "skill":
-        raw = await efficiency_repo.get_skill_hotness(session, start_date, end_date, dimension)
-        return [
-            {
-                "id": item["id"],
-                "name": item["name"],
-                "type": "skill",
-                "user_count": item.get("install_count", 0),
-                "monthly_calls": item.get("monthly_downloads", 0),
-                "department": item.get("scope_names", ""),
-            }
-            for item in raw
-        ]
-    raw = await efficiency_repo.get_mcp_hotness(session, start_date, end_date, dimension)
-    return [
-        {
-            "id": item["id"],
-            "name": item["name"],
-            "type": "mcp",
-            "user_count": item["user_count"],
-            "monthly_calls": item["monthly_calls"],
-            "department": item.get("scope_names", ""),
-        }
-        for item in raw
-    ]
-
-
-async def get_unused_users(
-    session: AsyncSession, start_date: date, end_date: date, dimension: str = "department"
-) -> list[dict]:
-    raw = await efficiency_repo.get_unused_users(session, start_date, end_date, dimension)
-    return [
-        {
-            "name": item["display_name"],
-            "department": item["department"],
-            "position": item["position"] or "",
-            "assigned_key": "有" if item["has_key"] else "无",
-            "last_active": item["last_active"] or "",
-        }
-        for item in raw
-    ]

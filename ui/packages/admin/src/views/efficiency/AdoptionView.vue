@@ -9,22 +9,33 @@ import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { createExportTask, getEfficiencyAdoption, getEfficiencyAdoptionAgents, getEfficiencyAdoptionResources, getEfficiencyAdoptionScopeUsers, getEfficiencyAdoptionUnusedUsers, toast } from '@aihelms/shared'
 import ExportTaskNotice from '../../components/ExportTaskNotice.vue'
+import ScopePickerDialog from '../../components/ScopePickerDialog.vue'
 import GlassCard from './components/GlassCard.vue'
 import KpiCard from './components/KpiCard.vue'
 import PresetTabs from './components/PresetTabs.vue'
 import AdoptionResourceSections from './components/AdoptionResourceSections.vue'
 import { presetToRange, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
+import { useScopeFilter } from './useScopeFilter'
 
 use([CanvasRenderer, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
 import type { ActiveTrend, AdoptionKpi, AgentRow, DeptCoverageRow, DepthDistribution, HeavyTrend, ResourceRow, ScopeUserRow, UnusedUser } from './adoptionTypes'
 
 const router = useRouter()
-
 const timePreset = ref('month')
 const customStart = ref('')
 const customEnd = ref('')
 const dimension = ref<'department' | 'project'>('department')
+const {
+  departmentTree,
+  handleScopeConfirm,
+  isScopePickerOpen,
+  loadScopeOptions,
+  projectOptions,
+  resetScopeSelection,
+  selectedScopeIds,
+  selectedScopeLabel,
+} = useScopeFilter(dimension, loadData)
 const unusedExpanded = ref(false)
 const expandedScopeId = ref<number | null>(null)
 const scopeUsers = ref<ScopeUserRow[]>([])
@@ -49,7 +60,6 @@ const unusedUsers = ref<UnusedUser[]>([])
 
 const deptSortKey = ref<keyof DeptCoverageRow>('coverage_rate')
 const deptSortAsc = ref(false)
-
 const TIME_PRESETS = [{ key: 'month', label: '本月' }, { key: '7d', label: '近7天' }, { key: '30d', label: '近30天' }]
 
 function getDateParams(): Record<string, string> {
@@ -59,9 +69,15 @@ function getDateParams(): Record<string, string> {
   return { period: timePreset.value }
 }
 
+function getBaseParams(): Record<string, string> {
+  const params: Record<string, string> = { ...getDateParams(), dimension: dimension.value }
+  if (selectedScopeIds.value.length) params.scope_ids = selectedScopeIds.value.join(',')
+  return params
+}
+
 async function loadData() {
   isLoading.value = true
-  const params = { ...getDateParams(), dimension: dimension.value }
+  const params = getBaseParams()
   try {
     const [adoptionData, agentData, mcpData, skillData, unusedData] = await Promise.all([
       getEfficiencyAdoption<{
@@ -108,6 +124,7 @@ function applyCustomRange() {
 
 function changeDimension(val: 'department' | 'project') {
   dimension.value = val
+  resetScopeSelection()
   loadData()
 }
 
@@ -158,7 +175,6 @@ function openLogs(tab: 'llm' | 'mcp' | 'skill' | 'agent', params: Record<string,
   router.push({ path: '/logs', query: { tab, ...getLogDateQuery(), ...params } })
 }
 
-
 function toggleDeptSort(key: keyof DeptCoverageRow) {
   if (deptSortKey.value === key) {
     deptSortAsc.value = !deptSortAsc.value
@@ -191,7 +207,7 @@ async function createEfficiencyExport(exportType: string, taskName: string) {
       source: 'efficiency',
       export_type: exportType,
       task_name: taskName,
-      params: { ...getDateParams(), dimension: dimension.value },
+      params: getBaseParams(),
     })
     exportNotice.value = '导出任务已创建，请到资源审计 > 导出任务下载表格'
   } catch (e) {
@@ -266,7 +282,10 @@ const heavyTrendOption = computed(() => {
   }
 })
 
-onMounted(loadData)
+onMounted(() => {
+  loadScopeOptions()
+  loadData()
+})
 </script>
 
 <template>
@@ -294,6 +313,10 @@ onMounted(loadData)
           {{ d.l }}
         </button>
       </div>
+      <button type="button" class="inline-flex min-w-[152px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50" @click="isScopePickerOpen = true">
+        <span class="truncate">{{ selectedScopeLabel }}</span>
+        <ChevronDown class="h-3.5 w-3.5 text-slate-400" />
+      </button>
       <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
         <span>最后更新时间：{{ lastUpdatedLabel }}</span>
         <button type="button" class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isRefreshing" @click.prevent="refreshData">
@@ -471,5 +494,6 @@ onMounted(loadData)
     </template>
 
     <div v-else class="py-20 text-center text-sm text-slate-400">加载失败，请刷新重试</div>
+    <ScopePickerDialog v-model:open="isScopePickerOpen" v-model="selectedScopeIds" :dimension="dimension" :department-tree="departmentTree" :project-options="projectOptions" @confirm="handleScopeConfirm" />
   </div>
 </template>

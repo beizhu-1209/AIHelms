@@ -81,6 +81,10 @@ async def llm_filters(session: AsyncSession) -> dict:
         "ai_keys": [keys[k] for k in raw["ai_key_ids"] if k in keys],
         "models": raw["models"],
         "providers": raw["providers"],
+        "user_key_pairs": [
+            {"user_id": user_id, "ai_key_id": ai_key_id}
+            for user_id, ai_key_id in raw["user_key_pairs"]
+        ],
     }
 
 
@@ -233,6 +237,10 @@ async def mcp_filters(session: AsyncSession) -> dict:
         "servers": [servers[s] for s in raw["server_ids"] if s in servers],
         "ai_keys": [keys[k] for k in raw["ai_key_ids"] if k in keys],
         "tool_names": raw["tool_names"],
+        "user_key_pairs": [
+            {"user_id": user_id, "ai_key_id": ai_key_id}
+            for user_id, ai_key_id in raw["user_key_pairs"]
+        ],
     }
 
 

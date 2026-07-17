@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { AlertTriangle, Download, RefreshCw } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { AlertTriangle, ChevronDown, Download, RefreshCw } from 'lucide-vue-next'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -9,9 +9,12 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 import { createExportTask, getEfficiencyBudget, getEfficiencyBudgetAlerts, toast } from '@aihelms/shared'
 import TooltipIcon from '../../components/TooltipIcon.vue'
 import ExportTaskNotice from '../../components/ExportTaskNotice.vue'
+import ScopePickerDialog from '../../components/ScopePickerDialog.vue'
 import GlassCard from './components/GlassCard.vue'
 import BudgetProgress from './components/BudgetProgress.vue'
+import Pagination from '../../components/Pagination.vue'
 import { formatCost, formatCostShort, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
+import { useScopeFilter } from './useScopeFilter'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
@@ -97,6 +100,17 @@ function selectedMonthLabel(): string {
 
 const activeDetailTab = ref<DetailTab>('department')
 const selectedMonth = ref(getCurrentMonth())
+const dimension = ref<'department' | 'project'>('department')
+const {
+  departmentTree,
+  handleScopeConfirm,
+  isScopePickerOpen,
+  loadScopeOptions,
+  projectOptions,
+  resetScopeSelection,
+  selectedScopeIds,
+  selectedScopeLabel,
+} = useScopeFilter(dimension, loadData)
 const isLoading = ref(true)
 const isRefreshing = ref(false)
 const exporting = ref(false)
@@ -104,7 +118,8 @@ const exportNotice = ref('')
 const lastUpdatedAt = ref<Date | null>(null)
 const lastUpdatedLabel = ref('--')
 const detailPage = ref(1)
-const pageSize = 20
+const pageSize = ref(20)
+watch(pageSize, () => { detailPage.value = 1 })
 
 const globalBudget = ref<BudgetGlobal>({ used: 0, budget: 0, remaining: 0, predicted: 0, risk: 'safe', execution_rate: 0 })
 const trendData = ref<BudgetTrendItem[]>([])
@@ -112,6 +127,19 @@ const deptRows = ref<ScopeBudgetRow[]>([])
 const projectRows = ref<ScopeBudgetRow[]>([])
 const keyRows = ref<KeyBudgetRow[]>([])
 const alerts = ref<BudgetAlert[]>([])
+
+function getBaseParams(): Record<string, string> {
+  const params: Record<string, string> = { month: selectedMonth.value, dimension: dimension.value }
+  if (selectedScopeIds.value.length) params.scope_ids = selectedScopeIds.value.join(',')
+  return params
+}
+
+function changeDimension(value: 'department' | 'project') {
+  dimension.value = value
+  resetScopeSelection()
+  activeDetailTab.value = value
+  loadData()
+}
 
 async function refreshData() {
   isRefreshing.value = true
@@ -133,8 +161,8 @@ async function loadData() {
   detailPage.value = 1
   try {
     const [budgetRes, alertRes] = await Promise.all([
-      getEfficiencyBudget<{ global: BudgetGlobal; trend: BudgetTrendItem[]; departments: ScopeBudgetRow[]; projects: ScopeBudgetRow[]; keys: KeyBudgetRow[]; freshness?: { last_updated_at: string | null; last_updated_label: string } }>({ month: selectedMonth.value }),
-      getEfficiencyBudgetAlerts<BudgetAlert[]>({ month: selectedMonth.value }),
+      getEfficiencyBudget<{ global: BudgetGlobal; trend: BudgetTrendItem[]; departments: ScopeBudgetRow[]; projects: ScopeBudgetRow[]; keys: KeyBudgetRow[]; freshness?: { last_updated_at: string | null; last_updated_label: string } }>(getBaseParams()),
+      getEfficiencyBudgetAlerts<BudgetAlert[]>(getBaseParams()),
     ])
     globalBudget.value = budgetRes.global
     trendData.value = budgetRes.trend
@@ -189,10 +217,9 @@ const activeRows = computed(() => {
   if (activeDetailTab.value === 'key') return keyRows.value
   return deptRows.value
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(activeRows.value.length / pageSize)))
-const pagedDeptRows = computed(() => deptRows.value.slice((detailPage.value - 1) * pageSize, detailPage.value * pageSize))
-const pagedProjectRows = computed(() => projectRows.value.slice((detailPage.value - 1) * pageSize, detailPage.value * pageSize))
-const pagedKeyRows = computed(() => keyRows.value.slice((detailPage.value - 1) * pageSize, detailPage.value * pageSize))
+const pagedDeptRows = computed(() => deptRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
+const pagedProjectRows = computed(() => projectRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
+const pagedKeyRows = computed(() => keyRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
 
 function switchTab(tab: DetailTab) {
   activeDetailTab.value = tab
@@ -206,7 +233,7 @@ async function exportDetail() {
       source: 'efficiency',
       export_type: `budget_${activeDetailTab.value}`,
       task_name: `预算管控-${DETAIL_TABS.find((tab) => tab.key === activeDetailTab.value)?.label || '明细'}`,
-      params: { month: selectedMonth.value },
+      params: getBaseParams(),
     })
     exportNotice.value = '导出任务已创建，请到资源审计 > 导出任务下载表格'
   } catch (e) {
@@ -236,7 +263,10 @@ const globalRiskClass = computed(() => {
   return 'border-slate-200 bg-white'
 })
 
-onMounted(loadData)
+onMounted(() => {
+  loadScopeOptions()
+  loadData()
+})
 </script>
 
 <template>
@@ -255,6 +285,15 @@ onMounted(loadData)
           <button type="button" class="rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-white" @click="changeMonth(getCurrentMonth())">本月</button>
           <button type="button" class="rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-white" @click="changeMonth(getLastMonth())">上月</button>
         </div>
+        <span class="text-xs text-slate-500">维度</span>
+        <div class="inline-flex rounded-lg bg-slate-100 p-1">
+          <button type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="dimension === 'department' ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="changeDimension('department')">按部门</button>
+          <button type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="dimension === 'project' ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="changeDimension('project')">按项目</button>
+        </div>
+        <button type="button" class="inline-flex min-w-[152px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50" @click="isScopePickerOpen = true">
+          <span class="truncate">{{ selectedScopeLabel }}</span>
+          <ChevronDown class="h-3.5 w-3.5 text-slate-400" />
+        </button>
         <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
           <span>最后更新时间：{{ lastUpdatedLabel }}</span>
           <button type="button" class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isRefreshing" @click.prevent="refreshData">
@@ -412,14 +451,13 @@ onMounted(loadData)
           </table>
         </div>
 
-        <div v-if="activeRows.length > pageSize" class="mt-3 flex items-center justify-between text-xs text-slate-500">
-          <span>共 {{ activeRows.length }} 条，每页 {{ pageSize }} 条</span>
-          <div class="flex items-center gap-2">
-            <button class="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50" :disabled="detailPage <= 1" @click="detailPage--">上一页</button>
-            <span>{{ detailPage }} / {{ totalPages }}</span>
-            <button class="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50" :disabled="detailPage >= totalPages" @click="detailPage++">下一页</button>
-          </div>
-        </div>
+        <Pagination
+          v-if="activeRows.length > 0"
+          :page="detailPage"
+          v-model:page-size="pageSize"
+          :total="activeRows.length"
+          @change="detailPage = $event"
+        />
       </GlassCard>
 
       <div v-if="alerts.length > 0" class="space-y-3">
@@ -442,5 +480,6 @@ onMounted(loadData)
         </div>
       </div>
     </template>
+    <ScopePickerDialog v-model:open="isScopePickerOpen" v-model="selectedScopeIds" :dimension="dimension" :department-tree="departmentTree" :project-options="projectOptions" @confirm="handleScopeConfirm" />
   </div>
 </template>

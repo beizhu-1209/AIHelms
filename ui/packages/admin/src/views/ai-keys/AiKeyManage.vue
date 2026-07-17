@@ -417,13 +417,13 @@
       </div>
     </div>
 
-    <div v-if="total > pageSize" class="flex items-center justify-between">
-      <span class="text-sm text-slate-500">共 {{ total }} 条</span>
-      <div class="flex gap-1">
-        <button :disabled="page <= 1" class="rounded-lg border border-slate-200/60 bg-white/70 px-3 py-1.5 text-sm disabled:opacity-40" @click="page--; fetchData()">上一页</button>
-        <button :disabled="page * pageSize >= total" class="rounded-lg border border-slate-200/60 bg-white/70 px-3 py-1.5 text-sm disabled:opacity-40" @click="page++; fetchData()">下一页</button>
-      </div>
-    </div>
+    <Pagination
+      v-if="total > 0"
+      :page="page"
+      v-model:page-size="pageSize"
+      :total="total"
+      @change="handlePageChange"
+    />
 
     <KeyFormDialog
       :visible="showKeyForm"
@@ -493,6 +493,7 @@ import ScenarioTab from './ScenarioTab.vue'
 import BudgetCell from './BudgetCell.vue'
 import RateLimitCell from './RateLimitCell.vue'
 import BatchResourceDialog from './BatchResourceDialog.vue'
+import Pagination from '../../components/Pagination.vue'
 
 const { hasPermission } = usePermission()
 const router = useRouter()
@@ -530,6 +531,11 @@ const defaultOwnerType = ref<'user' | 'department' | 'project'>('user')
 const defaultOwnerId = ref<number | undefined>(undefined)
 const showScenarioDialog = ref(false)
 const showBatchResource = ref(false)
+
+function handlePageChange(newPage: number): void {
+  page.value = newPage
+  fetchData()
+}
 
 async function fetchData(): Promise<void> {
   isLoading.value = true

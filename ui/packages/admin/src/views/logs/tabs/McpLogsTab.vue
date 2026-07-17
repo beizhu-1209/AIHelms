@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { Download } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import {
@@ -13,6 +13,7 @@ import {
   type McpLogFilters,
 } from '@aihelms/shared'
 import Pagination from '../../../components/Pagination.vue'
+import SearchableSelect from '../../../components/SearchableSelect.vue'
 import LogDrawer from '../components/LogDrawer.vue'
 
 const logs = ref<McpLog[]>([])
@@ -24,7 +25,7 @@ const loading = ref(false)
 const exporting = ref(false)
 const exportNotice = ref('')
 
-const filters = ref<McpLogFilters>({ users: [], servers: [], ai_keys: [], tool_names: [] })
+const filters = ref<McpLogFilters>({ users: [], servers: [], ai_keys: [], tool_names: [], user_key_pairs: [] })
 const filterStartTime = ref('')
 const filterEndTime = ref('')
 const filterUserId = ref<number | ''>('')
@@ -35,6 +36,62 @@ const filterStatus = ref('')
 
 const drawerOpen = ref(false)
 const detail = ref<McpLogDetail | null>(null)
+
+const userOptions = computed(() => filters.value.users.map((user) => ({
+  value: user.id,
+  label: user.display_name || user.username,
+  searchText: `${user.username} ${user.department_name || ''}`,
+})))
+
+const userById = computed(() => new Map(filters.value.users.map((user) => [user.id, user])))
+
+const keyUserIdsMap = computed(() => {
+  const result = new Map<number, Set<number>>()
+  for (const pair of filters.value.user_key_pairs) {
+    const userIds = result.get(pair.ai_key_id) || new Set<number>()
+    userIds.add(pair.user_id)
+    result.set(pair.ai_key_id, userIds)
+  }
+  return result
+})
+
+const availableAiKeys = computed(() => {
+  if (filterUserId.value === '') return filters.value.ai_keys
+  return filters.value.ai_keys.filter((key) => (
+    keyUserIdsMap.value.get(key.id)?.has(Number(filterUserId.value))
+  ))
+})
+
+const aiKeyOptions = computed(() => availableAiKeys.value.map((key) => {
+  const userIds = [...(keyUserIdsMap.value.get(key.id) || [])]
+  const selectedUser = filterUserId.value === '' ? undefined : userById.value.get(Number(filterUserId.value))
+  const userLabel = selectedUser
+    ? (selectedUser.display_name || selectedUser.username)
+    : userIds.length === 1
+      ? (userById.value.get(userIds[0])?.display_name || userById.value.get(userIds[0])?.username || '未知人员')
+      : `${userIds.length}人使用`
+  const relatedUsers = userIds.map((userId) => {
+    const user = userById.value.get(userId)
+    return user ? `${user.display_name} ${user.username} ${user.department_name}` : ''
+  }).join(' ')
+  const token = key.key_token || '无 Token'
+  return {
+    value: key.id,
+    label: `${userLabel} / ${key.name} / ${token}`,
+    searchText: `${relatedUsers} ${key.name} ${token}`,
+  }
+}))
+
+const serverOptions = computed(() => filters.value.servers.map((server) => ({
+  value: server.id,
+  label: server.name,
+  searchText: server.server_name,
+})))
+
+const toolOptions = computed(() => filters.value.tool_names.map((toolName) => ({
+  value: toolName,
+  label: toolName,
+})))
 
 async function loadLogs(): Promise<void> {
   loading.value = true
@@ -62,8 +119,15 @@ async function loadLogs(): Promise<void> {
 async function loadFilters(): Promise<void> {
   try {
     filters.value = await getMcpLogFilters()
+    resetKeyIfMismatched()
   } catch {
     /* ignore */
+  }
+}
+
+function resetKeyIfMismatched(): void {
+  if (filterAiKeyId.value !== '' && !availableAiKeys.value.some((key) => key.id === filterAiKeyId.value)) {
+    filterAiKeyId.value = ''
   }
 }
 
@@ -167,18 +231,35 @@ onMounted(() => {
       <input v-model="filterStartTime" type="datetime-local" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none" />
       <span class="text-sm text-slate-400">至</span>
       <input v-model="filterEndTime" type="datetime-local" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none" />
-      <select v-model="filterUserId" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none">
-        <option value="">全部用户</option>
-        <option v-for="u in filters.users" :key="u.id" :value="u.id">{{ u.display_name || u.username }}</option>
-      </select>
-      <select v-model="filterAiKeyId" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none">
-        <option value="">全部 Key</option>
-        <option v-for="k in filters.ai_keys" :key="k.id" :value="k.id">{{ k.name }}</option>
-      </select>
-      <select v-model="filterToolName" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none">
-        <option value="">全部工具</option>
-        <option v-for="t in filters.tool_names" :key="t" :value="t">{{ t }}</option>
-      </select>
+      <SearchableSelect
+        v-model="filterUserId"
+        :options="userOptions"
+        placeholder="全部人员"
+        search-placeholder="搜索姓名、账号或部门"
+        class="w-44"
+        @change="resetKeyIfMismatched"
+      />
+      <SearchableSelect
+        v-model="filterAiKeyId"
+        :options="aiKeyOptions"
+        placeholder="全部 Key"
+        search-placeholder="搜索人员、Key 或 Token"
+        class="w-[26rem]"
+      />
+      <SearchableSelect
+        v-model="filterServerId"
+        :options="serverOptions"
+        placeholder="全部 MCP 服务"
+        search-placeholder="搜索 MCP 服务"
+        class="w-48"
+      />
+      <SearchableSelect
+        v-model="filterToolName"
+        :options="toolOptions"
+        placeholder="全部工具"
+        search-placeholder="搜索工具"
+        class="w-48"
+      />
       <select v-model="filterStatus" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-500 focus:outline-none">
         <option value="">全部状态</option>
         <option value="success">成功</option>
@@ -209,8 +290,8 @@ onMounted(() => {
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">时间</th>
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">用户</th>
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">Key</th>
+            <th class="px-4 py-2.5 text-left font-medium text-slate-700">MCP 服务</th>
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">工具</th>
-            <th class="px-4 py-2.5 text-left font-medium text-slate-700">Tool</th>
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">状态</th>
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">耗时</th>
             <th class="px-4 py-2.5 text-left font-medium text-slate-700">外部</th>
@@ -237,7 +318,7 @@ onMounted(() => {
       </table>
     </div>
 
-    <Pagination v-if="total > 0" :page="page" :page-size="pageSize" :total="total" @change="handlePageChange" />
+    <Pagination v-if="total > 0" :page="page" v-model:page-size="pageSize" :total="total" @change="handlePageChange" />
 
     <LogDrawer
       v-if="detail"
