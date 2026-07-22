@@ -15,6 +15,7 @@ import BudgetProgress from './components/BudgetProgress.vue'
 import Pagination from '../../components/Pagination.vue'
 import { formatCost, formatCostShort, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
 import { useScopeFilter } from './useScopeFilter'
+import type { UserKeyBudgetRow } from './costTypes'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
@@ -51,16 +52,6 @@ interface ScopeBudgetRow {
   trend?: number[]
 }
 
-interface KeyBudgetRow {
-  key_name: string
-  owner: string
-  owner_type: string
-  key_type: string
-  budget: number
-  used: number
-  execution_rate: number
-}
-
 interface BudgetAlert {
   target: string
   type: string
@@ -68,12 +59,19 @@ interface BudgetAlert {
   predicted_overspend: number
 }
 
-type DetailTab = 'department' | 'project' | 'key'
+interface UserBudgetTop10Row {
+  rank: number
+  user_name: string
+  department: string
+  used: number
+}
+
+type DetailTab = 'department' | 'project' | 'user'
 
 const DETAIL_TABS = [
   { key: 'department' as const, label: '部门预算' },
   { key: 'project' as const, label: '项目预算' },
-  { key: 'key' as const, label: 'Key预算' },
+  { key: 'user' as const, label: '人预算' },
 ]
 
 function getCurrentMonth(): string {
@@ -125,7 +123,8 @@ const globalBudget = ref<BudgetGlobal>({ used: 0, budget: 0, remaining: 0, predi
 const trendData = ref<BudgetTrendItem[]>([])
 const deptRows = ref<ScopeBudgetRow[]>([])
 const projectRows = ref<ScopeBudgetRow[]>([])
-const keyRows = ref<KeyBudgetRow[]>([])
+const userKeyRows = ref<UserKeyBudgetRow[]>([])
+const userBudgetTop10 = ref<UserBudgetTop10Row[]>([])
 const alerts = ref<BudgetAlert[]>([])
 
 function getBaseParams(): Record<string, string> {
@@ -161,14 +160,15 @@ async function loadData() {
   detailPage.value = 1
   try {
     const [budgetRes, alertRes] = await Promise.all([
-      getEfficiencyBudget<{ global: BudgetGlobal; trend: BudgetTrendItem[]; departments: ScopeBudgetRow[]; projects: ScopeBudgetRow[]; keys: KeyBudgetRow[]; freshness?: { last_updated_at: string | null; last_updated_label: string } }>(getBaseParams()),
+      getEfficiencyBudget<{ global: BudgetGlobal; trend: BudgetTrendItem[]; departments: ScopeBudgetRow[]; projects: ScopeBudgetRow[]; user_keys: UserKeyBudgetRow[]; user_budget_top10: UserBudgetTop10Row[]; freshness?: { last_updated_at: string | null; last_updated_label: string } }>(getBaseParams()),
       getEfficiencyBudgetAlerts<BudgetAlert[]>(getBaseParams()),
     ])
     globalBudget.value = budgetRes.global
     trendData.value = budgetRes.trend
     deptRows.value = budgetRes.departments
     projectRows.value = budgetRes.projects
-    keyRows.value = budgetRes.keys
+    userKeyRows.value = budgetRes.user_keys
+    userBudgetTop10.value = budgetRes.user_budget_top10
     alerts.value = alertRes
     lastUpdatedAt.value = budgetRes.freshness?.last_updated_at ? new Date(budgetRes.freshness.last_updated_at) : new Date()
     lastUpdatedLabel.value = budgetRes.freshness?.last_updated_label || formatLastUpdated()
@@ -195,13 +195,6 @@ function executionColor(rate: number): string {
   return 'text-slate-700'
 }
 
-function ownerTypeLabel(type: string): string {
-  if (type === 'user') return '用户'
-  if (type === 'department') return '部门'
-  if (type === 'project') return '项目'
-  return type || '--'
-}
-
 function formatLastUpdated(): string {
   if (!lastUpdatedAt.value) return '--'
   const diffMinutes = Math.floor((Date.now() - lastUpdatedAt.value.getTime()) / 60000)
@@ -214,12 +207,12 @@ function formatLastUpdated(): string {
 
 const activeRows = computed(() => {
   if (activeDetailTab.value === 'project') return projectRows.value
-  if (activeDetailTab.value === 'key') return keyRows.value
+  if (activeDetailTab.value === 'user') return userKeyRows.value
   return deptRows.value
 })
 const pagedDeptRows = computed(() => deptRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
 const pagedProjectRows = computed(() => projectRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
-const pagedKeyRows = computed(() => keyRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
+const pagedUserRows = computed(() => userKeyRows.value.slice((detailPage.value - 1) * pageSize.value, detailPage.value * pageSize.value))
 
 function switchTab(tab: DetailTab) {
   activeDetailTab.value = tab
@@ -242,7 +235,6 @@ async function exportDetail() {
     exporting.value = false
   }
 }
-
 
 const trendChartOption = computed(() => ({
   tooltip: { trigger: 'axis' },
@@ -345,6 +337,30 @@ onMounted(() => {
         <VChart :option="trendChartOption" style="height: 280px; width: 100%" autoresize />
       </GlassCard>
 
+      <GlassCard title="人预算 Top10" tooltip="按所选月份个人 Key 已用内部成本汇总，取前 10 名。">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-slate-200 text-left text-xs text-slate-400">
+                <th class="py-2.5 font-medium">序号</th>
+                <th class="py-2.5 font-medium">姓名</th>
+                <th class="py-2.5 font-medium">部门</th>
+                <th class="py-2.5 text-right font-medium">已用金额</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in userBudgetTop10" :key="row.rank" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/40">
+                <td class="py-3 text-slate-400">{{ row.rank }}</td>
+                <td class="py-3 font-medium text-slate-800">{{ row.user_name }}</td>
+                <td class="py-3 text-slate-500">{{ row.department || '-' }}</td>
+                <td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.used) }}</td>
+              </tr>
+              <tr v-if="userBudgetTop10.length === 0"><td colspan="4" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </GlassCard>
+
       <GlassCard>
         <div class="mb-3 flex items-center justify-between">
           <div class="flex items-center gap-1">
@@ -424,29 +440,28 @@ onMounted(() => {
             </tbody>
           </table>
 
-          <table v-else class="min-w-[900px] w-full text-sm">
+          <table v-else-if="activeDetailTab === 'user'" class="min-w-[760px] w-full text-sm">
             <thead class="sticky top-0 z-10 bg-white">
               <tr class="border-b border-slate-200 text-left text-xs text-slate-400">
-                <th class="py-2.5 font-medium">Key名</th>
-                <th class="py-2.5 font-medium">归属对象</th>
-                <th class="py-2.5 font-medium">归属类型</th>
-                <th class="py-2.5 font-medium">Key类型</th>
+                <th class="py-2.5 font-medium">姓名</th>
+                <th class="py-2.5 font-medium">Key</th>
                 <th class="py-2.5 text-right font-medium">预算</th>
                 <th class="py-2.5 text-right font-medium">已用</th>
                 <th class="py-2.5 w-36 font-medium">执行率</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in pagedKeyRows" :key="row.key_name" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/40">
-                <td class="py-3 font-medium text-slate-800">{{ row.key_name }}</td>
-                <td class="py-3 text-slate-600">{{ row.owner }}</td>
-                <td class="py-3 text-slate-600">{{ ownerTypeLabel(row.owner_type) }}</td>
-                <td class="py-3 text-slate-600">{{ row.key_type }}</td>
+              <tr v-for="row in pagedUserRows" :key="`${row.user_name}-${row.key_name}`" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/40">
+                <td class="py-3 font-medium text-slate-800">{{ row.user_name }}</td>
+                <td class="py-3 text-slate-600">
+                  <span>{{ row.key_name }}</span>
+                  <span class="ml-1 text-xs text-slate-400">{{ row.is_main ? '主' : '场景' }}</span>
+                </td>
                 <td class="py-3 text-right text-slate-700">{{ formatCost(row.budget) }}</td>
                 <td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.used) }}</td>
                 <td class="py-3"><BudgetProgress :value="row.execution_rate" :show-label="true" /></td>
               </tr>
-              <tr v-if="keyRows.length === 0"><td colspan="7" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
+              <tr v-if="userKeyRows.length === 0"><td colspan="5" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
             </tbody>
           </table>
         </div>

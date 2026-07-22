@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Menu, ShieldAlert, ShieldCheck, ShieldOff } from 'lucide-vue-next'
+import { BookOpen, Menu, ShieldAlert, ShieldCheck, ShieldOff } from 'lucide-vue-next'
 import { useAuth, useBranding, useLicense } from '@aihelms/shared'
 
 const { currentUser, logout } = useAuth()
@@ -58,6 +58,16 @@ function goLicense(): void {
       </div>
     </div>
     <div class="flex items-center gap-2 sm:gap-4">
+      <a
+        href="http://www.aihelms.cn/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-100/80"
+        title="查看文档"
+      >
+        <BookOpen class="h-4 w-4" />
+        <span class="hidden sm:inline">文档</span>
+      </a>
       <button
         class="flex min-w-[5.25rem] items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors"
         :class="licenseTone"

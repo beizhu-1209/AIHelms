@@ -15,6 +15,7 @@ interface Props {
   sparkColor?: string
   valueColor?: string
   tooltip?: string
+  subDetail?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -26,6 +27,7 @@ const props = withDefaults(defineProps<Props>(), {
   sparkColor: '#6366f1',
   valueColor: '',
   tooltip: '',
+  subDetail: '',
 })
 
 const sparkPath = computed(() => {
@@ -82,6 +84,7 @@ const changeLabel = computed(() => {
       <component :is="changeIcon" class="h-3 w-3" />
       <span>{{ changeLabel }}</span>
     </div>
+    <div v-if="subDetail" class="mt-1 text-xs text-slate-400">{{ subDetail }}</div>
     <svg
       v-if="sparkline.length >= 2"
       class="absolute right-3 top-3 opacity-70"

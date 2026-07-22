@@ -48,15 +48,57 @@ export interface PerCapitaItem {
 export interface ScopeDetailRow {
   department: string
   scope_name?: string
+  scope_id: number | null
   llm_cost: number
   mcp_cost: number
   total_cost: number
   external_cost: number
   cost_diff: number
   requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
   per_capita_cost: number
   active_per_capita_cost: number
   cost_change: number | null
+}
+
+export interface ScopeUserCostRow {
+  user_id: number
+  user_name: string
+  department: string
+  internal_cost: number
+  external_cost: number
+  cost_diff: number
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
+}
+
+export interface UserTop10Row {
+  rank: number
+  user_id: number
+  user_name: string
+  department: string
+  internal_cost: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
+  total_tokens: number
+  requests: number
+}
+
+export interface UserKeyBudgetRow {
+  user_name: string
+  key_name: string
+  is_main: boolean
+  budget: number
+  used: number
+  execution_rate: number
 }
 
 export interface ModelCredentialRow {

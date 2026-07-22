@@ -6,16 +6,18 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
-import { createExportTask, getEfficiencyOverview, toast } from '@aihelms/shared'
+import { createExportTask, getEfficiencyOverview, getEfficiencyTopUsers, toast } from '@aihelms/shared'
 import TooltipIcon from '../../components/TooltipIcon.vue'
 import ExportTaskNotice from '../../components/ExportTaskNotice.vue'
 import ScopePickerDialog from '../../components/ScopePickerDialog.vue'
 import GlassCard from './components/GlassCard.vue'
 import KpiCard from './components/KpiCard.vue'
+import UserTop10Panel from './components/UserTop10Panel.vue'
 import PresetTabs from './components/PresetTabs.vue'
 import Pagination from '../../components/Pagination.vue'
-import { submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
+import { formatBigToken, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
 import { useScopeFilter } from './useScopeFilter'
+import type { UserTop10Row } from './costTypes'
 
 use([CanvasRenderer, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
@@ -27,6 +29,11 @@ interface OverviewKpi {
   per_capita_cost: number
   active_per_capita_cost?: number
   per_capita_change: number | null
+  total_tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
 }
 
 interface TrendData {
@@ -86,6 +93,8 @@ type SortKey = keyof Pick<
 >
 
 const TIME_PRESETS = [
+  { key: 'today', label: '今天' },
+  { key: 'yesterday', label: '昨天' },
   { key: 'month', label: '本月' },
   { key: '7d', label: '近7天' },
   { key: '30d', label: '近30天' },
@@ -119,6 +128,9 @@ const customStart = ref('')
 const customEnd = ref('')
 const page = ref(1)
 const pageSize = ref(20)
+const topMetric = ref<'cost' | 'tokens' | 'requests'>('cost')
+const topRows = ref<UserTop10Row[]>([])
+const topLoading = ref(false)
 watch(pageSize, () => { page.value = 1 })
 
 const dimensionText = computed(() => (dimension.value === 'project' ? '项目' : '部门'))
@@ -141,9 +153,27 @@ async function loadData() {
   try {
     data.value = await getEfficiencyOverview<OverviewData>(getBaseParams())
     page.value = 1
+    await loadTopUsers()
   } finally {
     isLoading.value = false
   }
+}
+
+async function loadTopUsers() {
+  topLoading.value = true
+  try {
+    topRows.value = await getEfficiencyTopUsers<UserTop10Row[]>({
+      ...getBaseParams(),
+      metric: topMetric.value,
+    })
+  } finally {
+    topLoading.value = false
+  }
+}
+
+function handleTopMetricChange(metric: 'cost' | 'tokens' | 'requests') {
+  topMetric.value = metric
+  loadTopUsers()
 }
 
 function changePreset(val: string) {
@@ -341,7 +371,7 @@ onMounted(() => {
         </div>
       </GlassCard>
 
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-4 gap-4">
         <KpiCard
           label="AI 覆盖率"
           :value="`${data.kpi.coverage_rate}%`"
@@ -363,6 +393,14 @@ onMounted(() => {
           change-kind="up-bad"
           tooltip="活跃人均成本 = 平台投入 ÷ 所选时间内活跃用户数。"
         />
+        <KpiCard
+          label="Token 用量"
+          :value="formatBigToken(data.kpi.total_tokens)"
+          change-kind="neutral"
+          change-text=""
+          :sub-detail="`输入 ${formatBigToken(data.kpi.input_tokens)} / 输出 ${formatBigToken(data.kpi.output_tokens)} / 缓存命中 ${formatBigToken(data.kpi.cache_read_tokens)} / 缓存创建 ${formatBigToken(data.kpi.cache_creation_tokens)}`"
+          tooltip="所选时间范围内的 token 消耗合计（含输入/输出/缓存）。"
+        />
       </div>
 
       <GlassCard title="活跃用户与平台成本趋势" tooltip="X 轴为顶部筛选时间内的统计粒度；左侧 Y 轴为活跃人数，右侧 Y 轴为平台成本，单位为元。">
@@ -377,6 +415,13 @@ onMounted(() => {
           <VChart :option="perCapitaChartOption" class="h-56 w-full" autoresize />
         </GlassCard>
       </div>
+
+      <UserTop10Panel
+        :metric="topMetric"
+        :rows="topRows"
+        :loading="topLoading"
+        @metric-change="handleTopMetricChange"
+      />
 
       <GlassCard :title="`${dimensionText}明细`" padding="p-0" tooltip="明细受顶部时间和视角联动；趋势图按所选时间范围自动选择统计粒度。环比均与上一等长周期比较。">
         <template #action>

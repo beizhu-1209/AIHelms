@@ -5,7 +5,7 @@ import GlassCard from './GlassCard.vue'
 import TooltipIcon from '../../../components/TooltipIcon.vue'
 import Pagination from '../../../components/Pagination.vue'
 import { formatCost, formatNumber, formatChange } from '../utils'
-import type { AttributionRow, DateDetailRow, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, ScopeDetailRow } from '../costTypes'
+import type { AttributionRow, DateDetailRow, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, ScopeDetailRow, ScopeUserCostRow } from '../costTypes'
 
 const props = defineProps<{
   activeDetailTab: DetailTab
@@ -18,11 +18,15 @@ const props = defineProps<{
   mcpDetail: McpDetailRow[]
   dateDetail: DateDetailRow[]
   attributionDetail: AttributionRow[]
+  expandedScopeId: number | null
+  scopeUsers: ScopeUserCostRow[]
+  scopeUsersLoading: boolean
 }>()
 
 const emit = defineEmits<{
   tabChange: [tab: DetailTab]
   exportDetail: []
+  toggleScopeUsers: [row: ScopeDetailRow]
   openModelLogs: [row: ModelDetailRow]
   openModelCredentialLogs: [row: ModelCredentialRow]
   openMcpLogs: [row: McpDetailRow]
@@ -31,7 +35,7 @@ const emit = defineEmits<{
   openAttributionLogs: [row: AttributionRow]
 }>()
 
-const { activeDetailTab, detailTabs, isDetailLoading, exporting, dimensionLabel, scopeDetail, modelDetail, mcpDetail, dateDetail, attributionDetail } = toRefs(props)
+const { activeDetailTab, detailTabs, isDetailLoading, exporting, dimensionLabel, scopeDetail, modelDetail, mcpDetail, dateDetail, attributionDetail, expandedScopeId, scopeUsers, scopeUsersLoading } = toRefs(props)
 const pageSize = ref(20)
 const detailPage = ref(1)
 watch(pageSize, () => { detailPage.value = 1 })
@@ -56,6 +60,7 @@ const pagedAttributionDetail = computed(() => attributionDetail.value.slice(page
 
 function handleDetailTabChange(tab: DetailTab) { emit('tabChange', tab) }
 function exportDetail() { emit('exportDetail') }
+function toggleScopeUsers(row: ScopeDetailRow) { if (row.scope_id !== null) emit('toggleScopeUsers', row) }
 function openModelLogs(row: ModelDetailRow) { emit('openModelLogs', row) }
 function openModelCredentialLogs(row: ModelCredentialRow) { emit('openModelCredentialLogs', row) }
 function openMcpLogs(row: McpDetailRow) { emit('openMcpLogs', row) }
@@ -65,6 +70,9 @@ function openAttributionLogs(row: AttributionRow) { emit('openAttributionLogs', 
 
 function formatTokenCount(value: number | null | undefined): string {
   return Math.round(value || 0).toLocaleString()
+}
+function formatTokenBreakdown(row: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number }): string {
+  return `${formatTokenCount(row.input_tokens)} / ${formatTokenCount(row.output_tokens)} / ${formatTokenCount(row.cache_read_tokens)} / ${formatTokenCount(row.cache_creation_tokens)}`
 }
 function formatResourceName(name: string): string {
   if (name === 'llm') return 'LLM'
@@ -115,7 +123,7 @@ function toggleMcpExpanded(row: McpDetailRow) {
 
         <div v-else>
           <div class="max-h-[520px] overflow-auto">
-            <table v-if="activeDetailTab === 'department'" class="min-w-[1120px] w-full text-sm">
+            <table v-if="activeDetailTab === 'department'" class="min-w-[1320px] w-full text-sm">
               <thead class="sticky top-0 z-10 bg-white">
                 <tr class="border-b border-slate-200 text-left text-xs text-slate-400">
                   <th class="py-2.5 font-medium">{{ dimensionLabel }}</th>
@@ -125,25 +133,75 @@ function toggleMcpExpanded(row: McpDetailRow) {
                   <th class="py-2.5 text-right font-medium">外部总成本</th>
                   <th class="py-2.5 text-right font-medium">差额</th>
                   <th class="py-2.5 text-right font-medium">请求数</th>
+                  <th class="py-2.5 text-right font-medium">
+                    <div>Token</div>
+                    <div class="text-[10px] font-normal text-slate-300">输入/输出/缓存命中/缓存创建</div>
+                  </th>
                   <th class="py-2.5 text-right font-medium">人均成本</th>
                   <th class="py-2.5 text-right font-medium">活跃人均成本</th>
                   <th class="py-2.5 text-right font-medium">内部总成本环比</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in pagedScopeDetail" :key="row.scope_name || row.department" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/40">
-                  <td class="py-3 font-medium text-slate-800">{{ row.scope_name || row.department }}</td>
-                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.llm_cost) }}</td>
-                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.mcp_cost) }}</td>
-                  <td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.total_cost) }}</td>
-                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cost) }}</td>
-                  <td class="py-3 text-right" :class="row.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(row.cost_diff) }}</td>
-                  <td class="py-3 text-right text-slate-700">{{ formatNumber(row.requests) }}</td>
-                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.per_capita_cost) }}</td>
-                  <td class="py-3 text-right text-slate-700">{{ formatCost(row.active_per_capita_cost) }}</td>
-                  <td class="py-3 text-right" :class="row.cost_change !== null && row.cost_change > 0 ? 'text-red-500' : 'text-emerald-600'">{{ formatChange(row.cost_change) }}</td>
-                </tr>
-                <tr v-if="scopeDetail.length === 0"><td colspan="10" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
+                <template v-for="row in pagedScopeDetail" :key="row.scope_name || row.department">
+                  <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/40">
+                    <td class="py-3 font-medium text-slate-800">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-left hover:text-blue-700"
+                        :class="row.scope_id !== null ? 'cursor-pointer' : 'cursor-default'"
+                        @click="toggleScopeUsers(row)"
+                      >
+                        <ChevronRight class="h-3.5 w-3.5 shrink-0 transition-transform" :class="expandedScopeId === row.scope_id ? 'rotate-90' : ''" />
+                        <span>{{ row.scope_name || row.department }}</span>
+                      </button>
+                    </td>
+                    <td class="py-3 text-right text-slate-700">{{ formatCost(row.llm_cost) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatCost(row.mcp_cost) }}</td>
+                    <td class="py-3 text-right font-semibold text-slate-900">{{ formatCost(row.total_cost) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatCost(row.external_cost) }}</td>
+                    <td class="py-3 text-right" :class="row.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(row.cost_diff) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatNumber(row.requests) }}</td>
+                    <td class="py-3 text-right text-slate-600 whitespace-nowrap">{{ formatTokenBreakdown(row) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatCost(row.per_capita_cost) }}</td>
+                    <td class="py-3 text-right text-slate-700">{{ formatCost(row.active_per_capita_cost) }}</td>
+                    <td class="py-3 text-right" :class="row.cost_change !== null && row.cost_change > 0 ? 'text-red-500' : 'text-emerald-600'">{{ formatChange(row.cost_change) }}</td>
+                  </tr>
+                  <tr v-if="expandedScopeId === row.scope_id" class="border-b border-slate-100 bg-slate-50/60">
+                    <td colspan="11" class="px-4 py-3">
+                      <div v-if="scopeUsersLoading" class="py-6 text-center text-sm text-slate-400">加载中...</div>
+                      <table v-else class="w-full text-xs">
+                        <thead class="text-slate-400">
+                          <tr class="text-left">
+                            <th class="py-1.5 font-medium">姓名</th>
+                            <th class="py-1.5 font-medium">部门</th>
+                            <th class="py-1.5 text-right font-medium">内部成本</th>
+                            <th class="py-1.5 text-right font-medium">外部成本</th>
+                            <th class="py-1.5 text-right font-medium">差额</th>
+                            <th class="py-1.5 text-right font-medium">请求数</th>
+                            <th class="py-1.5 text-right font-medium">
+                              <div>Token</div>
+                              <div class="text-[10px] font-normal text-slate-300">输入/输出/缓存命中/缓存创建</div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="user in scopeUsers" :key="user.user_id" class="border-t border-slate-200/70">
+                            <td class="py-2 font-medium text-slate-800">{{ user.user_name }}</td>
+                            <td class="py-2 text-slate-500">{{ user.department || '-' }}</td>
+                            <td class="py-2 text-right font-medium text-slate-800">{{ formatCost(user.internal_cost) }}</td>
+                            <td class="py-2 text-right text-slate-600">{{ formatCost(user.external_cost) }}</td>
+                            <td class="py-2 text-right" :class="user.cost_diff >= 0 ? 'text-emerald-600' : 'text-red-500'">{{ formatCost(user.cost_diff) }}</td>
+                            <td class="py-2 text-right text-slate-600">{{ formatNumber(user.requests) }}</td>
+                            <td class="py-2 text-right text-slate-600 whitespace-nowrap">{{ formatTokenBreakdown(user) }}</td>
+                          </tr>
+                          <tr v-if="scopeUsers.length === 0"><td colspan="7" class="py-6 text-center text-slate-400">暂无人员明细</td></tr>
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                </template>
+                <tr v-if="scopeDetail.length === 0"><td colspan="11" class="py-12 text-center text-sm text-slate-400">暂无数据</td></tr>
               </tbody>
             </table>
 

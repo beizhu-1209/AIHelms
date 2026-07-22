@@ -2,20 +2,23 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronDown, RefreshCw } from 'lucide-vue-next'
-import { createExportTask, getEfficiencyCost, getEfficiencyCostDetail, toast } from '@aihelms/shared'
+import { createExportTask, getEfficiencyCost, getEfficiencyCostDetail, getEfficiencyCostDetailScopeUsers, getEfficiencyTopUsers, toast } from '@aihelms/shared'
 import ExportTaskNotice from '../../components/ExportTaskNotice.vue'
 import ScopePickerDialog from '../../components/ScopePickerDialog.vue'
 import GlassCard from './components/GlassCard.vue'
 import KpiCard from './components/KpiCard.vue'
 import PresetTabs from './components/PresetTabs.vue'
 import CostCharts from './components/CostCharts.vue'
+import UserTop10Panel from './components/UserTop10Panel.vue'
 import CostDetailSection from './components/CostDetailSection.vue'
-import { formatCost, formatCostShort, formatNumber, formatChange, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
+import { formatCost, formatCostShort, formatNumber, formatChange, presetToRange, submitEfficiencyRefresh, keepRefreshIndicator } from './utils'
 import { useScopeFilter } from './useScopeFilter'
 
-import type { AttributionRow, CostComposition, CostKpi, CostTrendItem, DateDetailRow, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, PerCapitaItem, ScopeDetailRow } from './costTypes'
+import type { AttributionRow, CostComposition, CostKpi, CostTrendItem, DateDetailRow, DetailTab, McpDetailRow, McpToolRow, ModelCredentialRow, ModelDetailRow, PerCapitaItem, ScopeDetailRow, ScopeUserCostRow, UserTop10Row } from './costTypes'
 
 const TIME_PRESETS = [
+  { key: 'today', label: '今天' },
+  { key: 'yesterday', label: '昨天' },
   { key: 'month', label: '本月' },
   { key: '7d', label: '近7天' },
   { key: '30d', label: '近30天' },
@@ -57,6 +60,12 @@ const trendData = ref<CostTrendItem[]>([])
 const composition = ref<CostComposition>({ by_resource_type: [], by_scope: [] })
 const perCapita = ref<PerCapitaItem[]>([])
 const scopeDetail = ref<ScopeDetailRow[]>([])
+const expandedScopeId = ref<number | null>(null)
+const scopeUsers = ref<ScopeUserCostRow[]>([])
+const scopeUsersLoading = ref(false)
+const topMetric = ref<'cost' | 'tokens' | 'requests'>('cost')
+const topRows = ref<UserTop10Row[]>([])
+const topLoading = ref(false)
 const modelDetail = ref<ModelDetailRow[]>([])
 const mcpDetail = ref<McpDetailRow[]>([])
 const dateDetail = ref<DateDetailRow[]>([])
@@ -92,21 +101,8 @@ function getLogDateQuery(): Record<string, string> {
   if (activePreset.value === 'custom' && customStart.value && customEnd.value) {
     return { start_date: customStart.value, end_date: customEnd.value }
   }
-  if (activePreset.value === '7d') {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - 6)
-    return { start_date: start.toISOString().slice(0, 10), end_date: end.toISOString().slice(0, 10) }
-  }
-  if (activePreset.value === '30d') {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - 29)
-    return { start_date: start.toISOString().slice(0, 10), end_date: end.toISOString().slice(0, 10) }
-  }
-  const now = new Date()
-  const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  return { start_date: start, end_date: now.toISOString().slice(0, 10) }
+  const range = presetToRange(activePreset.value)
+  return { start_date: range.start, end_date: range.end }
 }
 
 
@@ -206,6 +202,24 @@ async function loadOverview() {
     isLoading.value = false
   }
   await loadDetail()
+  await loadTopUsers()
+}
+
+async function loadTopUsers() {
+  topLoading.value = true
+  try {
+    topRows.value = await getEfficiencyTopUsers<UserTop10Row[]>({
+      ...getBaseParams(),
+      metric: topMetric.value,
+    })
+  } finally {
+    topLoading.value = false
+  }
+}
+
+function handleTopMetricChange(metric: 'cost' | 'tokens' | 'requests') {
+  topMetric.value = metric
+  loadTopUsers()
 }
 
 async function loadDetail() {
@@ -219,7 +233,11 @@ async function loadDetail() {
       attribution?: AttributionRow[]
       freshness?: { last_updated_at: string | null; last_updated_label: string }
     }>({ ...getBaseParams(), tab: activeDetailTab.value })
-    if (res.department) scopeDetail.value = res.department
+    if (res.department) {
+      scopeDetail.value = res.department
+      expandedScopeId.value = null
+      scopeUsers.value = []
+    }
     if (res.model) {
       modelDetail.value = res.model
     }
@@ -259,7 +277,28 @@ function handleDimensionChange(val: 'department' | 'project') {
 
 function handleDetailTabChange(tab: DetailTab) {
   activeDetailTab.value = tab
+  expandedScopeId.value = null
+  scopeUsers.value = []
   loadDetail()
+}
+
+async function toggleScopeUsers(row: ScopeDetailRow) {
+  if (row.scope_id === null) return
+  if (expandedScopeId.value === row.scope_id) {
+    expandedScopeId.value = null
+    scopeUsers.value = []
+    return
+  }
+  expandedScopeId.value = row.scope_id
+  scopeUsers.value = []
+  scopeUsersLoading.value = true
+  try {
+    const params: Record<string, string> = { ...getDateParams(), dimension: dimension.value, scope_id: String(row.scope_id) }
+    if (resourceType.value) params.resource_type = resourceType.value
+    scopeUsers.value = await getEfficiencyCostDetailScopeUsers<ScopeUserCostRow[]>(params)
+  } finally {
+    scopeUsersLoading.value = false
+  }
 }
 
 
@@ -395,6 +434,13 @@ onMounted(() => {
         :dimension-cost-note="dimensionCostNote"
       />
 
+      <UserTop10Panel
+        :metric="topMetric"
+        :rows="topRows"
+        :loading="topLoading"
+        @metric-change="handleTopMetricChange"
+      />
+
       <CostDetailSection
         :active-detail-tab="activeDetailTab"
         :detail-tabs="detailTabs"
@@ -406,8 +452,12 @@ onMounted(() => {
         :mcp-detail="mcpDetail"
         :date-detail="dateDetail"
         :attribution-detail="attributionDetail"
+        :expanded-scope-id="expandedScopeId"
+        :scope-users="scopeUsers"
+        :scope-users-loading="scopeUsersLoading"
         @tab-change="handleDetailTabChange"
         @export-detail="exportDetail"
+        @toggle-scope-users="toggleScopeUsers"
         @open-model-logs="openModelLogs"
         @open-model-credential-logs="openModelCredentialLogs"
         @open-mcp-logs="openMcpLogs"

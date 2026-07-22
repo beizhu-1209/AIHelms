@@ -20,6 +20,11 @@ def _parse_scope_ids(scope_ids: str, scope_id: str, department: str) -> list[int
 def _parse_period(period: str | None) -> tuple[date, date]:
     """Convert frontend period param to start_date/end_date."""
     today = date.today()
+    if period == "today":
+        return today, today
+    if period == "yesterday":
+        yesterday = today - timedelta(days=1)
+        return yesterday, yesterday
     if period == "7d":
         return today - timedelta(days=6), today
     if period == "30d":
@@ -250,6 +255,54 @@ async def get_cost_detail(
     project_id = selected_scopes if dimension == "project" else None
     data = await efficiency_service.get_cost_detail(
         session, start, end, tab, cost_type, dept_id, dimension, project_id
+    )
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/cost/detail/scope-users")
+async def get_cost_detail_scope_users(
+    period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    resource_type: str = Query(""),
+    dimension: str = Query("department", pattern="^(department|project)$"),
+    scope_id: int = Query(...),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    cost_type = resource_type if resource_type else "all"
+    data = await efficiency_service.get_cost_detail_scope_users(
+        session, start, end, dimension, scope_id, cost_type
+    )
+    return {"code": 200, "message": "ok", "data": data}
+
+
+@router.get("/top-users")
+async def get_top_users(
+    period: str | None = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    metric: str = Query("cost", pattern="^(cost|tokens|requests)$"),
+    resource_type: str = Query(""),
+    dimension: str = Query("department", pattern="^(department|project)$"),
+    scope_ids: str = Query(""),
+    session: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if start_date and end_date:
+        start, end = start_date, end_date
+    else:
+        start, end = _parse_period(period)
+    cost_type = resource_type if resource_type else "all"
+    selected = _parse_scope_ids(scope_ids, "", "")
+    department_ids = selected if dimension == "department" else None
+    project_ids = selected if dimension == "project" else None
+    data = await efficiency_service.get_top_users(
+        session, start, end, metric, cost_type, department_ids, project_ids
     )
     return {"code": 200, "message": "ok", "data": data}
 

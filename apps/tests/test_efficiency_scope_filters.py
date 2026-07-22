@@ -255,6 +255,16 @@ async def test_budget_scope_global_usage_matches_scope_cost(monkeypatch):
         "get_key_top10_budget",
         AsyncMock(return_value=[]),
     )
+    monkeypatch.setattr(
+        efficiency_budget_service.efficiency_repo,
+        "get_user_personal_key_budget",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        efficiency_budget_service.efficiency_repo,
+        "get_user_budget_top10",
+        AsyncMock(return_value=[]),
+    )
 
     result = await efficiency_budget_service.get_budget(
         session, "2026-07", [28], None
@@ -317,6 +327,16 @@ async def test_budget_without_scope_counts_all_usage(monkeypatch):
     monkeypatch.setattr(
         efficiency_budget_service.efficiency_repo,
         "get_key_top10_budget",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        efficiency_budget_service.efficiency_repo,
+        "get_user_personal_key_budget",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        efficiency_budget_service.efficiency_repo,
+        "get_user_budget_top10",
         AsyncMock(return_value=[]),
     )
 

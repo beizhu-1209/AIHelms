@@ -60,7 +60,13 @@ const unusedUsers = ref<UnusedUser[]>([])
 
 const deptSortKey = ref<keyof DeptCoverageRow>('coverage_rate')
 const deptSortAsc = ref(false)
-const TIME_PRESETS = [{ key: 'month', label: '本月' }, { key: '7d', label: '近7天' }, { key: '30d', label: '近30天' }]
+const TIME_PRESETS = [
+  { key: 'today', label: '今天' },
+  { key: 'yesterday', label: '昨天' },
+  { key: 'month', label: '本月' },
+  { key: '7d', label: '近7天' },
+  { key: '30d', label: '近30天' },
+]
 
 function getDateParams(): Record<string, string> {
   if (timePreset.value === 'custom' && customStart.value && customEnd.value) {

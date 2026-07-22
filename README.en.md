@@ -8,7 +8,7 @@
 <p>Built on top of LiteLLM · Model distribution, AI identity, cost control, and governance</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.17-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.17)
+[![Release](https://img.shields.io/badge/Release-v0.1.18-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.18)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.18` | 2026-07-22 | Added a Token column to cost detail by department/project with inline drill-down into members; added Token usage stats and a Top 10 people leaderboard to Efficiency overview, cost, budget and the dashboard; reworked the budget detail "Key budget" tab into "Per-person budget". |
 | `0.1.17` | 2026-07-17 | Unified department and project filters across AI Efficiency and fixed cost details; added fuzzy search to log and admin filters with correct person-to-Key linkage; added Workbuddy to the user-portal client guidance. |
 | `0.1.16` | 2026-07-14 | Added enterprise license management and platform branding customization. |
 | `0.1.15` | 2026-07-013 | Fix bug . |

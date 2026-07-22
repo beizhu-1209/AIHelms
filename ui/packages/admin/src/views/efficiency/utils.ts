@@ -22,6 +22,13 @@ export function formatNumber(val: number): string {
   return val.toLocaleString()
 }
 
+export function formatBigToken(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
+  return String(n)
+}
+
 export function formatChange(val: number | null | undefined): string {
   if (val === null || val === undefined) return '--'
   const sign = val > 0 ? '+' : ''
@@ -34,7 +41,8 @@ export interface DatePreset {
 }
 
 export const DATE_PRESETS: DatePreset[] = [
-  { key: 'today', label: '今日' },
+  { key: 'today', label: '今天' },
+  { key: 'yesterday', label: '昨天' },
   { key: '7d', label: '本周' },
   { key: 'month', label: '本月' },
   { key: 'last_month', label: '上月' },
@@ -42,37 +50,56 @@ export const DATE_PRESETS: DatePreset[] = [
   { key: '90d', label: '本季' },
 ]
 
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function presetToRange(key: string): { start: string; end: string } {
   const t = new Date()
-  const today = t.toISOString().slice(0, 10)
+  const today = formatLocalDate(t)
   if (key === 'today') return { start: today, end: today }
+  if (key === 'yesterday') {
+    const yesterday = new Date(t)
+    yesterday.setDate(t.getDate() - 1)
+    const date = formatLocalDate(yesterday)
+    return { start: date, end: date }
+  }
   if (key === '7d') {
+    const start = new Date(t)
+    start.setDate(t.getDate() - 6)
     return {
-      start: new Date(t.getTime() - 6 * 86400000).toISOString().slice(0, 10),
+      start: formatLocalDate(start),
       end: today,
     }
   }
   if (key === 'month') {
     return {
-      start: new Date(t.getFullYear(), t.getMonth(), 1).toISOString().slice(0, 10),
+      start: formatLocalDate(new Date(t.getFullYear(), t.getMonth(), 1)),
       end: today,
     }
   }
   if (key === 'last_month') {
     return {
-      start: new Date(t.getFullYear(), t.getMonth() - 1, 1).toISOString().slice(0, 10),
-      end: new Date(t.getFullYear(), t.getMonth(), 0).toISOString().slice(0, 10),
+      start: formatLocalDate(new Date(t.getFullYear(), t.getMonth() - 1, 1)),
+      end: formatLocalDate(new Date(t.getFullYear(), t.getMonth(), 0)),
     }
   }
   if (key === '30d') {
+    const start = new Date(t)
+    start.setDate(t.getDate() - 29)
     return {
-      start: new Date(t.getTime() - 29 * 86400000).toISOString().slice(0, 10),
+      start: formatLocalDate(start),
       end: today,
     }
   }
   if (key === '90d') {
+    const start = new Date(t)
+    start.setDate(t.getDate() - 89)
     return {
-      start: new Date(t.getTime() - 89 * 86400000).toISOString().slice(0, 10),
+      start: formatLocalDate(start),
       end: today,
     }
   }

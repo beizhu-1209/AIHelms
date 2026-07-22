@@ -276,12 +276,17 @@ async def get_cost_detail(
         {
             "department": item["name"],
             "scope_name": item["name"],
+            "scope_id": item["scope_id"],
             "llm_cost": item["llm_cost"],
             "mcp_cost": item["mcp_cost"],
             "total_cost": item["internal_cost"],
             "external_cost": item["external_cost"],
             "cost_diff": round(item["internal_cost"] - item["external_cost"], 4),
             "requests": item["requests"],
+            "input_tokens": item["input_tokens"],
+            "output_tokens": item["output_tokens"],
+            "cache_read_tokens": item["cache_read_tokens"],
+            "cache_creation_tokens": item["cache_creation_tokens"],
             "per_capita_cost": item["per_capita"],
             "active_per_capita_cost": item["active_per_capita"],
             "cost_change": _calc_change(item["internal_cost"], prev_by_name.get(item["name"], 0)),
@@ -290,3 +295,38 @@ async def get_cost_detail(
     ]
     return {"department": items}
 
+
+async def get_cost_detail_scope_users(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    dimension: str,
+    scope_id: int,
+    cost_type: str = "all",
+) -> list[dict]:
+    ct = None if cost_type == "all" else cost_type
+    return await efficiency_repo.get_cost_detail_scope_users(
+        session, start_date, end_date, dimension, scope_id, ct
+    )
+
+
+async def get_top_users(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    metric: str = "cost",
+    cost_type: str = "all",
+    department_id=None,
+    project_id=None,
+) -> list[dict]:
+    selected_cost_type = None if cost_type == "all" else cost_type
+    rows = await efficiency_repo.get_user_top10(
+        session,
+        start_date,
+        end_date,
+        selected_cost_type,
+        department_id,
+        project_id,
+        metric,
+    )
+    return [{"rank": index + 1, **row} for index, row in enumerate(rows)]

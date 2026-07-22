@@ -42,6 +42,9 @@ async def get_dashboard(session: AsyncSession, start_date: date, end_date: date)
     pending_approvals, pending_total = await _get_latest_pending_approvals(session)
     service_status = await _get_service_status(session)
     last_updated_at = await _get_last_updated_at(session)
+    cost_leaderboard = await dashboard_repo.get_cost_leaderboard(
+        session, start_date, end_date
+    )
 
     status["pendingCount"] = pending_total
     status["pendingApprovals"] = pending_total
@@ -63,6 +66,7 @@ async def get_dashboard(session: AsyncSession, start_date: date, end_date: date)
         "pendingApprovalsList": pending_approvals,
         "pendingItems": pending_approvals,
         "serviceStatus": service_status,
+        "costLeaderboard": cost_leaderboard,
     }
 
 
@@ -94,6 +98,7 @@ async def _get_status(
 ) -> dict:
     current = await _range_status(session, start_date, end_date)
     previous = await _range_status(session, prev_start, prev_end)
+    token_stats = await dashboard_repo.get_token_stats(session, start_date, end_date)
     cost_change_percent = _calc_change(current["internalCost"], previous["internalCost"])
 
     return {
@@ -108,6 +113,11 @@ async def _get_status(
         "externalCost": current["externalCost"],
         "costDiff": round(current["internalCost"] - current["externalCost"], 2),
         "costChangePercent": cost_change_percent,
+        "totalTokens": token_stats["total"],
+        "inputTokens": token_stats["input"],
+        "outputTokens": token_stats["output"],
+        "cacheReadTokens": token_stats["cache_read"],
+        "cacheCreationTokens": token_stats["cache_creation"],
         "pendingCount": 0,
         "pendingApprovals": 0,
         "pendingAlerts": 0,
