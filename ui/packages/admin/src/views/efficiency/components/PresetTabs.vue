@@ -11,7 +11,8 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   presets: () => [
-    { key: 'today', label: '今日' },
+    { key: 'today', label: '今天' },
+    { key: 'yesterday', label: '昨天' },
     { key: '7d', label: '本周' },
     { key: 'month', label: '本月' },
     { key: 'last_month', label: '上月' },

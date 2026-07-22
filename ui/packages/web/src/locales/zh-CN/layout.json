@@ -3,6 +3,7 @@
   "layout.nav.market": "AI 市场",
   "layout.nav.models": "模型广场",
   "layout.nav.agents": "智能体中心",
+  "layout.docs": "文档",
   "layout.adminConsole": "管理后台",
   "layout.password.mismatch": "两次输入的新密码不一致",
   "layout.password.failed": "修改失败，请重试",

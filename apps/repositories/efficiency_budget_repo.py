@@ -294,3 +294,95 @@ async def get_cumulative_cost_by_date(
         cumulative += float(r[1])
         rows.append({"date": str(r[0]), "actual": round(cumulative, 2)})
     return rows
+
+
+async def get_user_personal_key_budget(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    key_ids: list[int] | None = None,
+) -> list[dict]:
+    if key_ids == []:
+        return []
+    params: dict = {"start": start_date, "end": end_date}
+    id_filter = build_id_filter("k.id", key_ids, params, "user_key")
+    sql = text(
+        "SELECT COALESCE(NULLIF(u.display_name, ''), u.username, '') AS user_name,"
+        " k.name AS key_name, k.key_type,"
+        " k.budget_limit, COALESCE(SUM(c.internal_cost),0) AS used"
+        " FROM aihelms.ai_keys k"
+        " JOIN aihelms.users u ON u.id = k.owner_id AND k.owner_type = 'user'"
+        " LEFT JOIN aihelms.cost_summary_daily c ON c.ai_key_id = k.id"
+        " AND c.summary_date >= :start AND c.summary_date <= :end"
+        " WHERE k.is_active = true"
+        " AND k.key_type IN ('personal_main','personal_scene')"
+        f"{id_filter}"
+        " GROUP BY k.id, u.display_name, u.username, k.name, k.key_type, k.budget_limit"
+        " ORDER BY used DESC"
+    )
+    result = await session.execute(sql, params)
+    return [
+        {
+            "user_name": row[0],
+            "key_name": row[1],
+            "is_main": row[2] == "personal_main",
+            "budget": float(row[3] or 0),
+            "used": float(row[4]),
+            "execution_rate": (
+                round(float(row[4]) / float(row[3]) * 100, 1)
+                if row[3] and float(row[3]) > 0
+                else 0
+            ),
+        }
+        for row in result.fetchall()
+    ]
+
+
+async def get_user_budget_top10(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    key_ids: list[int] | None = None,
+) -> list[dict]:
+    if key_ids == []:
+        return []
+    params: dict = {"start": start_date, "end": end_date}
+    id_filter = build_id_filter("k.id", key_ids, params, "user_budget_top")
+    sql = text(
+        "WITH RECURSIVE all_paths AS ("
+        " SELECT id, name, parent_id, name::text AS path"
+        " FROM aihelms.departments WHERE parent_id IS NULL"
+        " UNION ALL"
+        " SELECT d.id, d.name, d.parent_id, (ap.path || ' / ' || d.name)::text"
+        " FROM aihelms.departments d JOIN all_paths ap ON ap.id = d.parent_id"
+        " ), user_dept AS ("
+        " SELECT DISTINCT ON (ud.user_id) ud.user_id, ap.path"
+        " FROM aihelms.user_departments ud"
+        " JOIN all_paths ap ON ap.id = ud.department_id"
+        " ORDER BY ud.user_id, length(ap.path) DESC"
+        " )"
+        " SELECT u.id,"
+        " COALESCE(NULLIF(u.display_name, ''), u.username, '') AS user_name,"
+        " COALESCE(udp.path,'') AS department,"
+        " COALESCE(SUM(c.internal_cost),0) AS used"
+        " FROM aihelms.ai_keys k"
+        " JOIN aihelms.users u ON u.id = k.owner_id AND k.owner_type = 'user'"
+        " LEFT JOIN user_dept udp ON udp.user_id = u.id"
+        " LEFT JOIN aihelms.cost_summary_daily c ON c.ai_key_id = k.id"
+        " AND c.summary_date >= :start AND c.summary_date <= :end"
+        " WHERE k.is_active = true"
+        " AND k.key_type IN ('personal_main','personal_scene')"
+        f"{id_filter}"
+        " GROUP BY u.id, u.display_name, u.username, udp.path"
+        " ORDER BY used DESC LIMIT 10"
+    )
+    result = await session.execute(sql, params)
+    return [
+        {
+            "rank": index + 1,
+            "user_name": row[1],
+            "department": row[2],
+            "used": float(row[3]),
+        }
+        for index, row in enumerate(result.fetchall())
+    ]

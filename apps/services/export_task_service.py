@@ -34,6 +34,7 @@ EXPORT_TYPE_OPTIONS = {
         "cost_department",
         "cost_project",
         "budget_key",
+        "budget_user",
         "budget_department",
         "budget_project",
         "health_model",
@@ -340,5 +341,4 @@ async def get_export_task(session: AsyncSession, task_id: int) -> ExportTask | N
 def _default_task_name(source: str, export_type: str) -> str:
     source_label = next((item["label"] for item in SOURCE_OPTIONS if item["key"] == source), source)
     return f"{source_label}-{export_type}"
-
 

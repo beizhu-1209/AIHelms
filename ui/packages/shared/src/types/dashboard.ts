@@ -10,6 +10,11 @@ export interface DashboardStatus {
   externalCost: number
   costDiff: number
   costChangePercent: number
+  totalTokens: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
   pendingCount: number
   pendingApprovals: number
   pendingAlerts: number
@@ -67,6 +72,13 @@ export interface DashboardPeriod {
   label: string
 }
 
+export interface CostLeaderboardItem {
+  rank: number
+  user_name: string
+  department: string
+  internal_cost: number
+}
+
 export interface DashboardData {
   period: DashboardPeriod
   lastUpdatedAt: string | null
@@ -79,4 +91,5 @@ export interface DashboardData {
   resources: ResourceSummary[]
   recentActivities: RecentActivity[]
   serviceStatus: ServiceStatusItem[]
+  costLeaderboard: CostLeaderboardItem[]
 }

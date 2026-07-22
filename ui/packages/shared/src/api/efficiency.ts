@@ -93,6 +93,14 @@ export function getEfficiencyCostDetail<T>(params?: Params) {
   return request<T>('/api/v1/efficiency/cost/detail', { params })
 }
 
+export function getEfficiencyCostDetailScopeUsers<T>(params?: Params) {
+  return request<T>('/api/v1/efficiency/cost/detail/scope-users', { params })
+}
+
+export function getEfficiencyTopUsers<T>(params?: Params) {
+  return request<T>('/api/v1/efficiency/top-users', { params })
+}
+
 export function getEfficiencyBudget<T>(params?: Params) {
   return request<T>('/api/v1/efficiency/budget', { params })
 }

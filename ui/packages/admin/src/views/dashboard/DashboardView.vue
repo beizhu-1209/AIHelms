@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock3,
+  Coins,
   DollarSign,
   FileText,
   FolderTree,
@@ -25,9 +26,10 @@ import {
   Users,
   Zap,
 } from 'lucide-vue-next'
-import { getDashboard, refreshDashboard, toast } from '@aihelms/shared'
+import { getDashboard, getEfficiencyTopUsers, refreshDashboard, toast } from '@aihelms/shared'
 import { keepRefreshIndicator } from '../efficiency/utils'
 import TooltipIcon from '../../components/TooltipIcon.vue'
+import DashboardUserTop10 from './components/DashboardUserTop10.vue'
 import type { DashboardData, PendingItem, ResourceSummary, ServiceStatusItem } from '@aihelms/shared'
 
 const router = useRouter()
@@ -37,6 +39,19 @@ const data = ref<DashboardData | null>(null)
 const period = ref('month')
 const customStart = ref('')
 const customEnd = ref('')
+const leaderboardMetric = ref<'cost' | 'tokens' | 'requests'>('cost')
+const leaderboardRows = ref<DashboardLeaderboardRow[]>([])
+const isLeaderboardLoading = ref(false)
+
+interface DashboardLeaderboardRow {
+  rank: number
+  user_id: number
+  user_name: string
+  department: string
+  internal_cost: number
+  total_tokens: number
+  requests: number
+}
 
 const periodOptions = [
   { value: 'today', label: '今日' },
@@ -115,9 +130,27 @@ async function loadData() {
   isLoading.value = true
   try {
     data.value = await getDashboard(getQueryParams())
+    await loadLeaderboard()
   } finally {
     isLoading.value = false
   }
+}
+
+async function loadLeaderboard() {
+  isLeaderboardLoading.value = true
+  try {
+    leaderboardRows.value = await getEfficiencyTopUsers<DashboardLeaderboardRow[]>({
+      ...getQueryParams(),
+      metric: leaderboardMetric.value,
+    })
+  } finally {
+    isLeaderboardLoading.value = false
+  }
+}
+
+function changeLeaderboardMetric(metric: 'cost' | 'tokens' | 'requests') {
+  leaderboardMetric.value = metric
+  loadLeaderboard()
 }
 
 async function handleRefresh() {
@@ -184,6 +217,13 @@ function formatNumber(value: number) {
   return value.toLocaleString()
 }
 
+function formatBigToken(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
+  return String(n)
+}
+
 onMounted(loadData)
 </script>
 
@@ -238,7 +278,7 @@ onMounted(loadData)
     </div>
 
     <template v-else-if="data">
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-5 gap-4">
         <button class="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md" @click="handleNavigate('/efficiency')">
           <div class="flex items-center justify-between">
             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50"><Users class="h-5 w-5 text-blue-600" /></div>
@@ -267,6 +307,19 @@ onMounted(loadData)
           <div class="mt-4 text-2xl font-semibold text-slate-950">{{ formatMoney(data.status.internalCost) }}</div>
           <div class="mt-1 flex items-center gap-1 text-xs text-slate-500">平台成本 <TooltipIcon text="所选时间内 AIHelms 平台日志计算出的内部计费成本。" :focusable="false" width-class="w-72" /></div>
           <div class="mt-3 text-xs text-slate-400">外部 {{ formatMoney(data.status.externalCost) }} / 差额 {{ formatMoney(data.status.costDiff) }}</div>
+        </button>
+
+        <button class="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-purple-200 hover:shadow-md" @click="handleNavigate('/efficiency')">
+          <div class="flex items-center justify-between">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50"><Coins class="h-5 w-5 text-purple-600" /></div>
+            <span class="rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">Token</span>
+          </div>
+          <div class="mt-4 text-2xl font-semibold text-slate-950">{{ formatBigToken(data.status.totalTokens) }}</div>
+          <div class="mt-1 flex items-center gap-1 text-xs text-slate-500">Token 用量 <TooltipIcon text="所选时间内的 Token 消耗合计，包含输入、输出、缓存命中和缓存创建。" :focusable="false" width-class="w-72" /></div>
+          <div class="mt-3 space-y-0.5 text-xs text-slate-400">
+            <div>输入 {{ formatBigToken(data.status.inputTokens) }} / 输出 {{ formatBigToken(data.status.outputTokens) }}</div>
+            <div>缓存命中 {{ formatBigToken(data.status.cacheReadTokens) }} / 缓存创建 {{ formatBigToken(data.status.cacheCreationTokens) }}</div>
+          </div>
         </button>
 
         <button class="group rounded-xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" :class="data.status.pendingCount > 0 ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-emerald-200'" @click="handleNavigate('/resource-approval?status=pending')">
@@ -405,6 +458,13 @@ onMounted(loadData)
           </div>
         </div>
       </div>
+
+      <DashboardUserTop10
+        :metric="leaderboardMetric"
+        :rows="leaderboardRows"
+        :loading="isLeaderboardLoading"
+        @metric-change="changeLeaderboardMetric"
+      />
     </template>
   </div>
 </template>

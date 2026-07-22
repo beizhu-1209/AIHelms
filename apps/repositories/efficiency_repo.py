@@ -17,6 +17,8 @@ from repositories.efficiency_budget_repo import (
     get_key_top10_budget,
     get_project_budget_usage,
     get_scope_budget_key_ids,
+    get_user_budget_top10,
+    get_user_personal_key_budget,
 )
 from repositories.efficiency_cost_repo import (
     get_cost_attribution_detail,
@@ -28,9 +30,11 @@ from repositories.efficiency_cost_repo import (
     get_cost_detail_by_dimension,
     get_cost_detail_by_mcp,
     get_cost_detail_by_model,
+    get_cost_detail_scope_users,
     get_cost_trend,
     get_dept_per_capita_cost,
     get_per_capita_cost_by_dimension,
+    get_user_top10,
 )
 from repositories.efficiency_report_repo import (
     create_report,
@@ -88,6 +92,42 @@ async def get_summary_trend(
         }
         for r in result.fetchall()
     ]
+
+
+async def get_period_token_stats(
+    session: AsyncSession,
+    start_date: date,
+    end_date: date,
+    department_ids: list[int] | None = None,
+    project_ids: list[int] | None = None,
+) -> dict:
+    params: dict = {"start": start_date, "end": end_date}
+    scope_filter = build_scope_filter(
+        "c.user_id", department_ids, project_ids, params, "token_stats"
+    )
+    sql = text(
+        "SELECT COALESCE(SUM(c.input_tokens),0), COALESCE(SUM(c.output_tokens),0),"
+        " COALESCE(SUM(c.cache_read_tokens),0),"
+        " COALESCE(SUM(c.cache_creation_tokens),0)"
+        " FROM aihelms.cost_summary_daily c"
+        " WHERE c.summary_date >= :start AND c.summary_date <= :end"
+        f"{scope_filter}"
+    )
+    row = (await session.execute(sql, params)).one()
+    input_tokens, output_tokens = int(row[0]), int(row[1])
+    cache_read_tokens, cache_creation_tokens = int(row[2]), int(row[3])
+    return {
+        "total": (
+            input_tokens
+            + output_tokens
+            + cache_read_tokens
+            + cache_creation_tokens
+        ),
+        "input": input_tokens,
+        "output": output_tokens,
+        "cache_read": cache_read_tokens,
+        "cache_creation": cache_creation_tokens,
+    }
 
 
 async def get_dept_ranking(

@@ -113,3 +113,71 @@ async def get_last_updated_at(session: AsyncSession) -> datetime | None:
             COALESCE((SELECT MAX(called_at)::timestamptz FROM aihelms.mcp_call_logs), '-infinity'::timestamptz)
         ), '-infinity'::timestamptz)"""))
     return result.scalar()
+
+
+async def get_token_stats(
+    session: AsyncSession, start_date: date, end_date: date
+) -> dict:
+    sql = text(
+        "SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),"
+        " COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_creation_tokens),0)"
+        " FROM aihelms.cost_summary_daily"
+        " WHERE summary_date >= :start AND summary_date <= :end"
+    )
+    row = (
+        await session.execute(sql, {"start": start_date, "end": end_date})
+    ).one()
+    input_tokens, output_tokens = int(row[0]), int(row[1])
+    cache_read_tokens, cache_creation_tokens = int(row[2]), int(row[3])
+    return {
+        "total": (
+            input_tokens
+            + output_tokens
+            + cache_read_tokens
+            + cache_creation_tokens
+        ),
+        "input": input_tokens,
+        "output": output_tokens,
+        "cache_read": cache_read_tokens,
+        "cache_creation": cache_creation_tokens,
+    }
+
+
+async def get_cost_leaderboard(
+    session: AsyncSession, start_date: date, end_date: date
+) -> list[dict]:
+    sql = text(
+        "WITH RECURSIVE all_paths AS ("
+        " SELECT id, name, parent_id, name::text AS path"
+        " FROM aihelms.departments WHERE parent_id IS NULL"
+        " UNION ALL"
+        " SELECT d.id, d.name, d.parent_id, (ap.path || ' / ' || d.name)::text"
+        " FROM aihelms.departments d JOIN all_paths ap ON ap.id = d.parent_id"
+        " ), user_dept AS ("
+        " SELECT DISTINCT ON (ud.user_id) ud.user_id, ap.path"
+        " FROM aihelms.user_departments ud"
+        " JOIN all_paths ap ON ap.id = ud.department_id"
+        " ORDER BY ud.user_id, length(ap.path) DESC"
+        " )"
+        " SELECT c.user_id,"
+        " COALESCE(NULLIF(u.display_name, ''), u.username, '') AS user_name,"
+        " COALESCE(udp.path, '') AS department,"
+        " COALESCE(SUM(c.internal_cost), 0) AS internal_cost"
+        " FROM aihelms.cost_summary_daily c"
+        " JOIN aihelms.users u ON u.id = c.user_id AND u.is_active = true"
+        " LEFT JOIN user_dept udp ON udp.user_id = c.user_id"
+        " WHERE c.summary_date >= :start AND c.summary_date <= :end"
+        " AND c.user_id IS NOT NULL"
+        " GROUP BY c.user_id, u.display_name, u.username, udp.path"
+        " ORDER BY SUM(c.internal_cost) DESC LIMIT 10"
+    )
+    result = await session.execute(sql, {"start": start_date, "end": end_date})
+    return [
+        {
+            "rank": index + 1,
+            "user_name": row[1],
+            "department": row[2],
+            "internal_cost": float(row[3]),
+        }
+        for index, row in enumerate(result.fetchall())
+    ]

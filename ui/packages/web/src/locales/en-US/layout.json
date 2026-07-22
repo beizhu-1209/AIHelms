@@ -3,6 +3,7 @@
   "layout.nav.market": "AI Tools",
   "layout.nav.models": "Model Hub",
   "layout.nav.agents": "Agent Center",
+  "layout.docs": "Docs",
   "layout.adminConsole": "Admin",
   "layout.password.mismatch": "The new passwords do not match.",
   "layout.password.failed": "Could not change the password. Try again.",

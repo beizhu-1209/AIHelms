@@ -65,7 +65,7 @@ export {
 } from './api/usageLogs'
 export type { LlmLogQuery, McpLogQuery, SkillLogQuery, AgentLogQuery } from './api/usageLogs'
 export type {
-  DashboardData, DashboardStatus, PendingItem, HourlyTrend, TrendPoint, ResourceSummary, RecentActivity, ServiceStatusItem,
+  DashboardData, DashboardStatus, PendingItem, HourlyTrend, TrendPoint, ResourceSummary, RecentActivity, ServiceStatusItem, CostLeaderboardItem,
 } from './types/dashboard'
 export { getDashboard, refreshDashboard, getDashboardRefreshStatus } from './api/dashboard'
 export type { DashboardQuery, RefreshTaskStatus } from './api/dashboard'
@@ -87,5 +87,6 @@ export {
   refreshEfficiencyData, getEfficiencyAdoption, getEfficiencyAdoptionAgents,
   getEfficiencyAdoptionResources, getEfficiencyAdoptionUnusedUsers,
   getEfficiencyAdoptionScopeUsers, getEfficiencyCost, getEfficiencyCostDetail,
+  getEfficiencyCostDetailScopeUsers, getEfficiencyTopUsers,
   getEfficiencyBudget, getEfficiencyBudgetAlerts, getEfficiencyHealth,
 } from './api/efficiency'

@@ -59,6 +59,11 @@ def _date_range(params: dict[str, object]) -> tuple[date, date]:
         return date.fromisoformat(str(start_raw)), date.fromisoformat(str(end_raw))
     today = date.today()
     period = _text(params, "period", "month")
+    if period == "today":
+        return today, today
+    if period == "yesterday":
+        yesterday = today - timedelta(days=1)
+        return yesterday, yesterday
     if period == "7d":
         return today - timedelta(days=6), today
     if period == "30d":
@@ -220,11 +225,25 @@ async def _build_efficiency_rows(
         if tab == "attribution":
             return ["日期", "资源类型", "成本对象", "使用人", "AI Key", "归属", "调用数", "输入Token", "输出Token", "缓存读Token", "缓存写Token", "内部输入成本(元)", "内部输出成本(元)", "内部缓存命中成本(元)", "内部缓存创建成本(元)", "内部成本(元)", "外部输入成本(元)", "外部输出成本(元)", "外部缓存命中成本(元)", "外部缓存创建成本(元)", "外部成本(元)", "差额(元)"], [[row["date"], row["resource_type"], row["cost_object"], row["user_name"], row["key_name"], row["scope_name"], row["requests"], row["input_tokens"], row["output_tokens"], row["cache_read_tokens"], row["cache_creation_tokens"], row["internal_input_cost"], row["internal_output_cost"], row["internal_cache_read_cost"], row["internal_cache_creation_cost"], row["internal_cost"], row["external_input_cost"], row["external_output_cost"], row["external_cache_read_cost"], row["external_cache_creation_cost"], row["external_cost"], row["cost_diff"]] for row in detail.get("attribution", [])]
         scope_key = "department"
-        return ["归属", "LLM内部成本(元)", "MCP内部成本(元)", "内部总成本(元)", "外部总成本(元)", "差额(元)", "请求数", "人均成本(元)", "活跃人均成本(元)", "内部总成本环比(%)"], [[row.get("scope_name") or row.get("department"), row["llm_cost"], row["mcp_cost"], row["total_cost"], row["external_cost"], row["cost_diff"], row["requests"], row["per_capita_cost"], row["active_per_capita_cost"], row["cost_change"] if row["cost_change"] is not None else ""] for row in detail.get(scope_key, [])]
+        return ["归属", "LLM内部成本(元)", "MCP内部成本(元)", "内部总成本(元)", "外部总成本(元)", "差额(元)", "请求数", "输入Token", "输出Token", "缓存读Token", "缓存写Token", "人均成本(元)", "活跃人均成本(元)", "内部总成本环比(%)"], [[row.get("scope_name") or row.get("department"), row["llm_cost"], row["mcp_cost"], row["total_cost"], row["external_cost"], row["cost_diff"], row["requests"], row["input_tokens"], row["output_tokens"], row["cache_read_tokens"], row["cache_creation_tokens"], row["per_capita_cost"], row["active_per_capita_cost"], row["cost_change"] if row["cost_change"] is not None else ""] for row in detail.get(scope_key, [])]
     if export_type.startswith("budget_"):
         result = await efficiency_service.get_budget(session, _text(params, "month") or None)
         if export_type == "budget_key":
             return ["Key名", "归属对象", "归属类型", "Key类型", "预算(元)", "已用(元)", "执行率(%)"], [[row["key_name"], row["owner"], row["owner_type"], row["key_type"], row["budget"], row["used"], row["execution_rate"]] for row in result["keys"]]
+        if export_type == "budget_user":
+            header = ["姓名", "Key", "Key类型", "预算(元)", "已用(元)", "执行率(%)"]
+            rows = [
+                [
+                    row["user_name"],
+                    row["key_name"],
+                    "主" if row["is_main"] else "场景",
+                    row["budget"],
+                    row["used"],
+                    row["execution_rate"],
+                ]
+                for row in result["user_keys"]
+            ]
+            return header, rows
         key = "departments" if export_type == "budget_department" else "projects"
         name_key = "department" if export_type == "budget_department" else "project"
         return ["名称", "总预算(元)", "总已用(元)", "执行率(%)", "人员Key数", "人员Key预算(元)", "人员Key已用(元)", "归属Key数", "归属Key预算(元)", "归属Key已用(元)", "预测月底(元)", "风险"], [[row[name_key], row["monthly_budget"], row["used"], row["execution_rate"], row["user_key_count"], row["user_key_budget"], row["user_key_used"], row["scope_key_count"], row["scope_key_budget"], row["scope_key_used"], row["predicted_end"], row["risk"]] for row in result[key]]

@@ -16,7 +16,7 @@
       <!-- Key Name -->
       <div class="mb-4">
         <label class="block text-sm font-medium text-slate-700 mb-1">Key 名称</label>
-        <input v-model="form.name" type="text" placeholder="支持模板变量: {username}, {display_name}" class="w-full px-3 py-2 rounded-lg border border-slate-200/60 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50" />
+        <input v-model="form.name" type="text" placeholder="留空自动生成；支持模板变量: {username}, {display_name}" class="w-full px-3 py-2 rounded-lg border border-slate-200/60 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50" />
         <p v-if="isBatchMode" class="mt-1 text-xs text-slate-400">批量创建时可用 {username}、{display_name} 自动替换</p>
       </div>
 
@@ -27,7 +27,7 @@
       </div>
 
       <!-- Owner Selection -->
-      <div v-if="!isEdit" class="mb-4">
+      <div v-if="!isEdit && !defaultOwnerId" class="mb-4">
         <label class="block text-sm font-medium text-slate-700 mb-1">归属</label>
         <div v-if="ownerType === 'user'">
           <button type="button" class="px-4 py-2 rounded-lg border border-slate-200/60 bg-white/80 text-sm hover:bg-slate-50 transition" @click="showUserPicker = true">
@@ -358,6 +358,18 @@ watch(() => form.models, (ids) => {
   }
 }, { immediate: true, deep: true })
 
+function buildDefaultName(): string {
+  const trimmed = form.name.trim()
+  if (trimmed) return trimmed
+  if (isBatchMode.value) return '{username}'
+  const scenario = scenarios.value.find(s => s.id === form.scenario_id)
+  const base = scenario?.name ?? '场景Key'
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const suffix = `${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`
+  return `${base}-${suffix}`
+}
+
 function buildRateLimits(): RateLimitItem[] | null {
   if (rateLimitMode.value !== 'per_model') return null
   const items: RateLimitItem[] = []
@@ -396,6 +408,7 @@ async function handleSubmit() {
   batchResults.value = null
 
   try {
+    const keyName = buildDefaultName()
     const isUnified = form.budget_scope === 'unified'
     const isPerType = form.budget_scope === 'per_type'
     const budgetLimit = isUnified ? form.budget_limit : null
@@ -411,7 +424,7 @@ async function handleSubmit() {
 
     if (isEdit.value) {
       await updateAiKey(props.editKey!.id, {
-        name: form.name,
+        name: keyName,
         description: form.description,
         models: form.models,
         mcps: form.mcps,
@@ -439,7 +452,7 @@ async function handleSubmit() {
       const res = await batchCreateAiKeys({
         user_ids: selectedUsers.value.map(u => u.id),
         key_type: 'personal_scene',
-        name_template: form.name,
+        name_template: keyName,
         description: form.description,
         models: form.models,
         mcps: form.mcps,
@@ -465,9 +478,9 @@ async function handleSubmit() {
       batchResults.value = res
       emit('saved')
     } else {
-      const ownerId = ownerType.value === 'user' ? selectedUsers.value[0]?.id : props.defaultOwnerId!
+      const ownerId = props.defaultOwnerId ?? (ownerType.value === 'user' ? selectedUsers.value[0]?.id : undefined)
       const res = await createAiKey({
-        name: form.name,
+        name: keyName,
         key_type: form.key_type,
         owner_type: ownerType.value,
         owner_id: ownerId,

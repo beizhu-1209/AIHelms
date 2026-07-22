@@ -169,6 +169,12 @@ async def get_budget(
         }
         for i in key_raw
     ]
+    user_keys_raw = await efficiency_repo.get_user_personal_key_budget(
+        session, month_start, usage_end, key_ids
+    )
+    user_budget_top10 = await efficiency_repo.get_user_budget_top10(
+        session, month_start, usage_end, key_ids
+    )
 
     return {
         "period": {
@@ -190,6 +196,8 @@ async def get_budget(
         "departments": departments,
         "projects": projects,
         "keys": keys_list,
+        "user_keys": user_keys_raw,
+        "user_budget_top10": user_budget_top10,
     }
 
 

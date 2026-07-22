@@ -18,7 +18,12 @@ from services.efficiency_adoption_service import (
     get_unused_users,
 )
 from services.efficiency_budget_service import get_budget, get_budget_alerts
-from services.efficiency_cost_service import get_cost, get_cost_detail
+from services.efficiency_cost_service import (
+    get_cost,
+    get_cost_detail,
+    get_cost_detail_scope_users,
+    get_top_users,
+)
 from services.efficiency_health_service import get_ai_health
 from services.efficiency_report_service import (
     create_report,
@@ -161,6 +166,9 @@ async def get_overview(
     total_cost = await efficiency_repo.get_total_cost(
         session, start_date, end_date, department_ids, project_ids
     )
+    token_stats = await efficiency_repo.get_period_token_stats(
+        session, start_date, end_date, department_ids, project_ids
+    )
     coverage_rate = round(active_count / total_users * 100, 1) if total_users > 0 else 0
     active_per_capita = round(total_cost / active_count, 2) if active_count > 0 else 0
 
@@ -248,6 +256,11 @@ async def get_overview(
             "total_cost": total_cost,
             "per_capita_cost": active_per_capita,
             "active_per_capita_cost": active_per_capita,
+            "total_tokens": token_stats["total"],
+            "input_tokens": token_stats["input"],
+            "output_tokens": token_stats["output"],
+            "cache_read_tokens": token_stats["cache_read"],
+            "cache_creation_tokens": token_stats["cache_creation"],
             "coverage_change": _calc_change(coverage_rate, prev_coverage),
             "cost_change": _calc_change(total_cost, prev_total_cost),
             "per_capita_change": _calc_change(active_per_capita, prev_active_per_capita),

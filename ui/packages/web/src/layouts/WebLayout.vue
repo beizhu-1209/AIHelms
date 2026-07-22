@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth, changePassword, useBranding } from '@aihelms/shared'
-import { LogOut, Settings, KeyRound, ChevronDown } from 'lucide-vue-next'
+import { LogOut, Settings, KeyRound, ChevronDown, BookOpen } from 'lucide-vue-next'
 import LanguageSwitcher from '@aihelms/shared/src/components/LanguageSwitcher.vue'
 
 const router = useRouter()
@@ -151,6 +151,11 @@ async function handleChangePassword(): Promise<void> {
 
       <!-- 右：用户操作 -->
       <div class="flex items-center justify-end gap-3">
+        <a href="http://www.aihelms.cn/docs" target="_blank" rel="noopener noreferrer"
+          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">
+          <BookOpen class="h-4 w-4" />
+          {{ t('layout.docs') }}
+        </a>
         <LanguageSwitcher />
         <a v-if="currentUser?.is_admin" href="/admin/"
           class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">
