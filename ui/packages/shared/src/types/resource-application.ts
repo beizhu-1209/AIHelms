@@ -12,6 +12,7 @@ export interface ResourceApplicationResourceInfo {
   name: string
   model_id?: string
   server_name?: string
+  icon_url?: string
 }
 
 export interface ResourceApplication {

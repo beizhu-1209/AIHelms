@@ -8,6 +8,7 @@ from core.config import settings
 from exceptions import ConflictError, NotFoundError
 from models.db import Skill, SkillCategory, SkillUsageLog
 from repositories import ai_policies_repo, skill_repo
+from services.icon_url import normalize_hosted_icon_path, resolve_icon_url
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ async def create_skill(
     session: AsyncSession,
     name: str,
     icon: str = "📦",
+    icon_url: str | None = None,
     description: str = "",
     category: str = "general",
     version: str = "1.0.0",
@@ -101,6 +103,7 @@ async def create_skill(
         skill_id=sid,
         name=name,
         icon=icon,
+        icon_url=normalize_hosted_icon_path(icon_url),
         description=description,
         category=category,
         version=version,
@@ -137,6 +140,11 @@ async def update_skill(
     skill = await skill_repo.find_by_id(session, skill_id)
     if not skill:
         raise NotFoundError("skill", skill_id)
+
+    if "icon_url" in kwargs:
+        kwargs["icon_url"] = normalize_hosted_icon_path(kwargs["icon_url"])
+    elif "icon" in kwargs:
+        skill.icon_url = None
 
     for key, value in kwargs.items():
         if hasattr(skill, key) and value is not None:
@@ -288,6 +296,7 @@ def _serialize(skill: Skill, latest_audit_map: dict[int, str] | None = None) -> 
         "skill_id": skill.skill_id,
         "name": skill.name,
         "icon": skill.icon,
+        "icon_url": resolve_icon_url(skill.icon_url or skill.icon),
         "description": skill.description,
         "category": skill.category,
         "version": skill.version,

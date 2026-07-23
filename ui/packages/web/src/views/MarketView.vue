@@ -7,8 +7,8 @@ import { createResourceApplication } from '@aihelms/shared/src/api/resource-appl
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import type { Skill } from '@aihelms/shared/src/types/skill'
 import type { McpServer } from '@aihelms/shared/src/types/mcp'
-import { Server, Sparkles, CheckCircle2, Search, X, ExternalLink, Flame } from 'lucide-vue-next'
-import * as lucideIcons from 'lucide-vue-next'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
+import { CheckCircle2, Search, X, ExternalLink, Flame } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -72,17 +72,7 @@ function getTags(item: MarketItem): string[] {
 }
 
 function getIconUrl(item: MarketItem): string {
-  if (item._type === 'mcp') return (item as unknown as McpServer).icon_url || ''
-  return ''
-}
-
-function getSkillIcon(item: MarketItem): string {
-  if (item._type === 'skill') return (item as unknown as Skill).icon || ''
-  return ''
-}
-
-function getLucideIcon(name: string) {
-  return (lucideIcons as Record<string, unknown>)[name] || null
+  return item.icon_url
 }
 
 function getAuthor(item: MarketItem): string {
@@ -317,13 +307,7 @@ onMounted(loadData)
         <!-- Icon + Type badge -->
         <div class="mb-3 flex items-start justify-between">
           <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-blue-100">
-            <component
-              :is="getLucideIcon(getIconUrl(item) || getSkillIcon(item))"
-              v-if="getLucideIcon(getIconUrl(item) || getSkillIcon(item))"
-              class="h-5 w-5 text-purple-600"
-            />
-            <Server v-else-if="item._type === 'mcp'" class="h-5 w-5 text-blue-600" />
-            <Sparkles v-else class="h-5 w-5 text-purple-600" />
+            <HostedIcon :src="getIconUrl(item)" :size="20" :alt="item.name" />
           </div>
           <div class="flex items-center gap-1.5">
             <CheckCircle2 v-if="isOwned(item)" class="h-4 w-4 text-green-500" />
@@ -552,4 +536,3 @@ onMounted(loadData)
     </Teleport>
   </div>
 </template>
-

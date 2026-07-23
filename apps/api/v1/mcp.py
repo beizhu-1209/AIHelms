@@ -57,7 +57,7 @@ class UpdateServerRequest(BaseModel):
     category: str | None = None
     tags: list[str] | None = None
     author: str | None = Field(None, max_length=128)
-    icon_url: str | None = None
+    icon_url: str | None = Field(None, max_length=500)
     documentation_url: str | None = None
     source_url: str | None = None
     billing_type: str | None = Field(None, pattern=r"^(per_call|free)$")

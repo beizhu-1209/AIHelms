@@ -36,6 +36,7 @@ import { Search, X } from 'lucide-vue-next'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import AccessTestDialog from '../../components/AccessTestDialog.vue'
 import ProviderIcon from '../../components/ProviderIcon.vue'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 
 const { hasPermission } = usePermission()
 
@@ -238,6 +239,8 @@ const FALLBACK_PREFIX_MAP: Record<string, Record<string, string | null>> = {
   zhipu: { chat: 'openai', embedding: 'openai', rerank: null },
   moonshot: { chat: 'openai', embedding: null, rerank: null },
   minimax: { chat: 'openai', embedding: null, rerank: null },
+  tencent: { chat: 'tencent', embedding: null, rerank: null },
+  xai: { chat: 'xai', embedding: null, rerank: null },
   vllm: { chat: 'openai', embedding: 'openai', rerank: 'hosted_vllm' },
   sglang: { chat: 'openai', embedding: 'openai', rerank: null },
   ollama: { chat: 'ollama', embedding: 'ollama', rerank: null },
@@ -256,10 +259,12 @@ const BUILT_IN_LOGO_OPTIONS: LogoOption[] = [
   { value: 'vertex_ai', label: 'Vertex AI' },
   { value: 'volcengine', label: '火山引擎' },
   { value: 'dashscope', label: '阿里百炼' },
-  { value: 'zhipu', label: '智谱 GLM' },
+  { value: 'zhipu', label: 'Z.ai（GLM）' },
   { value: 'moonshot', label: 'Moonshot' },
   { value: 'minimax', label: 'MiniMax' },
   { value: 'xiaomi_mimo', label: '小米MiMo' },
+  { value: 'tencent', label: '腾讯混元' },
+  { value: 'xai', label: 'xAI（Grok）' },
   { value: 'vllm', label: 'vLLM' },
   { value: 'sglang', label: 'SGLang' },
   { value: 'ollama', label: 'Ollama' },
@@ -954,12 +959,9 @@ onMounted(() => {
           :class="selectedModel?.id === model.id ? 'bg-purple-50 ring-1 ring-purple-200' : 'hover:bg-slate-50'"
           @click="handleSelectModel(model)"
         >
-          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-            <ProviderIcon v-if="model.logo_provider_type" :type="model.logo_provider_type" :size="20" />
-            <svg v-else class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-2.47 2.47a2.25 2.25 0 01-1.591.659H9.061a2.25 2.25 0 01-1.591-.659L5 14.5m14 0V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
-            </svg>
-          </div>
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+              <ProviderIcon :src="model.icon_url" :type="model.logo_provider_type" :size="20" />
+            </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <span class="truncate text-sm font-medium" :class="selectedModel?.id === model.id ? 'text-purple-700' : 'text-slate-900'">{{ model.name }}</span>
@@ -1270,9 +1272,7 @@ onMounted(() => {
                 <span class="flex min-w-0 items-center gap-2">
                   <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100">
                     <ProviderIcon v-if="formLogoProviderType" :type="formLogoProviderType" :size="18" />
-                    <svg v-else class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5m14 0l-4.091-4.091a2.25 2.25 0 01-.659-1.591V3.104M19 14.5V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
-                    </svg>
+                    <HostedIcon v-else src="/icons/v1/default.svg" alt="平台默认图标" :size="18" />
                   </span>
                   <span class="truncate font-medium">{{ selectedLogoOption.label }}</span>
                 </span>
@@ -1347,9 +1347,7 @@ onMounted(() => {
             >
               <span class="flex h-7 w-7 items-center justify-center rounded bg-slate-100">
                 <ProviderIcon v-if="option.value" :type="option.value" :size="20" />
-                <svg v-else class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5m14 0l-4.091-4.091a2.25 2.25 0 01-.659-1.591V3.104M19 14.5V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5" />
-                </svg>
+                <HostedIcon v-else src="/icons/v1/default.svg" alt="平台默认图标" :size="20" />
               </span>
               <span class="max-w-full truncate px-1">{{ option.label }}</span>
             </button>

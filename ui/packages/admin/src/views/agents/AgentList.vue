@@ -15,6 +15,7 @@ import {
 } from '@aihelms/shared'
 import { toast, usePermission } from '@aihelms/shared'
 import { Plus, X } from 'lucide-vue-next'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 const { hasPermission } = usePermission()
@@ -258,8 +259,8 @@ onMounted(loadData)
         @click="openDetail(agent)"
       >
         <div class="mb-3 flex items-start justify-between">
-          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 text-2xl">
-            {{ agent.icon }}
+          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50">
+            <HostedIcon :src="agent.icon_url" :size="24" :alt="agent.name" />
           </div>
           <div class="flex flex-col items-end gap-1">
             <span class="rounded-full px-2 py-0.5 text-[10px] font-medium" :class="statusColor(agent.status)">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, type Component } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import {
   getBusinessScenarios,
   createBusinessScenario,
@@ -8,25 +8,11 @@ import {
   type BusinessScenario,
 } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
-import {
-  Target, Code2, Headphones, BarChart3, PenLine, FileText, Languages,
-  Briefcase, Bot, Brain, Cpu, Database, Search, ShoppingCart,
-  Mail, MessageSquare, Image, Video, Music, Globe,
-} from 'lucide-vue-next'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+import IconPicker from '../../components/IconPicker.vue'
 
 const { hasPermission } = usePermission()
-
-const ICON_MAP: Record<string, Component> = {
-  Target, Code2, Headphones, BarChart3, PenLine, FileText, Languages,
-  Briefcase, Bot, Brain, Cpu, Database, Search, ShoppingCart,
-  Mail, MessageSquare, Image, Video, Music, Globe,
-}
-const ICON_OPTIONS = Object.keys(ICON_MAP)
-
-function getIcon(name: string): Component {
-  return ICON_MAP[name] || Target
-}
 
 const scenarios = ref<BusinessScenario[]>([])
 const total = ref(0)
@@ -39,7 +25,7 @@ const editingId = ref<number | null>(null)
 const formCode = ref('')
 const formName = ref('')
 const formDescription = ref('')
-const formIcon = ref('Target')
+const formIconUrl = ref('/icons/v1/default.svg')
 const formSortOrder = ref(0)
 const formIsActive = ref(true)
 const formError = ref('')
@@ -61,7 +47,7 @@ function handleCreate(): void {
   formCode.value = ''
   formName.value = ''
   formDescription.value = ''
-  formIcon.value = 'Target'
+  formIconUrl.value = '/icons/v1/default.svg'
   formSortOrder.value = 0
   formIsActive.value = true
   formError.value = ''
@@ -73,7 +59,7 @@ function handleEdit(scenario: BusinessScenario): void {
   formCode.value = scenario.code
   formName.value = scenario.name
   formDescription.value = scenario.description
-  formIcon.value = scenario.icon || 'Target'
+  formIconUrl.value = scenario.icon_url
   formSortOrder.value = scenario.sort_order
   formIsActive.value = scenario.is_active
   formError.value = ''
@@ -95,7 +81,7 @@ async function handleSubmit(): Promise<void> {
       await updateBusinessScenario(editingId.value, {
         name: formName.value.trim(),
         description: formDescription.value.trim(),
-        icon: formIcon.value,
+        icon_url: formIconUrl.value,
         sort_order: formSortOrder.value,
         is_active: formIsActive.value,
       })
@@ -104,7 +90,7 @@ async function handleSubmit(): Promise<void> {
         code: formCode.value.trim(),
         name: formName.value.trim(),
         description: formDescription.value.trim(),
-        icon: formIcon.value,
+        icon_url: formIconUrl.value,
         sort_order: formSortOrder.value,
       })
     }
@@ -187,7 +173,7 @@ onMounted(fetchData)
             class="border-b border-slate-100 transition-colors hover:bg-slate-50/50"
           >
             <td class="px-4 py-3">
-              <component :is="getIcon(s.icon)" class="h-5 w-5 text-purple-500" />
+              <HostedIcon :src="s.icon_url" :size="20" :alt="s.name" />
             </td>
             <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ s.code }}</td>
             <td class="px-4 py-3 font-medium text-slate-900">{{ s.name }}</td>
@@ -276,23 +262,7 @@ onMounted(fetchData)
             />
           </div>
           <div class="mb-3">
-            <label class="mb-1.5 block text-sm font-medium text-slate-700">图标</label>
-            <div class="grid grid-cols-10 gap-2">
-              <button
-                v-for="iconName in ICON_OPTIONS"
-                :key="iconName"
-                type="button"
-                class="flex h-9 w-9 items-center justify-center rounded-lg border transition-colors"
-                :class="
-                  formIcon === iconName
-                    ? 'border-purple-500 bg-purple-50 text-purple-600'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                "
-                @click="formIcon = iconName"
-              >
-                <component :is="getIcon(iconName)" class="h-4 w-4" />
-              </button>
-            </div>
+            <IconPicker v-model="formIconUrl" label="图标" />
           </div>
           <div class="mb-3 grid grid-cols-2 gap-3">
             <div>

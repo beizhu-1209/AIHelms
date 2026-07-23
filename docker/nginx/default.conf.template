@@ -26,6 +26,13 @@ server {
         try_files $uri $uri/ /admin/index.html;
     }
 
+    # 平台内置图标
+    location /icons/ {
+        root /usr/share/nginx/html/web;
+        try_files $uri /icons/v1/default.svg;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
     # 用户端（默认）
     location / {
         root /usr/share/nginx/html/web;

@@ -59,7 +59,7 @@ const zipFile = ref<File | null>(null)
 
 const form = ref({
   name: '',
-  icon: '📦',
+  icon_url: '/icons/v1/default.svg',
   description: '',
   author: '',
   category: 'general',
@@ -141,7 +141,7 @@ async function loadData(): Promise<void> {
       skill.value = s
       form.value = {
         name: s.name,
-        icon: s.icon,
+        icon_url: s.icon_url,
         description: s.description,
         author: s.author ?? '',
         category: s.category,
@@ -178,7 +178,7 @@ async function handleSave(): Promise<void> {
       : []
     const payload = {
       name: form.value.name.trim(),
-      icon: form.value.icon,
+      icon_url: form.value.icon_url,
       description: form.value.description,
       author: form.value.author,
       category: form.value.category,
@@ -310,7 +310,7 @@ onMounted(loadData)
             />
           </div>
           <div>
-            <IconPicker v-model="form.icon" label="图标" />
+            <IconPicker v-model="form.icon_url" label="图标" />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700">作者</label>

@@ -8,6 +8,7 @@ from exceptions import NotFoundError, ConflictError
 from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility, Provider, ProviderPrefixMap
 from repositories import model_repo, credential_repo, ai_key_repo
 from services import litellm_client
+from services.icon_url import resolve_provider_icon_url
 from services.litellm_credential_payload import build_litellm_credential_values_for_credential
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ async def get_all_active_models(session: AsyncSession) -> list[dict]:
             "capabilities": m.capabilities,
             "description": m.description,
             "logo_provider_type": m.logo_provider_type,
+            "icon_url": resolve_provider_icon_url(m.logo_provider_type),
             "is_active": m.is_active,
             "is_published": m.is_published,
             "requires_approval": m.requires_approval,
@@ -785,6 +787,7 @@ def _serialize_model(model: Model) -> dict:
         "capabilities": model.capabilities,
         "description": model.description,
         "logo_provider_type": model.logo_provider_type,
+        "icon_url": resolve_provider_icon_url(model.logo_provider_type),
         "is_active": model.is_active,
         "is_published": model.is_published,
         "visibility_type": model.visibility_type,

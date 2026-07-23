@@ -4,6 +4,7 @@ export interface BusinessScenario {
   name: string
   description: string
   icon: string
+  icon_url: string
   sort_order: number
   is_active: boolean
   created_at: string | null
@@ -15,6 +16,7 @@ export interface CreateBusinessScenarioParams {
   name: string
   description?: string
   icon?: string
+  icon_url?: string
   sort_order?: number
 }
 
@@ -22,6 +24,7 @@ export interface UpdateBusinessScenarioParams {
   name?: string
   description?: string
   icon?: string
+  icon_url?: string
   sort_order?: number
   is_active?: boolean
 }

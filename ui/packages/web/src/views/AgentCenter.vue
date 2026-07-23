@@ -5,14 +5,10 @@ import { request } from '@aihelms/shared/src/api/request'
 import { getMyKeys, createResourceApplication, recordAgentUsage, toast } from '@aihelms/shared'
 import type { Agent } from '@aihelms/shared/src/types/agent'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import { Bot, Search, ExternalLink } from 'lucide-vue-next'
-import * as lucideIcons from 'lucide-vue-next'
 
 const { t } = useI18n()
-
-function getLucideIcon(name: string) {
-  return (lucideIcons as Record<string, unknown>)[name] || null
-}
 
 const agents = ref<Agent[]>([])
 const myAgents = ref<number[]>([])
@@ -156,12 +152,7 @@ onMounted(async () => {
       >
         <div class="flex items-center gap-3">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-blue-100">
-            <component
-              :is="getLucideIcon(agent.icon)"
-              v-if="agent.icon && getLucideIcon(agent.icon)"
-              class="h-5 w-5 text-purple-600"
-            />
-            <Bot v-else class="h-5 w-5 text-purple-600" />
+            <HostedIcon :src="agent.icon_url" :size="20" :alt="agent.name" />
           </div>
           <div class="min-w-0 flex-1">
             <h3 class="truncate text-sm font-semibold text-slate-900">{{ agent.name }}</h3>
