@@ -26,6 +26,7 @@ export function getSkillById(id: number): Promise<Skill> {
 interface SkillFormFields {
   name: string
   icon?: string
+  icon_url?: string
   description?: string
   author?: string
   category?: string
@@ -41,6 +42,7 @@ function buildSkillFormData(fields: SkillFormFields): FormData {
   const fd = new FormData()
   fd.append('name', fields.name)
   if (fields.icon !== undefined) fd.append('icon', fields.icon)
+  if (fields.icon_url !== undefined) fd.append('icon_url', fields.icon_url)
   if (fields.description !== undefined) fd.append('description', fields.description)
   if (fields.author !== undefined) fd.append('author', fields.author)
   if (fields.category !== undefined) fd.append('category', fields.category)
@@ -61,6 +63,7 @@ export function updateSkill(id: number, fields: Partial<SkillFormFields>): Promi
   const fd = new FormData()
   if (fields.name !== undefined) fd.append('name', fields.name)
   if (fields.icon !== undefined) fd.append('icon', fields.icon)
+  if (fields.icon_url !== undefined) fd.append('icon_url', fields.icon_url)
   if (fields.description !== undefined) fd.append('description', fields.description)
   if (fields.author !== undefined) fd.append('author', fields.author)
   if (fields.category !== undefined) fd.append('category', fields.category)

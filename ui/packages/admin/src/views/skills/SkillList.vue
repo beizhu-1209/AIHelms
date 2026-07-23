@@ -12,8 +12,8 @@ import {
   type SkillCategory,
   usePermission,
 } from '@aihelms/shared'
-import { Download, FileText, Package, Plus, Search, X } from 'lucide-vue-next'
-import * as icons from 'lucide-vue-next'
+import { Download, FileText, Plus, Search, X } from 'lucide-vue-next'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 type PublishStatusFilter = 'all' | 'published' | 'unpublished'
@@ -71,10 +71,6 @@ const filteredSkills = computed(() => {
     return matchesCategory && matchesName && matchesPublishStatus
   })
 })
-
-function getIconComponent(name: string) {
-  return (icons as Record<string, unknown>)[name] || null
-}
 
 async function loadData(): Promise<void> {
   loading.value = true
@@ -295,12 +291,7 @@ onMounted(loadData)
         <div class="shrink-0 p-4">
           <div class="mb-3 flex items-start justify-between">
             <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50">
-              <component
-                :is="getIconComponent(skill.icon)"
-                v-if="skill.icon && getIconComponent(skill.icon)"
-                class="h-5 w-5 text-purple-600"
-              />
-              <Package v-else class="h-5 w-5 text-slate-400" />
+              <HostedIcon :src="skill.icon_url" :size="20" :alt="skill.name" />
             </div>
             <div class="flex flex-col items-end gap-1">
               <span v-if="skill.is_published" class="rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">

@@ -10,6 +10,7 @@ export interface Skill {
   skill_id: string
   name: string
   icon: string
+  icon_url: string
   description: string
   author: string
   category: string

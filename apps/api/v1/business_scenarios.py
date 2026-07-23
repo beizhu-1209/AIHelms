@@ -18,6 +18,7 @@ class CreateScenarioRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field("", max_length=500)
     icon: str = Field("Target", max_length=50)
+    icon_url: str | None = Field(None, max_length=500)
     sort_order: int = Field(0)
 
 
@@ -25,6 +26,7 @@ class UpdateScenarioRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
     icon: str | None = Field(None, max_length=50)
+    icon_url: str | None = Field(None, max_length=500)
     sort_order: int | None = Field(None)
     is_active: bool | None = Field(None)
 
@@ -66,6 +68,7 @@ async def create_scenario(
             name=req.name,
             description=req.description,
             icon=req.icon,
+            icon_url=req.icon_url,
             sort_order=req.sort_order,
         )
     except ConflictError as e:
@@ -87,6 +90,7 @@ async def update_scenario(
             name=req.name,
             description=req.description,
             icon=req.icon,
+            icon_url=req.icon_url,
             sort_order=req.sort_order,
             is_active=req.is_active,
         )

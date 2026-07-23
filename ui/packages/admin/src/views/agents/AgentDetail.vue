@@ -40,7 +40,7 @@ const urlCopied = ref(false)
 
 const form = ref({
   name: '',
-  icon: '',
+  icon_url: '/icons/v1/default.svg',
   description: '',
   platform: '',
   category: '',
@@ -90,7 +90,7 @@ async function loadData(): Promise<void> {
       agent.value = a
       form.value = {
         name: a.name,
-        icon: a.icon,
+        icon_url: a.icon_url,
         description: a.description,
         platform: a.platform,
         category: a.category,
@@ -131,7 +131,7 @@ async function handleSave(): Promise<void> {
       : []
     const payload = {
       name: form.value.name,
-      icon: form.value.icon,
+      icon_url: form.value.icon_url,
       description: form.value.description,
       platform: form.value.platform,
       category: form.value.category,
@@ -223,7 +223,7 @@ onMounted(loadData)
             />
           </div>
           <div>
-            <IconPicker v-model="form.icon" label="图标" />
+            <IconPicker v-model="form.icon_url" label="图标" />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700">平台 *</label>

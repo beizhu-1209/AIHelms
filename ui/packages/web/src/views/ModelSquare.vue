@@ -5,7 +5,7 @@ import { getMyKeys } from '@aihelms/shared'
 import { request } from '@aihelms/shared/src/api/request'
 import { createResourceApplication } from '@aihelms/shared/src/api/resource-application'
 import type { AiKey } from '@aihelms/shared/src/types/ai-key'
-import { Cpu, CheckCircle2, Search, Copy, Check, X, MessageSquare, Box, Eye, EyeOff } from 'lucide-vue-next'
+import { Cpu, CheckCircle2, Search, Copy, Check, X, Eye, EyeOff } from 'lucide-vue-next'
 import ProviderIcon from '../components/ProviderIcon.vue'
 
 const { t } = useI18n()
@@ -20,6 +20,7 @@ interface ModelItem {
   capabilities: string[]
   description: string
   logo_provider_type: string
+  icon_url: string
   is_published: boolean
   requires_approval: boolean
   deployment_count: number
@@ -183,10 +184,7 @@ onMounted(async () => {
         <!-- 头部 -->
         <div class="flex items-center gap-3">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-50 to-blue-50">
-            <ProviderIcon v-if="model.logo_provider_type" :type="model.logo_provider_type" :size="22" />
-            <MessageSquare v-else-if="model.category === 'chat'" class="h-5 w-5 text-purple-600" />
-            <Box v-else-if="model.category === 'embedding'" class="h-5 w-5 text-blue-600" />
-            <Cpu v-else class="h-5 w-5 text-slate-600" />
+            <ProviderIcon :src="model.icon_url" :type="model.logo_provider_type" :size="22" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
@@ -226,7 +224,7 @@ onMounted(async () => {
       <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-slate-200/60 bg-white shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div class="flex items-center gap-3">
-            <ProviderIcon v-if="activeModel.logo_provider_type" :type="activeModel.logo_provider_type" :size="24" />
+            <ProviderIcon :src="activeModel.icon_url" :type="activeModel.logo_provider_type" :size="24" />
             <h3 class="text-base font-semibold text-slate-900">{{ activeModel.name }}</h3>
           </div>
           <button @click="showAccessDialog = false" class="rounded-lg p-1 hover:bg-slate-100"><X class="h-4 w-4 text-slate-400" /></button>

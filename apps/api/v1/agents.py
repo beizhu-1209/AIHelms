@@ -12,6 +12,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 class CreateAgentRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     icon: str = ""
+    icon_url: str | None = Field(None, max_length=500)
     description: str = Field("", max_length=2000)
     platform: str = Field(..., min_length=1, max_length=64)
     category: str = Field("general", max_length=50)
@@ -29,6 +30,7 @@ class CreateAgentRequest(BaseModel):
 class UpdateAgentRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=128)
     icon: str | None = None
+    icon_url: str | None = Field(None, max_length=500)
     description: str | None = None
     platform: str | None = None
     category: str | None = None
@@ -192,6 +194,7 @@ async def create_agent(
         session,
         name=req.name,
         icon=req.icon,
+        icon_url=req.icon_url,
         description=req.description,
         platform=req.platform,
         category=req.category,

@@ -6,6 +6,7 @@ export interface ModelInfo {
   capabilities: string[]
   description: string
   logo_provider_type: string
+  icon_url: string
   is_active: boolean
   is_published: boolean
   visibility_type: string
@@ -88,6 +89,7 @@ export interface ActiveModel {
   capabilities?: string[]
   description?: string
   logo_provider_type: string
+  icon_url: string
   is_published?: boolean
   requires_approval?: boolean
   has_anthropic_deployment?: boolean

@@ -27,7 +27,7 @@ const trend = ref<TrendItem[]>([])
 const applications = ref<ResourceApplication[]>([])
 const mcpNames = ref<Record<number, string>>({})
 const skillNames = ref<Record<number, string>>({})
-const modelLogoProviderTypes = ref<Record<string, string>>({})
+const modelIconUrls = ref<Record<string, string>>({})
 const isLoading = ref(true)
 const copied = ref(false)
 const showFullKey = ref(false)
@@ -148,8 +148,8 @@ function getStatusLabel(status: string): string {
   return t('identity.status.rejected')
 }
 
-function getModelLogoProviderType(modelId: string): string {
-  return modelLogoProviderTypes.value[modelId] || ''
+function getModelIconUrl(modelId: string): string {
+  return modelIconUrls.value[modelId] || '/icons/v1/default.svg'
 }
 
 onMounted(async () => {
@@ -169,8 +169,8 @@ onMounted(async () => {
     trend.value = trendData
     applications.value = appsData.items
     endpointUrl.value = configData.litellm_base_url || ''
-    modelLogoProviderTypes.value = Object.fromEntries(
-      activeModelsData.map(model => [model.model_id, model.logo_provider_type || '']),
+    modelIconUrls.value = Object.fromEntries(
+      activeModelsData.map(model => [model.model_id, model.icon_url]),
     )
 
     for (const m of mcpRes.items) {
@@ -295,7 +295,7 @@ onMounted(async () => {
           <div v-if="mainKey.models.length" class="flex flex-wrap gap-2">
             <span v-for="m in mainKey.models" :key="m"
               class="flex items-center gap-1.5 rounded-md bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
-              <ProviderIcon v-if="getModelLogoProviderType(m)" :type="getModelLogoProviderType(m)" :size="14" />
+              <ProviderIcon :src="getModelIconUrl(m)" :size="14" />
               {{ m }}
             </span>
           </div>

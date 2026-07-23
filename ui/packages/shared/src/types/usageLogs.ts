@@ -26,6 +26,7 @@ export interface UsageLogSkill {
   id: number
   name: string
   icon: string
+  icon_url: string
   version: string
 }
 
@@ -33,6 +34,7 @@ export interface UsageLogAgent {
   id: number
   name: string
   icon: string
+  icon_url: string
   platform: string
 }
 

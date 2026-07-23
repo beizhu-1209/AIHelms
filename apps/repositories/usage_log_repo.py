@@ -535,7 +535,13 @@ async def load_skills(session: AsyncSession, skill_ids: list[int]) -> dict[int, 
         return {}
     result = await session.execute(select(Skill).where(Skill.id.in_(ids)))
     return {
-        s.id: {"id": s.id, "name": s.name, "icon": s.icon, "version": s.version}
+        s.id: {
+            "id": s.id,
+            "name": s.name,
+            "icon": s.icon,
+            "icon_url": s.icon_url,
+            "version": s.version,
+        }
         for s in result.scalars().all()
     }
 

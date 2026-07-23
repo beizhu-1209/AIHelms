@@ -14,6 +14,7 @@ from repositories import (
     skill_repo,
 )
 from services import ai_key_service
+from services.icon_url import resolve_icon_url
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +303,12 @@ async def _get_resource_info(
     elif resource_type == "skill":
         sk = await skill_repo.find_by_id(session, resource_id)
         if sk:
-            return {"id": sk.id, "name": sk.name, "icon": sk.icon}
+            return {
+                "id": sk.id,
+                "name": sk.name,
+                "icon": sk.icon,
+                "icon_url": resolve_icon_url(sk.icon_url or sk.icon),
+            }
     elif resource_type == "agent":
         ag = await agent_repo.find_by_id(session, resource_id)
         if ag:
@@ -310,6 +316,7 @@ async def _get_resource_info(
                 "id": ag.id,
                 "name": ag.name,
                 "icon": ag.icon,
+                "icon_url": resolve_icon_url(ag.icon_url or ag.icon),
                 "platform": ag.platform,
             }
     return None

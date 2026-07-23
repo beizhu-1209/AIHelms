@@ -93,6 +93,15 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 
 **Testing**: Vitest + @vue/test-utils, `describe('Component')` + `it('should ...')`
 
+## 资源图标
+
+- 资源接口统一返回可直接显示的 `icon_url`，admin 和 web 统一使用 shared 的 `HostedIcon` 组件展示
+- 平台内置图标放在 `ui/packages/web/public/icons/v1/`，Lucide 图标放 `lucide/`，模型供应商 Logo 放 `providers/`
+- 新增图标时提交对应静态文件，业务代码不得再把 emoji、Lucide 名称或打包资源路径作为对外图标值
+- Skill、Agent、业务场景写入 `icon_url`，旧 `icon` 字段只用于兼容；读取统一调用 `resolve_icon_url(icon_url or icon)`
+- MCP 的 `icon_url` 只接受 `/icons/` 下的平台托管地址，禁止外链和裸 Lucide 名称
+- 模型的 `icon_url` 由 `logo_provider_type` 统一生成，新增供应商时同步补充 provider 图标文件、后端映射和 shared 的 `getProviderIconUrl` 映射
+
 ## Database
 
 - SQLAlchemy 2.0 async + asyncpg driver, business tables in `aihelms` schema
@@ -110,6 +119,7 @@ Pagination: `data` contains `items`, `total`, `page`, `page_size`.
 - External AI clients access litellm directly via `LITELLM_PORT`
 - Never call model provider APIs directly
 - Provider keys configured via admin UI, not in env files
+- 新增模型供应商时必须同步更新管理端供应商选项、`provider_prefix_map` 初始化数据和编号迁移，并验证同步后的 LiteLLM 模型前缀
 
 ## Environment Variables
 

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from exceptions import NotFoundError, ConflictError
 from models.db import Agent, AgentCategory, AgentPlatform, AgentUsageLog, AiKey
 from repositories import agent_repo
+from services.icon_url import normalize_hosted_icon_path, resolve_icon_url
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ async def create_agent(
     name: str,
     platform: str,
     icon: str = "",
+    icon_url: str | None = None,
     description: str = "",
     category: str = "general",
     chat_url: str = "",
@@ -62,6 +64,7 @@ async def create_agent(
         agent_id=aid,
         name=name,
         icon=icon,
+        icon_url=normalize_hosted_icon_path(icon_url),
         description=description,
         platform=platform,
         category=category,
@@ -92,6 +95,10 @@ async def update_agent(session: AsyncSession, agent_id: int, **kwargs) -> dict:
     agent = await agent_repo.find_by_id(session, agent_id)
     if not agent:
         raise NotFoundError("agent", agent_id)
+    if "icon_url" in kwargs:
+        kwargs["icon_url"] = normalize_hosted_icon_path(kwargs["icon_url"])
+    elif "icon" in kwargs:
+        agent.icon_url = None
     for key, value in kwargs.items():
         if hasattr(agent, key) and value is not None:
             setattr(agent, key, value)
@@ -278,6 +285,7 @@ def _serialize(agent: Agent) -> dict:
         "agent_id": agent.agent_id,
         "name": agent.name,
         "icon": agent.icon,
+        "icon_url": resolve_icon_url(agent.icon_url or agent.icon),
         "description": agent.description,
         "platform": agent.platform,
         "category": agent.category,

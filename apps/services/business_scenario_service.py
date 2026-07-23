@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from exceptions import NotFoundError, ConflictError
 from models.db import BusinessScenario
 from repositories import business_scenario_repo
+from services.icon_url import normalize_hosted_icon_path, resolve_icon_url
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ async def create_scenario(
     name: str,
     description: str = "",
     icon: str = "Target",
+    icon_url: str | None = None,
     sort_order: int = 0,
 ) -> dict:
     existing = await business_scenario_repo.find_by_code(session, code)
@@ -57,6 +59,7 @@ async def create_scenario(
         name=name,
         description=description,
         icon=icon,
+        icon_url=normalize_hosted_icon_path(icon_url),
         sort_order=sort_order,
     )
     scenario = await business_scenario_repo.create(session, scenario)
@@ -70,6 +73,7 @@ async def update_scenario(
     name: str | None = None,
     description: str | None = None,
     icon: str | None = None,
+    icon_url: str | None = None,
     sort_order: int | None = None,
     is_active: bool | None = None,
 ) -> dict:
@@ -83,6 +87,10 @@ async def update_scenario(
         scenario.description = description
     if icon is not None:
         scenario.icon = icon
+        if icon_url is None:
+            scenario.icon_url = None
+    if icon_url is not None:
+        scenario.icon_url = normalize_hosted_icon_path(icon_url)
     if sort_order is not None:
         scenario.sort_order = sort_order
     if is_active is not None:
@@ -109,6 +117,7 @@ def _serialize(scenario: BusinessScenario) -> dict:
         "name": scenario.name,
         "description": scenario.description,
         "icon": scenario.icon,
+        "icon_url": resolve_icon_url(scenario.icon_url or scenario.icon),
         "sort_order": scenario.sort_order,
         "is_active": scenario.is_active,
         "created_at": scenario.created_at.isoformat() if scenario.created_at else None,

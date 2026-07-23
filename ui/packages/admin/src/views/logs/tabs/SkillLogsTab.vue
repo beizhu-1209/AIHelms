@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { Download } from 'lucide-vue-next'
-import * as icons from 'lucide-vue-next'
+import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import { useRoute } from 'vue-router'
 import {
   getSkillLogs,
@@ -22,11 +22,6 @@ const route = useRoute()
 const loading = ref(false)
 const exporting = ref(false)
 const exportNotice = ref('')
-
-function getIconComponent(name: string | undefined) {
-  if (!name) return null
-  return (icons as Record<string, unknown>)[name] || null
-}
 
 const filters = ref<SkillLogFilters>({ users: [], skills: [], actions: [] })
 const filterStartTime = ref('')
@@ -204,10 +199,12 @@ onMounted(() => {
             <td class="px-4 py-2.5 text-slate-900">{{ log.user?.display_name || log.user?.username || '—' }}</td>
             <td class="px-4 py-2.5 text-slate-700">{{ log.user?.department_name || '—' }}</td>
             <td class="px-4 py-2.5 text-slate-700">
-              <component
-                :is="getIconComponent(log.skill?.icon)"
-                v-if="log.skill?.icon && getIconComponent(log.skill.icon)"
-                class="mr-1 inline h-4 w-4 align-[-2px] text-slate-500"
+              <HostedIcon
+                v-if="log.skill"
+                :src="log.skill.icon_url"
+                :size="16"
+                :alt="log.skill.name"
+                class="mr-1 inline align-[-2px]"
               />
               {{ log.skill?.name || '—' }}
             </td>

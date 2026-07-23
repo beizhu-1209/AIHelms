@@ -18,6 +18,7 @@ export interface Agent {
   agent_id: string
   name: string
   icon: string
+  icon_url: string
   description: string
   platform: string
   category: string
@@ -49,6 +50,7 @@ export interface AgentListResult {
 export interface CreateAgentParams {
   name: string
   icon?: string
+  icon_url?: string
   description?: string
   platform: string
   category?: string
@@ -66,6 +68,7 @@ export interface CreateAgentParams {
 export interface UpdateAgentParams {
   name?: string
   icon?: string
+  icon_url?: string
   description?: string
   platform?: string
   category?: string

@@ -75,6 +75,7 @@ export { useLicense } from './composables/useLicense'
 export { useBranding } from './composables/useBranding'
 export { toast } from './utils/toast'
 export { getLoginUrl } from './utils/auth-redirect'
+export { getProviderIconUrl } from './utils/icon'
 export type {
   EfficiencyKpi, TrendItem, CompositionItem, KeyTypeItem, RankingItem,
   AnalysisItem, BudgetOverview, EfficiencyReport, EfficiencySuggestion,

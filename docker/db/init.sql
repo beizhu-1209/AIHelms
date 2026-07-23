@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS aihelms.business_scenarios (
     name VARCHAR(100) NOT NULL,
     description TEXT DEFAULT '',
     icon VARCHAR(50) DEFAULT 'Target',
+    icon_url VARCHAR(500),
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -319,6 +320,9 @@ INSERT INTO aihelms.provider_prefix_map (provider_type, format, category, prefix
     -- 小米 MiMo
     ('xiaomi_mimo', 'openai', 'chat', 'xiaomi_mimo', false),
     ('xiaomi_mimo', 'anthropic', 'chat', 'anthropic', false),
+    -- 腾讯混元与 xAI
+    ('tencent', 'openai', 'chat', 'tencent', true),
+    ('xai', 'openai', 'chat', 'xai', false),
     -- 其他
     ('other', 'openai', 'chat', 'openai', true),
     ('other', 'openai', 'embedding', 'openai', true),
@@ -647,6 +651,7 @@ CREATE TABLE IF NOT EXISTS aihelms.skills (
     skill_id VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(128) NOT NULL,
     icon VARCHAR(20) DEFAULT '📦',
+    icon_url VARCHAR(500),
     description TEXT DEFAULT '',
     category VARCHAR(50) DEFAULT 'general',
     business_scenario_id BIGINT REFERENCES aihelms.business_scenarios(id) ON DELETE SET NULL,
@@ -802,6 +807,7 @@ CREATE TABLE IF NOT EXISTS aihelms.agents (
     agent_id VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(128) NOT NULL,
     icon VARCHAR(20) DEFAULT '🤖',
+    icon_url VARCHAR(500),
     description TEXT DEFAULT '',
     platform VARCHAR(64) NOT NULL,
     category VARCHAR(50) DEFAULT 'general',
