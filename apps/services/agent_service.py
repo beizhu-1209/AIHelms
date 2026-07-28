@@ -4,6 +4,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import Agent, AgentCategory, AgentPlatform, AgentUsageLog, AiKey
 from repositories import agent_repo
@@ -163,7 +164,7 @@ async def list_usage_logs(
             "agent_id": log.agent_id,
             "user_id": log.user_id,
             "session_id": log.session_id,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "created_at": fmt_local_time(log.created_at),
         })
     return {"items": serialized, "total": total, "page": page, "page_size": page_size}
 
@@ -303,6 +304,6 @@ def _serialize(agent: Agent) -> dict:
         "user_count": agent.user_count,
         "call_count": agent.call_count,
         "created_by": agent.created_by,
-        "created_at": agent.created_at.isoformat() if agent.created_at else None,
-        "updated_at": agent.updated_at.isoformat() if agent.updated_at else None,
+        "created_at": fmt_local_time(agent.created_at),
+        "updated_at": fmt_local_time(agent.updated_at),
     }

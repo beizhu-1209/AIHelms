@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from models.db import AdminAuditLog
 from repositories import audit_log_repo
 
@@ -68,5 +69,5 @@ def _serialize(log: AdminAuditLog) -> dict:
         "user_agent": log.user_agent,
         "duration_ms": log.duration_ms,
         "request_summary": log.request_summary,
-        "created_at": log.created_at.isoformat() if log.created_at else None,
+        "created_at": fmt_local_time(log.created_at),
     }

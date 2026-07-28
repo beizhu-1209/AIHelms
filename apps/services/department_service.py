@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import Department
 from repositories import department_repo
@@ -101,7 +102,7 @@ async def get_department_members(session: AsyncSession, dept_id: int) -> list[di
             "position": user.position,
             "is_active": user.is_active,
             "is_manager": ud.is_manager,
-            "joined_at": ud.joined_at.isoformat() if ud.joined_at else None,
+            "joined_at": fmt_local_time(ud.joined_at),
         }
         for user, ud in rows
     ]
@@ -161,8 +162,8 @@ def _serialize_dept(dept: Department) -> dict:
         "sort_order": dept.sort_order,
         "is_active": dept.is_active,
         "litellm_team_id": dept.litellm_team_id,
-        "created_at": dept.created_at.isoformat() if dept.created_at else None,
-        "updated_at": dept.updated_at.isoformat() if dept.updated_at else None,
+        "created_at": fmt_local_time(dept.created_at),
+        "updated_at": fmt_local_time(dept.updated_at),
     }
 
 
