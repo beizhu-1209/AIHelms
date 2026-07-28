@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 async def list_providers(session: AsyncSession, page: int = 1, page_size: int = 50) -> dict:
-    total = await provider_repo.count_all(session)
-    items = await provider_repo.find_all(session, page, page_size)
+    total = await provider_repo.count_all(session, is_active=True)
+    items = await provider_repo.find_all(session, page, page_size, is_active=True)
     return {
         "items": [_serialize(p) for p in items],
         "total": total,
