@@ -18,8 +18,8 @@ async def list_credentials(
     page_size: int = 50,
     provider_id: int | None = None,
 ) -> dict:
-    total = await credential_repo.count_all(session, provider_id=provider_id)
-    items = await credential_repo.find_all(session, page, page_size, provider_id=provider_id)
+    total = await credential_repo.count_all(session, provider_id=provider_id, is_active=True)
+    items = await credential_repo.find_all(session, page, page_size, provider_id=provider_id, is_active=True)
     return {
         "items": [_serialize(c) for c in items],
         "total": total,
