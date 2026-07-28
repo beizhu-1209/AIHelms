@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.time_utils import fmt_local_time
 from exceptions import ConflictError, NotFoundError
 from models.db import Skill, SkillCategory, SkillUsageLog
 from repositories import ai_policies_repo, skill_repo
@@ -319,6 +320,6 @@ def _serialize(skill: Skill, latest_audit_map: dict[int, str] | None = None) -> 
         "latest_ai_policies_audit_id": skill.latest_ai_policies_audit_id,
         "latest_ai_policies_audit_code": latest_audit_code,
         "created_by": skill.created_by,
-        "created_at": skill.created_at.isoformat() if skill.created_at else None,
-        "updated_at": skill.updated_at.isoformat() if skill.updated_at else None,
+        "created_at": fmt_local_time(skill.created_at),
+        "updated_at": fmt_local_time(skill.updated_at),
     }

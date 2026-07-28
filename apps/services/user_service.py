@@ -3,6 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import get_password_hash
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import User
 from repositories import user_repo
@@ -177,7 +178,7 @@ def _serialize_user(user: User) -> dict:
         "position": user.position,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "created_at": fmt_local_time(user.created_at),
         "roles": [{"id": ur.role.id, "name": ur.role.name, "display_name": ur.role.display_name} for ur in user.roles],
         "departments": [{"id": ud.department.id, "name": ud.department.name, "is_manager": ud.is_manager} for ud in user.departments],
         "projects": [{"id": up.project.id, "name": up.project.name} for up in user.projects],
@@ -188,5 +189,5 @@ def _serialize_user_detail(user: User) -> dict:
     data = _serialize_user(user)
     data["avatar"] = user.avatar
     data["litellm_user_id"] = user.litellm_user_id
-    data["updated_at"] = user.updated_at.isoformat() if user.updated_at else None
+    data["updated_at"] = fmt_local_time(user.updated_at)
     return data

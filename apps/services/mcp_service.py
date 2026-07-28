@@ -3,6 +3,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from exceptions import ConflictError, NotFoundError, ValidationError
 from models.db import McpServer, McpTool
 from repositories import mcp_repo
@@ -483,15 +484,13 @@ def _serialize_server(server: McpServer) -> dict:
         "requires_approval": server.requires_approval,
         "status": server.status,
         "call_count": server.call_count or 0,
-        "last_health_check": (
-            server.last_health_check.isoformat() if server.last_health_check else None
-        ),
+        "last_health_check": fmt_local_time(server.last_health_check),
         "health_check_error": server.health_check_error,
         "litellm_synced": server.litellm_synced,
         "litellm_sync_error": server.litellm_sync_error,
         "created_by": server.created_by,
-        "created_at": server.created_at.isoformat() if server.created_at else None,
-        "updated_at": server.updated_at.isoformat() if server.updated_at else None,
+        "created_at": fmt_local_time(server.created_at),
+        "updated_at": fmt_local_time(server.updated_at),
     }
 
 

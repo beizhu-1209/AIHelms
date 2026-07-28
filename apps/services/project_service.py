@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import Project
 from repositories import project_repo
@@ -93,7 +94,7 @@ async def get_project_members(session: AsyncSession, project_id: int) -> list[di
             "display_name": user.display_name,
             "position": user.position,
             "is_active": user.is_active,
-            "joined_at": up.joined_at.isoformat() if up.joined_at else None,
+            "joined_at": fmt_local_time(up.joined_at),
         }
         for user, up in rows
     ]
@@ -144,6 +145,6 @@ def _serialize_project(project: Project) -> dict:
         "description": project.description,
         "is_active": project.is_active,
         "litellm_team_id": project.litellm_team_id,
-        "created_at": project.created_at.isoformat() if project.created_at else None,
-        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+        "created_at": fmt_local_time(project.created_at),
+        "updated_at": fmt_local_time(project.updated_at),
     }

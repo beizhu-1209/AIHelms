@@ -16,11 +16,13 @@ interface ModelItem {
   id: number
   name: string
   model_id: string
+  model_id_anthropic: string | null
   category: string
   capabilities: string[]
   description: string
   logo_provider_type: string
   icon_url: string
+  base_url: string
   is_published: boolean
   requires_approval: boolean
   deployment_count: number
@@ -249,9 +251,9 @@ onMounted(async () => {
                   {{ copied === 'model' ? t('modelSquare.action.copied') : t('modelSquare.action.copy') }}
                 </button>
               </div>
-              <div v-if="activeModel.has_anthropic_deployment && activeModel.category === 'chat'" class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
+              <div v-if="activeModel.model_id_anthropic" class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
                 <div>
-                  <code class="text-sm font-medium text-slate-800">{{ activeModel.model_id }}(Anthropic)</code>
+                  <code class="text-sm font-medium text-slate-800">{{ activeModel.model_id_anthropic }}</code>
                   <p class="mt-0.5 text-xs text-slate-400">
                     {{ t('modelSquare.access.anthropicClientsPrefix') }}
                     <template v-for="(client, index) in anthropicClients" :key="client">
@@ -259,7 +261,7 @@ onMounted(async () => {
                     </template>{{ t('modelSquare.access.anthropicClientsSuffix') }}
                   </p>
                 </div>
-                <button @click="copyText(activeModel.model_id + '(Anthropic)', 'model-cc')" class="shrink-0 text-xs text-purple-600 hover:text-purple-700">
+                <button @click="copyText(activeModel.model_id_anthropic, 'model-cc')" class="shrink-0 text-xs text-purple-600 hover:text-purple-700">
                   {{ copied === 'model-cc' ? t('modelSquare.action.copied') : t('modelSquare.action.copy') }}
                 </button>
               </div>
@@ -284,11 +286,11 @@ onMounted(async () => {
           <div class="rounded-lg bg-slate-50 p-4">
             <div class="mb-1 flex items-center justify-between">
               <span class="text-xs font-medium text-slate-500">Base URL</span>
-              <button @click="copyText(litellmBaseUrl, 'url')" class="text-xs text-purple-600 hover:text-purple-700">
+              <button @click="copyText(activeModel.base_url || litellmBaseUrl, 'url')" class="text-xs text-purple-600 hover:text-purple-700">
                 {{ copied === 'url' ? t('modelSquare.action.copied') : t('modelSquare.action.copy') }}
               </button>
             </div>
-            <code class="text-sm text-slate-800">{{ litellmBaseUrl || t('modelSquare.fallback.notConfigured') }}</code>
+            <code class="text-sm text-slate-800">{{ activeModel.base_url || litellmBaseUrl || t('modelSquare.fallback.notConfigured') }}</code>
           </div>
 
 

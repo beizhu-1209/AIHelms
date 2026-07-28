@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import async_session
 from core.security import create_access_token, get_password_hash, verify_password
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, UnauthorizedError
 from models.db import Permission, Role, RolePermission, User, UserRole
 
@@ -66,7 +67,7 @@ async def get_current_user_info(session: AsyncSession, user_id: int) -> dict:
         "position": user.position,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "created_at": fmt_local_time(user.created_at),
         "permissions": permissions,
         "roles": [{"id": ur.role.id, "name": ur.role.name, "display_name": ur.role.display_name} for ur in user.roles],
         "departments": departments,

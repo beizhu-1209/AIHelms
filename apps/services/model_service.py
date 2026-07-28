@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility, Provider, ProviderPrefixMap
 from repositories import model_repo, credential_repo, ai_key_repo
@@ -43,27 +44,33 @@ async def get_model_by_id(session: AsyncSession, model_id: int) -> dict:
     return data
 
 
+def _serialize_active_model(m: Model, has_anthropic: bool) -> dict:
+    model_id_anthropic = None
+    if has_anthropic and m.category == "chat":
+        model_id_anthropic = f"{m.model_id}{ANTHROPIC_MODEL_SUFFIX}"
+    return {
+        "id": m.id,
+        "name": m.name,
+        "model_id": m.model_id,
+        "model_id_anthropic": model_id_anthropic,
+        "category": m.category,
+        "capabilities": m.capabilities,
+        "description": m.description,
+        "logo_provider_type": m.logo_provider_type,
+        "icon_url": resolve_provider_icon_url(m.logo_provider_type),
+        "base_url": settings.litellm_public_url,
+        "is_active": m.is_active,
+        "is_published": m.is_published,
+        "requires_approval": m.requires_approval,
+        "has_anthropic_deployment": has_anthropic,
+    }
+
+
 async def get_all_active_models(session: AsyncSession) -> list[dict]:
     models = await model_repo.find_all_active(session, published_only=True)
     model_ids = [m.model_id for m in models]
     anthropic_set = await model_repo.find_model_ids_with_anthropic_deployments(session, model_ids)
-    return [
-        {
-            "id": m.id,
-            "name": m.name,
-            "model_id": m.model_id,
-            "category": m.category,
-            "capabilities": m.capabilities,
-            "description": m.description,
-            "logo_provider_type": m.logo_provider_type,
-            "icon_url": resolve_provider_icon_url(m.logo_provider_type),
-            "is_active": m.is_active,
-            "is_published": m.is_published,
-            "requires_approval": m.requires_approval,
-            "has_anthropic_deployment": m.model_id in anthropic_set,
-        }
-        for m in models
-    ]
+    return [_serialize_active_model(m, m.model_id in anthropic_set) for m in models]
 
 
 async def get_model_ids_by_credential_ids(
@@ -792,8 +799,8 @@ def _serialize_model(model: Model) -> dict:
         "is_published": model.is_published,
         "visibility_type": model.visibility_type,
         "deployment_count": len(model.deployments) if model.deployments else 0,
-        "created_at": model.created_at.isoformat() if model.created_at else None,
-        "updated_at": model.updated_at.isoformat() if model.updated_at else None,
+        "created_at": fmt_local_time(model.created_at),
+        "updated_at": fmt_local_time(model.updated_at),
     }
 
 
@@ -815,7 +822,7 @@ def _serialize_deployment(deployment: ModelDeployment) -> dict:
         "monthly_call_quota": deployment.monthly_call_quota,
         "monthly_call_used": deployment.monthly_call_used,
         "is_active": deployment.is_active,
-        "created_at": deployment.created_at.isoformat() if deployment.created_at else None,
+        "created_at": fmt_local_time(deployment.created_at),
     }
 
 
@@ -826,7 +833,7 @@ def _serialize_access_group(group: ModelAccessGroup) -> dict:
         "description": group.description,
         "model_ids": group.model_ids,
         "is_active": group.is_active,
-        "created_at": group.created_at.isoformat() if group.created_at else None,
+        "created_at": fmt_local_time(group.created_at),
     }
 
 
@@ -840,7 +847,7 @@ def _serialize_router_settings(settings: RouterSettings) -> dict:
         "num_retries": settings.num_retries,
         "timeout": settings.timeout,
         "config": settings.config,
-        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+        "updated_at": fmt_local_time(settings.updated_at),
     }
 
 

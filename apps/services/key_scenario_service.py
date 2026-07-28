@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import KeyScenario
 from repositories import key_scenario_repo
@@ -91,6 +92,6 @@ def _serialize(scenario: KeyScenario) -> dict:
         "name": scenario.name,
         "description": scenario.description,
         "is_active": scenario.is_active,
-        "created_at": scenario.created_at.isoformat() if scenario.created_at else None,
-        "updated_at": scenario.updated_at.isoformat() if scenario.updated_at else None,
+        "created_at": fmt_local_time(scenario.created_at),
+        "updated_at": fmt_local_time(scenario.updated_at),
     }

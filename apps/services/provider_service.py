@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, ConflictError
 from models.db import Provider
 from repositories import provider_repo, credential_repo
@@ -110,6 +111,6 @@ def _serialize(provider: Provider) -> dict:
         "description": provider.description,
         "config": provider.config,
         "credential_count": len(provider.credentials) if provider.credentials else 0,
-        "created_at": provider.created_at.isoformat() if provider.created_at else None,
-        "updated_at": provider.updated_at.isoformat() if provider.updated_at else None,
+        "created_at": fmt_local_time(provider.created_at),
+        "updated_at": fmt_local_time(provider.updated_at),
     }
