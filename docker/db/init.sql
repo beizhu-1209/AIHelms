@@ -547,7 +547,7 @@ CREATE TABLE IF NOT EXISTS aihelms.mcp_call_logs (
 -- LLM 调用日志（从 LiteLLM SpendLogs 定时同步）
 CREATE TABLE IF NOT EXISTS aihelms.llm_call_logs (
     id BIGSERIAL PRIMARY KEY,
-    request_id VARCHAR(100) UNIQUE NOT NULL,
+    request_id VARCHAR(500) UNIQUE NOT NULL,
     user_id BIGINT,
     ai_key_id BIGINT,
     deployment_id BIGINT,

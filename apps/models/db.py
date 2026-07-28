@@ -509,7 +509,7 @@ class LlmCallLog(Base):
     __table_args__ = {"schema": "aihelms"}
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    request_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    request_id: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
     user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     ai_key_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     deployment_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
