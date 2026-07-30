@@ -602,6 +602,7 @@ CREATE INDEX IF NOT EXISTS idx_skill_usage_skill ON aihelms.skill_usage_logs(ski
 CREATE TABLE IF NOT EXISTS aihelms.sync_state (
     key VARCHAR(64) PRIMARY KEY,
     last_sync_at TIMESTAMPTZ NOT NULL,
+    last_request_id VARCHAR(500),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
