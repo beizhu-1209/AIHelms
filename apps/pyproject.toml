@@ -1,6 +1,6 @@
 [project]
 name = "aihelms"
-version = "0.1.19"
+version = "0.1.20"
 description = "AIHelms - 企业级 AI 资源纳管平台"
 requires-python = ">=3.11"
 dependencies = [
