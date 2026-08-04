@@ -30,6 +30,9 @@ from services.model_service import ANTHROPIC_MODEL_SUFFIX
 
 logger = logging.getLogger(__name__)
 
+SPEND_LOG_BATCH_SIZE = 1000
+SPEND_LOG_MAX_BATCHES_PER_RUN = 50
+
 
 def _run_async(coro):
     loop = asyncio.new_event_loop()
@@ -128,13 +131,22 @@ def _messages_from_payload(
     return None
 
 
-def _max_spend_cursor_time(rows) -> datetime | None:
-    max_cursor_time = None
+def _max_spend_cursor(rows) -> tuple[datetime, str] | None:
+    """取本批最大的 (cursor_time, request_id) 复合游标。
+
+    行按 (cursor_time, request_id) 升序返回，但仍显式取最大值，
+    不依赖调用方保证顺序。
+    """
+    max_cursor = None
     for row in rows:
         cursor_time = _as_utc_datetime(row[11]) or _as_utc_datetime(row[10])
-        if cursor_time and (max_cursor_time is None or cursor_time > max_cursor_time):
-            max_cursor_time = cursor_time
-    return max_cursor_time
+        request_id = row[0]
+        if not cursor_time or not request_id:
+            continue
+        candidate = (cursor_time, request_id)
+        if max_cursor is None or candidate > max_cursor:
+            max_cursor = candidate
+    return max_cursor
 
 
 async def _ensure_spend_logs_cursor_index(session: AsyncSession) -> None:
@@ -187,41 +199,74 @@ async def _sync() -> None:
                 session.add(sync_state)
                 await session.flush()
 
-            start_time = sync_state.last_sync_at - timedelta(minutes=10)
-            start_time_naive = _to_utc_naive(start_time)
             spend_log_model_id_select = await _spend_log_model_id_select(session)
-            result = await session.execute(
-                text(
-                    'SELECT request_id, api_key, "user", model, custom_llm_provider, '
-                    "call_type, spend, total_tokens, prompt_tokens, completion_tokens, "
-                    '"startTime", "endTime", "completionStartTime", '
-                    "session_id, status, metadata, mcp_namespaced_tool_name, "
-                    "messages, response, proxy_server_request, "
-                    f"{spend_log_model_id_select} "
-                    'FROM public."LiteLLM_SpendLogs" '
-                    'WHERE COALESCE("endTime", "startTime") >= :start_time '
-                    "  AND (mcp_namespaced_tool_name IS NULL "
-                    "       OR mcp_namespaced_tool_name = '') "
-                    "  AND COALESCE(call_type, '') NOT IN ("
-                    "       'list_mcp_tools', 'list_mcp_tool', "
-                    "       'mcp_list_tools', 'mcp_list_tool') "
-                    'ORDER BY COALESCE("endTime", "startTime") ASC, request_id ASC '
-                    "LIMIT 1000"
-                ),
-                {"start_time": start_time_naive},
+            cursor_condition = (
+                'AND (COALESCE("endTime", "startTime"), request_id) '
+                "> (:last_time, :last_request_id) "
+                if sync_state.last_request_id
+                else 'AND COALESCE("endTime", "startTime") > :last_time '
             )
-            rows = result.fetchall()
+            query = text(
+                'SELECT request_id, api_key, "user", model, custom_llm_provider, '
+                "call_type, spend, total_tokens, prompt_tokens, completion_tokens, "
+                '"startTime", "endTime", "completionStartTime", '
+                "session_id, status, metadata, mcp_namespaced_tool_name, "
+                "messages, response, proxy_server_request, "
+                f"{spend_log_model_id_select} "
+                'FROM public."LiteLLM_SpendLogs" '
+                "WHERE (mcp_namespaced_tool_name IS NULL "
+                "       OR mcp_namespaced_tool_name = '') "
+                "  AND COALESCE(call_type, '') NOT IN ("
+                "       'list_mcp_tools', 'list_mcp_tool', "
+                "       'mcp_list_tools', 'mcp_list_tool') "
+                f"  {cursor_condition}"
+                'ORDER BY COALESCE("endTime", "startTime") ASC, request_id ASC '
+                "LIMIT :batch_size"
+            )
 
-            if not rows:
+            total_inserted = 0
+            total_scanned = 0
+            for _ in range(SPEND_LOG_MAX_BATCHES_PER_RUN):
+                params = {
+                    "last_time": _to_utc_naive(sync_state.last_sync_at),
+                    "batch_size": SPEND_LOG_BATCH_SIZE,
+                }
+                if sync_state.last_request_id:
+                    params["last_request_id"] = sync_state.last_request_id
+                result = await session.execute(query, params)
+                rows = result.fetchall()
+                if not rows:
+                    break
+
+                previous_cursor = (
+                    sync_state.last_sync_at,
+                    sync_state.last_request_id or "",
+                )
+                next_cursor = _max_spend_cursor(rows)
+                if next_cursor is None or next_cursor <= previous_cursor:
+                    logger.error(
+                        "llm log sync cursor did not advance, aborting run: "
+                        "cursor=%s scanned=%d",
+                        previous_cursor[0].isoformat(),
+                        len(rows),
+                    )
+                    break
+
+                total_inserted += await _upsert_spend_log_rows(session, rows)
+                total_scanned += len(rows)
+                sync_state.last_sync_at, sync_state.last_request_id = next_cursor
                 await session.commit()
-                return
 
-            inserted = await _upsert_spend_log_rows(session, rows)
-            max_cursor_time = _max_spend_cursor_time(rows)
-            if max_cursor_time:
-                sync_state.last_sync_at = max_cursor_time
+                if len(rows) < SPEND_LOG_BATCH_SIZE:
+                    break
+
             await session.commit()
-            logger.info("synced %d llm call logs (scanned %d)", inserted, len(rows))
+            if total_scanned:
+                logger.info(
+                    "synced %d llm call logs (scanned %d)",
+                    total_inserted,
+                    total_scanned,
+                )
     except Exception:  # noqa: BLE001
         logger.error("failed to sync llm call logs", exc_info=True)
 
@@ -254,10 +299,13 @@ async def _reconcile() -> None:
                     "  AND NOT EXISTS ("
                     "       SELECT 1 FROM aihelms.llm_call_logs l "
                     "       WHERE l.request_id = s.request_id) "
-                    'ORDER BY s."endTime" ASC, s.request_id ASC '
-                    "LIMIT 1000"
+                    'ORDER BY s."endTime" DESC, s.request_id DESC '
+                    "LIMIT :batch_size"
                 ),
-                {"start_time": _to_utc_naive(start_time)},
+                {
+                    "start_time": _to_utc_naive(start_time),
+                    "batch_size": SPEND_LOG_BATCH_SIZE,
+                },
             )
             rows = result.fetchall()
             if not rows:

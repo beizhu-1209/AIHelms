@@ -554,6 +554,7 @@ class SyncState(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     last_sync_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_request_id: Mapped[str | None] = mapped_column(String(500))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
