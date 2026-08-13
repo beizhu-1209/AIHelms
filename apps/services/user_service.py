@@ -13,9 +13,9 @@ from services import ai_key_service
 logger = logging.getLogger(__name__)
 
 
-async def list_users(session: AsyncSession, page: int = 1, page_size: int = 20, keyword: str = "") -> dict:
-    total = await user_repo.count_users(session, keyword)
-    users = await user_repo.find_users(session, page, page_size, keyword)
+async def list_users(session: AsyncSession, page: int = 1, page_size: int = 20, keyword: str = "", is_admin: bool | None = None, is_active: bool | None = None) -> dict:
+    total = await user_repo.count_users(session, keyword, is_admin, is_active)
+    users = await user_repo.find_users(session, page, page_size, keyword, is_admin, is_active)
     items = [_serialize_user(u) for u in users]
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 

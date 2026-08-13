@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.db import User, UserRole, UserDepartment, UserProject
 
 
-async def count_users(session: AsyncSession, keyword: str = "") -> int:
+async def count_users(session: AsyncSession, keyword: str = "", is_admin: bool | None = None, is_active: bool | None = None) -> int:
     stmt = select(func.count(User.id)).where(User.is_super_admin == False)
     if keyword:
         pattern = f"%{keyword}%"
@@ -16,11 +16,15 @@ async def count_users(session: AsyncSession, keyword: str = "") -> int:
                 User.display_name.ilike(pattern),
             )
         )
+    if is_admin is not None:
+        stmt = stmt.where(User.is_admin == is_admin)
+    if is_active is not None:
+        stmt = stmt.where(User.is_active == is_active)
     result = await session.execute(stmt)
     return result.scalar_one()
 
 
-async def find_users(session: AsyncSession, page: int, page_size: int, keyword: str = "") -> list[User]:
+async def find_users(session: AsyncSession, page: int, page_size: int, keyword: str = "", is_admin: bool | None = None, is_active: bool | None = None) -> list[User]:
     offset = (page - 1) * page_size
     stmt = select(User).where(User.is_super_admin == False).order_by(User.id)
     if keyword:
@@ -33,6 +37,10 @@ async def find_users(session: AsyncSession, page: int, page_size: int, keyword: 
                 User.display_name.ilike(pattern),
             )
         )
+    if is_admin is not None:
+        stmt = stmt.where(User.is_admin == is_admin)
+    if is_active is not None:
+        stmt = stmt.where(User.is_active == is_active)
     stmt = stmt.limit(page_size).offset(offset)
     result = await session.execute(stmt)
     return list(result.scalars().all())
