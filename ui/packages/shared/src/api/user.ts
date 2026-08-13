@@ -1,9 +1,9 @@
 import { request } from './request'
 import type { User, CreateUserParams, UpdateUserParams, UserListResult } from '../types/user'
 
-export function getUsers(page: number, pageSize: number, keyword?: string): Promise<UserListResult> {
+export function getUsers(page: number, pageSize: number, keyword?: string, isAdmin?: boolean | null, isActive?: boolean | null): Promise<UserListResult> {
   return request<UserListResult>('/api/v1/users', {
-    params: { page, page_size: pageSize, keyword },
+    params: { page, page_size: pageSize, keyword, is_admin: isAdmin ?? undefined, is_active: isActive ?? undefined },
   })
 }
 

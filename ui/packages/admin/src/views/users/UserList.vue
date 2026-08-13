@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getUsers, updateUser, type User } from '@aihelms/shared'
 import { usePermission } from '@aihelms/shared'
@@ -17,16 +17,28 @@ const filterRole = ref('')
 const filterStatus = ref('')
 const isLoading = ref(false)
 
+function getFilters() {
+  const isAdmin = filterRole.value === 'admin' ? true : filterRole.value === 'user' ? false : null
+  const isActive = filterStatus.value === 'active' ? true : filterStatus.value === 'disabled' ? false : null
+  return { isAdmin, isActive }
+}
+
 async function fetchUsers(): Promise<void> {
   isLoading.value = true
   try {
-    const result = await getUsers(page.value, pageSize.value, keyword.value)
+    const { isAdmin, isActive } = getFilters()
+    const result = await getUsers(page.value, pageSize.value, keyword.value, isAdmin, isActive)
     users.value = result.items
     total.value = result.total
   } finally {
     isLoading.value = false
   }
 }
+
+watch([filterRole, filterStatus], () => {
+  page.value = 1
+  fetchUsers()
+})
 
 function handleSearch(): void {
   page.value = 1
@@ -60,25 +72,6 @@ function getRoleLabel(user: User): string {
 function isAdmin(user: User): boolean {
   return user.roles.some(r => r.name === 'admin')
 }
-
-const filteredUsers = computed(() => {
-  let result = users.value
-  if (filterRole.value) {
-    result = result.filter(u => {
-      if (filterRole.value === 'admin') return u.roles.some(r => r.name === 'admin')
-      if (filterRole.value === 'user') return !u.roles.some(r => r.name === 'admin')
-      return true
-    })
-  }
-  if (filterStatus.value) {
-    result = result.filter(u => {
-      if (filterStatus.value === 'active') return u.is_active
-      if (filterStatus.value === 'disabled') return !u.is_active
-      return true
-    })
-  }
-  return result
-})
 
 onMounted(fetchUsers)
 </script>
@@ -152,10 +145,10 @@ onMounted(fetchUsers)
           <tr v-if="isLoading">
             <td colspan="7" class="px-4 py-8 text-center text-slate-400">加载中...</td>
           </tr>
-          <tr v-else-if="filteredUsers.length === 0">
+          <tr v-else-if="users.length === 0">
             <td colspan="7" class="px-4 py-8 text-center text-slate-400">暂无数据</td>
           </tr>
-          <tr v-for="user in filteredUsers" :key="user.id" class="border-b border-slate-100 last:border-0">
+          <tr v-for="user in users" :key="user.id" class="border-b border-slate-100 last:border-0">
             <td class="px-4 py-3 font-medium text-slate-900">{{ user.username }}</td>
             <td class="px-4 py-3 text-slate-600">{{ user.display_name || '-' }}</td>
             <td class="px-4 py-3 text-slate-600">{{ user.email }}</td>
