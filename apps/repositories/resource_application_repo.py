@@ -1,4 +1,6 @@
-from sqlalchemy import select, func
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.db import ResourceApplication
@@ -40,6 +42,10 @@ async def find_all(
     resource_type: str | None = None,
     resource_id: int | None = None,
     status: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    reviewed_after: datetime | None = None,
+    reviewed_before: datetime | None = None,
 ) -> list[ResourceApplication]:
     stmt = select(ResourceApplication).order_by(ResourceApplication.id.desc())
     if user_id is not None:
@@ -50,6 +56,14 @@ async def find_all(
         stmt = stmt.where(ResourceApplication.resource_id == resource_id)
     if status:
         stmt = stmt.where(ResourceApplication.status == status)
+    if created_after:
+        stmt = stmt.where(ResourceApplication.created_at >= created_after)
+    if created_before:
+        stmt = stmt.where(ResourceApplication.created_at <= created_before)
+    if reviewed_after:
+        stmt = stmt.where(ResourceApplication.reviewed_at >= reviewed_after)
+    if reviewed_before:
+        stmt = stmt.where(ResourceApplication.reviewed_at <= reviewed_before)
     offset = (page - 1) * page_size
     stmt = stmt.limit(page_size).offset(offset)
     result = await session.execute(stmt)
@@ -62,6 +76,10 @@ async def count_all(
     resource_type: str | None = None,
     resource_id: int | None = None,
     status: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    reviewed_after: datetime | None = None,
+    reviewed_before: datetime | None = None,
 ) -> int:
     stmt = select(func.count(ResourceApplication.id))
     if user_id is not None:
@@ -72,5 +90,13 @@ async def count_all(
         stmt = stmt.where(ResourceApplication.resource_id == resource_id)
     if status:
         stmt = stmt.where(ResourceApplication.status == status)
+    if created_after:
+        stmt = stmt.where(ResourceApplication.created_at >= created_after)
+    if created_before:
+        stmt = stmt.where(ResourceApplication.created_at <= created_before)
+    if reviewed_after:
+        stmt = stmt.where(ResourceApplication.reviewed_at >= reviewed_after)
+    if reviewed_before:
+        stmt = stmt.where(ResourceApplication.reviewed_at <= reviewed_before)
     result = await session.execute(stmt)
     return result.scalar_one()
