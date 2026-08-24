@@ -1,23 +1,23 @@
 import csv
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from celery_app import celery_app
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from celery_app import celery_app
 from core.config import settings
 from core.time_utils import fmt_local_time
 from models.db import ExportTask
 from repositories import export_task_repo
 from services.export_task_builders import build_export_rows
 
-MAX_EXPORT_ROWS = 100000
 EXPORT_RETENTION_DAYS = 7
 SOURCE_OPTIONS = [
     {"key": "usage_logs", "label": "日志管理"},
     {"key": "efficiency", "label": "AI效能"},
+    {"key": "resource_applications", "label": "审批记录"},
 ]
 EXPORT_TYPE_OPTIONS = {
     "usage_logs": {"llm", "mcp", "skill", "agent"},
@@ -42,6 +42,7 @@ EXPORT_TYPE_OPTIONS = {
         "health_docker",
         "health_mcp",
     },
+    "resource_applications": {"applications"},
 }
 EXPORT_RUNNING_TIMEOUT_MINUTES = 30
 STATUS_OPTIONS = [
@@ -53,6 +54,7 @@ STATUS_OPTIONS = [
 ]
 
 logger = logging.getLogger(__name__)
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 def _now() -> datetime:
@@ -86,15 +88,6 @@ def _is_path_under(base: Path, candidate: Path) -> bool:
         return True
     except ValueError:
         return False
-
-
-def _safe_export_path(file_name: str) -> Path:
-    exports_dir = _exports_dir()
-    exports_dir.mkdir(parents=True, exist_ok=True)
-    path = exports_dir / file_name
-    if not _is_path_under(exports_dir, path):
-        raise ValueError("导出文件路径非法")
-    return path
 
 
 def _stored_export_path(task: ExportTask) -> Path | None:
@@ -144,12 +137,20 @@ def _fmt_time(value: datetime | None) -> str | None:
     return fmt_local_time(value)
 
 
+def _sanitize_csv_cell(value: object) -> object:
+    if isinstance(value, str) and value.lstrip().startswith(CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
+
 def _write_csv(path: Path, header: list[str], rows: list[list[object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as fp:
         writer = csv.writer(fp)
         writer.writerow(header)
-        writer.writerows(rows)
+        writer.writerows(
+            [[_sanitize_csv_cell(value) for value in row] for row in rows]
+        )
 
 
 async def list_export_tasks(
@@ -342,4 +343,3 @@ async def get_export_task(session: AsyncSession, task_id: int) -> ExportTask | N
 def _default_task_name(source: str, export_type: str) -> str:
     source_label = next((item["label"] for item in SOURCE_OPTIONS if item["key"] == source), source)
     return f"{source_label}-{export_type}"
-

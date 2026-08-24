@@ -1,3 +1,5 @@
+from datetime import date, datetime, time
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,8 +11,18 @@ from services import resource_application_service
 router = APIRouter(prefix="/resource-applications", tags=["resource-applications"])
 
 
+def _date_start(value: date | None) -> datetime | None:
+    return datetime.combine(value, time.min) if value else None
+
+
+def _date_end(value: date | None) -> datetime | None:
+    return datetime.combine(value, time.max) if value else None
+
+
 class CreateApplicationRequest(BaseModel):
-    resource_type: str = Field(..., pattern=r"^(model|mcp|skill|agent)$")
+    resource_type: str = Field(
+        ..., pattern=resource_application_service.RESOURCE_TYPE_PATTERN
+    )
     resource_id: int
     reason: str = Field("", max_length=500)
     request_config: dict | None = None
@@ -43,11 +55,24 @@ async def list_applications(
     user_id: int | None = None,
     resource_type: str | None = None,
     status: str | None = None,
+    created_after: date | None = None,
+    created_before: date | None = None,
+    reviewed_after: date | None = None,
+    reviewed_before: date | None = None,
     session: AsyncSession = Depends(get_db),
     _: dict = Depends(require_permission("resource_application:read")),
 ):
     data = await resource_application_service.list_applications(
-        session, page, page_size, user_id, resource_type, status
+        session,
+        page,
+        page_size,
+        user_id,
+        resource_type,
+        status,
+        _date_start(created_after),
+        _date_end(created_before),
+        _date_start(reviewed_after),
+        _date_end(reviewed_before),
     )
     return {"code": 200, "message": "ok", "data": data}
 

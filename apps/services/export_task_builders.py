@@ -1,8 +1,9 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services import efficiency_service, usage_log_service
+from repositories import agent_repo, mcp_repo, model_repo, skill_repo
+from services import efficiency_service, resource_application_service, usage_log_service
 
 MAX_EXPORT_ROWS = 100000
 
@@ -42,11 +43,22 @@ def _strings(params: dict[str, object], key: str) -> list[str] | None:
     return [item for item in items if item] or None
 
 
-def _datetime(params: dict[str, object], key: str) -> datetime | None:
+def _datetime(
+    params: dict[str, object],
+    key: str,
+    *,
+    date_only_time: time = time.min,
+) -> datetime | None:
     value = params.get(key)
     if value in (None, ""):
         return None
-    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    raw_value = str(value)
+    try:
+        parsed_date = date.fromisoformat(raw_value)
+    except ValueError:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    else:
+        return datetime.combine(parsed_date, date_only_time)
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone().replace(tzinfo=None)
     return parsed
@@ -93,6 +105,8 @@ async def build_export_rows(
         return await _build_usage_log_rows(session, export_type, params)
     if source == "efficiency":
         return await _build_efficiency_rows(session, export_type, params)
+    if source == "resource_applications":
+        return await _build_resource_application_rows(session, export_type, params)
     raise ValueError("该来源暂不支持创建导出任务")
 
 
@@ -255,3 +269,123 @@ async def _build_efficiency_rows(
             return ["检查项", "状态", "结果"], [[row["name"], row["status"], row["value"]] for row in result["docker"]]
         return ["MCP名称", "Server Name", "工具数", "发布", "状态", "最后检查", "错误信息"], [[row["name"], row["server_name"], row["tool_count"], "是" if row["is_published"] else "否", row["status"], row["last_check"] or "", row["error"]] for row in result["mcp_servers"]]
     raise ValueError("不支持的效能导出类型")
+
+
+async def _build_resource_application_rows(
+    session: AsyncSession,
+    export_type: str,
+    params: dict[str, object],
+) -> tuple[list[str], list[list[object]]]:
+    if export_type != "applications":
+        raise ValueError("不支持的审批记录导出类型")
+
+    applications = await resource_application_service.list_applications_for_export(
+        session,
+        page=1,
+        page_size=MAX_EXPORT_ROWS,
+        user_id=_int(params, "user_id"),
+        resource_type=_text(params, "resource_type"),
+        status=_text(params, "status"),
+        created_after=_datetime(params, "created_after"),
+        created_before=_datetime(
+            params, "created_before", date_only_time=time.max
+        ),
+        reviewed_after=_datetime(params, "reviewed_after"),
+        reviewed_before=_datetime(
+            params, "reviewed_before", date_only_time=time.max
+        ),
+    )
+
+    resource_ids = {
+        resource_type: sorted(
+            {
+                app.resource_id
+                for app in applications
+                if app.resource_type == resource_type
+            }
+        )
+        for resource_type in (
+            item.value for item in resource_application_service.ResourceType
+        )
+    }
+    resource_type_enum = resource_application_service.ResourceType
+    resources = {
+        resource_type_enum.MODEL.value: await model_repo.find_by_ids(
+            session, resource_ids[resource_type_enum.MODEL.value]
+        ),
+        resource_type_enum.MCP.value: await mcp_repo.find_servers_by_ids(
+            session, resource_ids[resource_type_enum.MCP.value]
+        ),
+        resource_type_enum.SKILL.value: await skill_repo.find_by_ids(
+            session, resource_ids[resource_type_enum.SKILL.value]
+        ),
+        resource_type_enum.AGENT.value: await agent_repo.find_by_ids(
+            session, resource_ids[resource_type_enum.AGENT.value]
+        ),
+    }
+    resource_names = {
+        (resource_type, resource.id): resource.name
+        for resource_type, resource_items in resources.items()
+        for resource in resource_items
+    }
+
+    rows: list[list[object]] = []
+    for app in applications:
+        applicant_name = (
+            app.user.display_name or app.user.username if app.user else ""
+        )
+        departments = (
+            ", ".join(item.department.name for item in app.user.departments)
+            if app.user and app.user.departments
+            else ""
+        )
+        resource_type_label = resource_application_service.ResourceType.label_for(
+            app.resource_type
+        )
+        resource_name = resource_names.get(
+            (app.resource_type, app.resource_id), f"#{app.resource_id}"
+        )
+        status_label = resource_application_service.ApplicationStatus.label_for(
+            app.status
+        )
+        created_at_str = (
+            app.created_at.strftime("%Y-%m-%d %H:%M:%S") if app.created_at else ""
+        )
+        reviewed_at_str = (
+            app.reviewed_at.strftime("%Y-%m-%d %H:%M:%S")
+            if app.reviewed_at
+            else ""
+        )
+        reviewer_name = (
+            app.reviewer.display_name or app.reviewer.username
+            if app.reviewer
+            else ""
+        )
+
+        rows.append([
+            applicant_name,
+            departments,
+            resource_type_label,
+            resource_name,
+            app.reason or "",
+            status_label,
+            created_at_str,
+            reviewed_at_str,
+            reviewer_name,
+            app.review_notes or "",
+        ])
+
+    rows.sort(key=lambda r: (r[0], r[3]))
+
+    return [
+        "申请人",
+        "部门",
+        "资源类型",
+        "资源名称",
+        "申请理由",
+        "状态",
+        "申请时间",
+        "审批时间",
+        "审批人",
+        "审批备注",
+    ], rows

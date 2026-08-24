@@ -16,11 +16,19 @@ export function getResourceApplications(
   userId?: number,
   resourceType?: string,
   status?: string,
+  createdAfter?: string,
+  createdBefore?: string,
+  reviewedAfter?: string,
+  reviewedBefore?: string,
 ): Promise<ResourceApplicationListResult> {
   const params: Record<string, string | number> = { page, page_size: pageSize }
   if (userId) params.user_id = userId
   if (resourceType) params.resource_type = resourceType
   if (status) params.status = status
+  if (createdAfter) params.created_after = createdAfter
+  if (createdBefore) params.created_before = createdBefore
+  if (reviewedAfter) params.reviewed_after = reviewedAfter
+  if (reviewedBefore) params.reviewed_before = reviewedBefore
   return request<ResourceApplicationListResult>('/api/v1/resource-applications', { params })
 }
 

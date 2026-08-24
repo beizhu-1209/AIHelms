@@ -8,7 +8,7 @@
 <p>Built on top of LiteLLM · Model distribution, AI identity, cost control, and governance</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.20-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.20)
+[![Release](https://img.shields.io/badge/Release-v0.1.21-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.21)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.21` | 2026-08-13 | Fixed user management role/status filter pagination issue. Update export  |
 | `0.1.20` | 2026-08-04 | Fixed log sync issues; fixed timestamp display; updated Model Square access info. |
 | `0.1.19` | 2026-07-23 | Added Hunyuan and Grok provider support; reworked static asset (icon) hosting; enhanced batch operations for some APIs; upgraded the LiteLLM model-management base to v1.93. |
 | `0.1.18` | 2026-07-22 | Added a Token column to cost detail by department/project with inline drill-down into members; added Token usage stats and a Top 10 people leaderboard to Efficiency overview, cost, budget and the dashboard; reworked the budget detail "Key budget" tab into "Per-person budget". |
