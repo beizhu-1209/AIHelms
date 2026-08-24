@@ -1,0 +1,15 @@
+- id: webserver
+  config:
+    host: 0.0.0.0
+    port: 3080
+
+- id: web-runtime
+  config:
+    openBrowser: false
+    printUrl: true
+    surfaceContext: true
+    trustedHosts: !!js "process.env.NGINX_SERVER_NAME ? [process.env.NGINX_SERVER_NAME] : []"
+
+- id: connection
+  config:
+    trustedHosts: !!js "process.env.NGINX_SERVER_NAME ? [process.env.NGINX_SERVER_NAME] : []"

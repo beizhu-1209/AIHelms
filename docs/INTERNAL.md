@@ -28,7 +28,7 @@ AIHelms/
 │   └── packages/shared/   — 共享组件/工具
 ├── dev/                   — 开发启动脚本
 │   ├── setup              — 首次环境初始化
-│   ├── start-docker-compose — 启动中间件（db + redis + litellm + nginx）
+│   ├── start-docker-compose — 启动中间件（db + redis + litellm + dsh + nginx）
 │   ├── start-api          — 启动后端 API + Celery Worker
 │   └── start-web          — 启动前端开发服务器（admin + web）
 ├── docker/                — Docker 相关配置
@@ -90,7 +90,7 @@ cd ui && npm install
 
 ## 2. 日常本地开发
 
-### 启动中间件（PostgreSQL + Redis + LiteLLM）
+### 启动中间件（PostgreSQL + Redis + LiteLLM + DSH manager）
 
 所有开发都需要先启动中间件：
 
@@ -102,6 +102,8 @@ cd ui && npm install
 ```bash
 docker compose -f docker-compose.middleware.yaml -p aihelms ps
 ```
+
+开发环境的 DSH manager 由同一个中间件 Compose 启动，用户 DSH 容器由 manager 按用户按需创建。`.env` 中的 `DSH_VERSION` 和 `DSH_MANAGER_VERSION` 分别控制两个镜像版本；镜像仓库地址由 Compose 固定。更新 DSH 版本时先更新 `.env`、完成人工回归，再推送镜像和重载开发中间件。
 
 ### 后端开发
 
@@ -297,6 +299,11 @@ git checkout main && git pull
 docker build -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms:<version> .
 ```
 
+镜像地址：
+AIHelms registry.cn-zhangjiakou.aliyuncs.com/microbaton/aihelms
+dsh registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh
+skillspector registry.cn-zhangjiakou.aliyuncs.com/microbaton/skillspector
+Aihelms
 版本号取 `apps/pyproject.toml` 中的 version 字段。
 
 ## 7. 推送到阿里云
@@ -341,3 +348,197 @@ docker compose -f docker-compose.middleware.yaml -p aihelms up -d
 
 - 跟随 `apps/pyproject.toml` 中的 version 字段
 - 镜像 tag 与版本号一致，不用 latest
+
+## 11. DS Harness 开发流程
+
+### 11.1 DSH 版本、插件和 runtime 镜像
+
+目录：
+
+```text
+AIHelms/dsh/plugins/dsh-aihelms-web/   # AIHelms 自研适配插件
+<DSH源码目录>/                         # DSH 源码和构建目录
+<DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/               # DSH Web profile
+```
+
+最终目录结构：
+
+```text
+<DSH源码目录>/
+└── deploy/
+    └── aihelms/
+        ├── Dockerfile
+        ├── plugins/
+        │   └── dsh-aihelms-web/
+        └── dsh-home/
+            └── profiles/
+                └── web/
+```
+
+#### 1. 准备 DSH 和构建目录
+
+在 `<DSH源码目录>` 执行下面全部命令：
+
+```bash
+git fetch --tags
+git checkout dsh-v<DSH版本>
+pnpm install
+pnpm run build
+
+mkdir -p deploy/aihelms/plugins deploy/aihelms/dsh-home/profiles/web
+cp -a <AIHelms目录>/dsh/plugins/dsh-aihelms-web deploy/aihelms/plugins/
+cp <AIHelms目录>/dsh/plugins/dsh-aihelms-web/Dockerfile deploy/aihelms/Dockerfile
+```
+
+
+#### 2. 安装插件
+
+运行 DSH 命令前，当前终端的 Node.js 必须是 `22.13+`（推荐 `24.19.0`）。
+
+先初始化 Web profile：
+
+```bash
+cd <DSH源码目录>
+DSH_HOME=<DSH源码目录>/deploy/aihelms/dsh-home pnpm dsh plugin --profile web install
+```
+
+安装已发布的 DSH Bundle 插件：
+
+```bash
+DSH_HOME=<DSH源码目录>/deploy/aihelms/dsh-home pnpm dsh plugin --profile web add <插件包名>@<版本>
+```
+
+安装 AIHelms 自研插件：
+
+```bash
+cd <DSH源码目录>/deploy/aihelms/plugins/dsh-aihelms-web
+pnpm pack --out <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/dsh-aihelms-web.tgz
+
+# 先让 DSH 注册 Bundle
+cd <DSH源码目录>
+DSH_HOME=<DSH源码目录>/deploy/aihelms/dsh-home pnpm dsh plugin --profile web add <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/dsh-aihelms-web.tgz
+
+# 再改成镜像内可用的相对路径
+cd <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web
+pnpm remove dsh-aihelms-web
+pnpm add --ignore-workspace-root-check ./dsh-aihelms-web.tgz
+```
+
+安装其他本地插件：
+
+```bash
+cp -a <其他插件目录> <DSH源码目录>/deploy/aihelms/plugins/<插件目录>
+cd <DSH源码目录>/deploy/aihelms/plugins/<插件目录>
+pnpm pack --out <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/<插件名>.tgz
+
+# 先让 DSH 注册 Bundle
+cd <DSH源码目录>
+DSH_HOME=<DSH源码目录>/deploy/aihelms/dsh-home pnpm dsh plugin --profile web add <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/<插件名>.tgz
+
+# 再改成镜像内可用的相对路径
+cd <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web
+pnpm remove <插件名>
+pnpm add --ignore-workspace-root-check ./<插件名>.tgz
+```
+
+#### 2.1 局域网 HTTP 访问必须安装 `dsh-lan-access`
+
+通过 `http://服务器IP` 访问 DSH 时，浏览器没有 `crypto.randomUUID()`，工作区、会话和模型请求会失败。HTTPS 或 `localhost` 访问不需要这个插件。
+
+在 `<DSH源码目录>` 执行：
+
+```bash
+git clone https://github.com/ririv/dsh-lan-access.git deploy/aihelms/plugins/dsh-lan-access
+cd deploy/aihelms/plugins/dsh-lan-access
+pnpm pack --out <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/dsh-lan-access.tgz
+cd <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web
+pnpm add --ignore-workspace-root-check ./dsh-lan-access.tgz
+```
+
+`dsh-lan-access` 是客户端插件，不是 `dsh.bundle`，安装依赖后还要编辑：
+
+```text
+<DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/cordis.patch.yml
+```
+
+加入：
+
+```yaml
+- insert:
+    - id: lan-access
+      name: dsh-lan-access
+```
+
+检查 `package.json` 中有：
+
+```json
+"dsh-lan-access": "file:dsh-lan-access.tgz"
+```
+
+然后继续执行 dump-config 和 runtime 镜像构建。不能只执行 `pnpm dsh plugin add`，否则它不会自动写入 `cordis.patch.yml`。
+
+安装完成后检查这个文件：
+
+```text
+<DSH源码目录>/deploy/aihelms/dsh-home/profiles/web/package.json
+```
+
+AIHelms 插件的依赖必须写成：
+
+```json
+"dsh-aihelms-web": "file:dsh-aihelms-web.tgz"
+```
+
+本地插件 `<插件名>` 也必须写成：
+
+```json
+"<插件名>": "file:<插件名>.tgz"
+```
+
+如果看到 `link:/...`、`file:/tmp/...` 或其他绝对路径，重新在 profile 目录安装：
+
+```bash
+cd <DSH源码目录>/deploy/aihelms/dsh-home/profiles/web
+pnpm remove <插件名>
+pnpm add --ignore-workspace-root-check ./<插件名>.tgz
+```
+
+#### 3. 检查并启动 DSH
+
+在 `<DSH源码目录>` 执行：
+
+```bash
+DSH_HOME=<DSH源码目录>/deploy/aihelms/dsh-home pnpm dsh --profile web --dump-config
+DSH_HOME=<DSH源码目录>/deploy/aihelms/dsh-home pnpm dsh web --no-open
+curl http://127.0.0.1:3080
+```
+
+确认 `dump-config` 中有目标插件和 `webserver` 的 `0.0.0.0:3080`。
+
+#### 4. 构建 runtime 镜像
+
+
+```bash
+cd <DSH源码目录>
+docker build -f deploy/aihelms/Dockerfile -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh:<DSH版本> .
+docker push registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh:<DSH版本>
+```
+
+更新 DSH、更新插件或增加插件，都重复第 1 至第 4 步。
+### 11.2 修改 AIHelms manager
+
+只有 `dsh/manager/` 或 manager 依赖发生变化时，才在 AIHelms 根目录重建 manager：
+
+```bash
+docker build -f dsh/Dockerfile -t registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh-manager:<manager版本> .
+docker push registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh-manager:<manager版本>
+```
+
+
+### 11.3 开发环境更新
+
+
+```bash
+./dev/start-docker-compose
+docker compose -f docker-compose.middleware.yaml -p aihelms ps dsh nginx
+```

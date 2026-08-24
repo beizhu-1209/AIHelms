@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # 平台对外访问地址（自动由 NGINX_SERVER_NAME + WEB_PORT 拼接），用于生成 skill 下载链接等
     platform_public_url: str = ""
 
+    # DS Harness Beta 功能开关
+    dsh_enabled: bool = False
+
     # 日志
     log_level: str = "WARNING"
     log_dir: str = "/logs"

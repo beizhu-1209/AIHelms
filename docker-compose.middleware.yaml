@@ -80,6 +80,26 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  dsh:
+    image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh-manager:${DSH_MANAGER_VERSION}
+    restart: unless-stopped
+    environment:
+      DSH_ENABLED: ${DSH_ENABLED:-false}
+      DSH_RUNTIME_IMAGE: registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh:${DSH_VERSION}
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-localhost}
+      DSH_USER_NETWORK: ${DSH_USER_NETWORK:-aihelms-dsh-user}
+      DSH_CONTAINER_IDLE_TIMEOUT_SECONDS: ${DSH_CONTAINER_IDLE_TIMEOUT_SECONDS:-1800}
+      DSH_CONTAINER_RECLAIM_GRACE_SECONDS: ${DSH_CONTAINER_RECLAIM_GRACE_SECONDS:-60}
+      DSH_CONTAINER_START_TIMEOUT_SECONDS: ${DSH_CONTAINER_START_TIMEOUT_SECONDS:-30}
+      DSH_CONTAINER_MAX_COUNT: ${DSH_CONTAINER_MAX_COUNT:-20}
+      SECRET_KEY: ${SECRET_KEY:-aihelms}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - dsh_control
+      - dsh_user
+
   nginx:
     image: nginx:latest
     restart: unless-stopped
@@ -102,9 +122,20 @@ services:
         "-c",
         "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh",
       ]
+    depends_on:
+      - dsh
+    networks:
+      - default
+      - dsh_control
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
   pgdata:
   redisdata:
+
+networks:
+  dsh_control:
+    name: ${DSH_CONTROL_NETWORK:-aihelms-dsh-control}
+  dsh_user:
+    name: ${DSH_USER_NETWORK:-aihelms-dsh-user}

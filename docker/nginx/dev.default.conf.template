@@ -2,6 +2,10 @@ upstream aihelms_api {
     server host.docker.internal:8000;
 }
 
+upstream dsh_manager {
+    server dsh:8080;
+}
+
 upstream admin_dev {
     server host.docker.internal:4001;
 }
@@ -14,8 +18,8 @@ server {
     listen 80;
     server_name ${NGINX_SERVER_NAME};
 
-    # API 代理
-    location /api {
+    # AIHelms API 代理
+    location ^~ /api/v1/ {
         proxy_pass http://aihelms_api;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -26,6 +30,74 @@ server {
         proxy_buffering off;
         proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT};
         proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT};
+    }
+
+    # DSH events are downlink WebSocket channels; keep ordinary /api/ SSE as HTTP.
+    location = /api/events.mux {
+        proxy_pass http://dsh_manager;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location = /api/events.host {
+        proxy_pass http://dsh_manager;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # DSH API、SSE 和 WebSocket
+    location ^~ /api/ {
+        proxy_pass http://dsh_manager;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+    }
+
+    # DSH Web 的根路径静态资源
+    location ^~ /plugins/ {
+        proxy_pass http://dsh_manager;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+    }
+
+    location ^~ /assets/ {
+        proxy_pass http://dsh_manager;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+    }
+
+    location ^~ /sidebar/ {
+        proxy_pass http://dsh_manager;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location = /dsh {
+        return 301 /dsh/;
+    }
+
+    location ^~ /dsh/ {
+        proxy_pass http://dsh_manager/;
+        include /etc/nginx/proxy.conf;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 
     # 管理后台 → Vite dev server

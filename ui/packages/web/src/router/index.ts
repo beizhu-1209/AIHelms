@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { getPublicConfig } from '@aihelms/shared'
 
 const router = createRouter({
   history: createWebHistory('/'),
@@ -14,16 +15,17 @@ const router = createRouter({
       component: () => import('../layouts/WebLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', name: 'Identity', component: () => import('../views/MyIdentityView.vue') },
+        { path: 'dsh-harness', name: 'Dsh', component: () => import('../views/DSHarness.vue') },
         { path: 'market', name: 'Market', component: () => import('../views/MarketView.vue') },
         { path: 'models', name: 'Models', component: () => import('../views/ModelSquare.vue') },
         { path: 'agents', name: 'Agents', component: () => import('../views/AgentCenter.vue') },
+        { path: '', name: 'Identity', component: () => import('../views/MyIdentityView.vue') },
       ],
     },
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('aihelms_token')
   if (to.meta.requiresAuth !== false && !token) {
     next({ name: 'Login' })
@@ -32,6 +34,18 @@ router.beforeEach((to, _from, next) => {
   if (to.name === 'Login' && token) {
     next({ name: 'Identity' })
     return
+  }
+  if (to.name === 'Dsh') {
+    try {
+      const config = await getPublicConfig()
+      if (!config.dsh_enabled) {
+        next({ name: 'Identity' })
+        return
+      }
+    } catch {
+      next({ name: 'Identity' })
+      return
+    }
   }
   next()
 })

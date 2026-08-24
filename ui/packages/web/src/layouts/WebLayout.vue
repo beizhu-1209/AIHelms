@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuth, changePassword, useBranding } from '@aihelms/shared'
+import { useAuth, changePassword, useBranding, getPublicConfig } from '@aihelms/shared'
 import { LogOut, Settings, KeyRound, ChevronDown, BookOpen } from 'lucide-vue-next'
 import LanguageSwitcher from '@aihelms/shared/src/components/LanguageSwitcher.vue'
 
@@ -10,10 +10,16 @@ const router = useRouter()
 const { t } = useI18n()
 const { currentUser, fetchCurrentUser, logout } = useAuth()
 const { branding, squareLogoUrl } = useBranding()
+const isDshEnabled = ref(false)
 
 onMounted(async () => {
   if (!currentUser.value) {
     await fetchCurrentUser()
+  }
+  try {
+    isDshEnabled.value = (await getPublicConfig()).dsh_enabled
+  } catch {
+    isDshEnabled.value = false
   }
   document.addEventListener('click', handleGlobalClick, true)
 })
@@ -51,6 +57,12 @@ const navItems = [
   { path: '/models', labelKey: 'layout.nav.models' },
   { path: '/agents', labelKey: 'layout.nav.agents' },
 ]
+
+const visibleNavItems = computed(() => (
+  isDshEnabled.value
+    ? [...navItems, { path: '/dsh-harness', labelKey: 'layout.nav.dsh' }]
+    : navItems
+))
 
 // 下拉菜单
 const showDropdown = ref(false)
@@ -142,7 +154,7 @@ async function handleChangePassword(): Promise<void> {
 
       <!-- 中：导航居中 -->
       <nav class="flex items-center justify-center gap-1">
-        <RouterLink v-for="item in navItems" :key="item.path" :to="item.path"
+        <RouterLink v-for="item in visibleNavItems" :key="item.path" :to="item.path"
           class="whitespace-nowrap rounded-lg px-3.5 py-2 text-sm transition-colors"
           :class="isActive(item.path) ? 'bg-purple-50 font-medium text-purple-700' : 'text-slate-600 hover:bg-slate-100'">
           {{ t(item.labelKey) }}

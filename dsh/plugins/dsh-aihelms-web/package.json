@@ -1,0 +1,9 @@
+{
+  "name": "dsh-aihelms-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AIHelms Web deployment Bundle for DeepSeek Harness",
+  "type": "module",
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "files": ["package.json", "cordis.patch.yml", "Dockerfile", "README.md"]
+}

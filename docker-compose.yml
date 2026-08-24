@@ -95,6 +95,7 @@ services:
       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-localhost}
       WEB_PORT: ${WEB_PORT:-80}
       LITELLM_PORT: ${LITELLM_PORT:-4000}
+      DSH_ENABLED: ${DSH_ENABLED:-false}
       TZ: ${TZ:-Asia/Shanghai}
       LOG_DIR: /logs
       DATA_DIR: /app/data
@@ -114,6 +115,26 @@ services:
         condition: service_started
       skillspector:
         condition: service_started
+
+  dsh:
+    image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh-manager:${DSH_MANAGER_VERSION}
+    restart: unless-stopped
+    environment:
+      DSH_ENABLED: ${DSH_ENABLED:-false}
+      DSH_RUNTIME_IMAGE: registry.cn-zhangjiakou.aliyuncs.com/microbaton/dsh:${DSH_VERSION}
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-localhost}
+      DSH_USER_NETWORK: ${DSH_USER_NETWORK:-aihelms-dsh-user}
+      DSH_CONTAINER_IDLE_TIMEOUT_SECONDS: ${DSH_CONTAINER_IDLE_TIMEOUT_SECONDS:-1800}
+      DSH_CONTAINER_RECLAIM_GRACE_SECONDS: ${DSH_CONTAINER_RECLAIM_GRACE_SECONDS:-60}
+      DSH_CONTAINER_START_TIMEOUT_SECONDS: ${DSH_CONTAINER_START_TIMEOUT_SECONDS:-30}
+      DSH_CONTAINER_MAX_COUNT: ${DSH_CONTAINER_MAX_COUNT:-20}
+      SECRET_KEY: ${SECRET_KEY:-aihelms}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - dsh_control
+      - dsh_user
 
   skillspector:
     image: registry.cn-zhangjiakou.aliyuncs.com/microbaton/skillspector:${SKILLSPECTOR_VERSION:-0.1.0}
@@ -159,8 +180,11 @@ services:
     networks:
       - internal
       - external
+      - dsh_control
+      - dsh_user
     depends_on:
       - aihelms
+      - dsh
 
 volumes:
   pgdata:
@@ -171,3 +195,8 @@ networks:
   internal:
     internal: true
   external:
+  dsh_control:
+    internal: true
+    name: ${DSH_CONTROL_NETWORK:-aihelms-dsh-control}
+  dsh_user:
+    name: ${DSH_USER_NETWORK:-aihelms-dsh-user}

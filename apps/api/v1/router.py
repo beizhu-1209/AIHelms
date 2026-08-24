@@ -12,6 +12,7 @@ from api.v1.business_scenarios import router as business_scenarios_router
 from api.v1.credentials import router as credentials_router
 from api.v1.dashboard import router as dashboard_router
 from api.v1.departments import router as departments_router
+from api.v1.dsh import router as dsh_router
 from api.v1.efficiency import router as efficiency_router
 from api.v1.export_tasks import router as export_tasks_router
 from api.v1.key_scenarios import router as key_scenarios_router
@@ -57,6 +58,7 @@ router.include_router(efficiency_router, tags=["AI 效能"])
 router.include_router(dashboard_router, tags=["系统"])
 router.include_router(license_router, tags=["系统"])
 router.include_router(branding_router, tags=["系统"])
+router.include_router(dsh_router, tags=["DS Harness"])
 
 
 @router.get("/ping", tags=["系统"])
@@ -71,5 +73,6 @@ async def get_public_config():
         "message": "ok",
         "data": {
             "litellm_base_url": settings.litellm_public_url,
+            "dsh_enabled": settings.dsh_enabled,
         },
     }

@@ -12,6 +12,11 @@ export default defineConfig({
         target: "http://localhost:8000",
         changeOrigin: true,
       },
+      "/dsh/": {
+        target: process.env.DSH_DEV_PROXY_TARGET || "http://localhost:8080",
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });
