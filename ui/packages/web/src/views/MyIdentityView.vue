@@ -71,6 +71,13 @@ const totalBudget = computed(() => {
   return null
 })
 
+function formatBigToken(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
+  return String(n)
+}
+
 const dailyAvgCost = computed(() => {
   const cost = kpi.value?.total_cost ?? 0
   const day = new Date().getDate()
@@ -84,31 +91,86 @@ const budgetUsedPercent = computed(() => {
   return Math.min((spent / budget) * 100, 100)
 })
 
-const chartOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  grid: { top: 20, right: 20, bottom: 30, left: 50 },
-  xAxis: {
-    type: 'category',
-    data: trend.value.map(t => t.period),
-    axisLabel: { fontSize: 10, color: '#94a3b8' },
-    axisLine: { lineStyle: { color: '#e2e8f0' } },
-  },
-  yAxis: {
-    type: 'value',
-    axisLabel: { fontSize: 10, color: '#94a3b8', formatter: (v: number) => `¥${v}` },
+const chartMode = ref<'cost' | 'token'>('cost')
+
+const TOKEN_SERIES = [
+  { key: 'input_tokens', labelKey: 'identity.overview.tokenInput', color: '#8b5cf6' },
+  { key: 'output_tokens', labelKey: 'identity.overview.tokenOutput', color: '#0ea5e9' },
+  { key: 'cache_read_tokens', labelKey: 'identity.overview.tokenCacheRead', color: '#10b981' },
+  { key: 'cache_creation_tokens', labelKey: 'identity.overview.tokenCacheCreation', color: '#f59e0b' },
+] as const
+
+const tokenBreakdown = computed(() =>
+  TOKEN_SERIES.map(s => ({
+    labelKey: s.labelKey,
+    color: s.color,
+    value: kpi.value?.[s.key] ?? 0,
+  })),
+)
+
+const chartOption = computed(() => {
+  const periods = trend.value.map(t => t.period)
+  const baseAxis = {
+    xAxis: {
+      type: 'category',
+      data: periods,
+      axisLabel: { fontSize: 10, color: '#94a3b8' },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+    },
     splitLine: { lineStyle: { color: '#f1f5f9' } },
-  },
-  series: [{
-    type: 'line',
-    data: trend.value.map(t => t.cost),
-    smooth: true,
-    symbol: 'circle',
-    symbolSize: 4,
-    lineStyle: { color: '#8b5cf6', width: 2 },
-    areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(139,92,246,0.15)' }, { offset: 1, color: 'rgba(139,92,246,0)' }] } },
-    itemStyle: { color: '#8b5cf6' },
-  }],
-}))
+  }
+
+  if (chartMode.value === 'token') {
+    return {
+      tooltip: { trigger: 'axis' },
+      legend: {
+        top: 0,
+        itemWidth: 8,
+        itemHeight: 8,
+        textStyle: { fontSize: 10, color: '#94a3b8' },
+        data: TOKEN_SERIES.map(s => t(s.labelKey)),
+      },
+      grid: { top: 34, right: 20, bottom: 30, left: 50 },
+      xAxis: baseAxis.xAxis,
+      yAxis: {
+        type: 'value',
+        axisLabel: { fontSize: 10, color: '#94a3b8', formatter: (v: number) => formatBigToken(v) },
+        splitLine: baseAxis.splitLine,
+      },
+      series: TOKEN_SERIES.map(s => ({
+        name: t(s.labelKey),
+        type: 'line',
+        data: trend.value.map(item => item[s.key] ?? 0),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { color: s.color, width: 2 },
+        itemStyle: { color: s.color },
+      })),
+    }
+  }
+
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { top: 20, right: 20, bottom: 30, left: 50 },
+    xAxis: baseAxis.xAxis,
+    yAxis: {
+      type: 'value',
+      axisLabel: { fontSize: 10, color: '#94a3b8', formatter: (v: number) => `¥${v}` },
+      splitLine: baseAxis.splitLine,
+    },
+    series: [{
+      type: 'line',
+      data: trend.value.map(item => item.cost),
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 4,
+      lineStyle: { color: '#8b5cf6', width: 2 },
+      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(139,92,246,0.15)' }, { offset: 1, color: 'rgba(139,92,246,0)' }] } },
+      itemStyle: { color: '#8b5cf6' },
+    }],
+  }
+})
 
 async function handleCopy(): Promise<void> {
   if (!fullKey.value) return
@@ -284,6 +346,74 @@ onMounted(async () => {
         </div>
       </section>
 
+      <!-- 用量概览 -->
+      <section v-if="kpi" class="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
+        <h2 class="mb-4 text-sm font-medium text-slate-900">{{ t('identity.overview.title') }}</h2>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">{{ t('identity.overview.monthBudget') }}</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">{{ budgetDisplay }}</div>
+          </div>
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">{{ t('identity.overview.spent') }}</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ (kpi.total_cost ?? 0).toFixed(2) }}</div>
+            <div v-if="budgetUsedPercent !== null" class="mt-0.5 text-xs text-slate-400">{{ budgetUsedPercent.toFixed(1) }}%</div>
+          </div>
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">{{ t('identity.overview.requests') }}</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">{{ (kpi.total_requests ?? 0).toLocaleString() }}</div>
+          </div>
+          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
+            <div class="text-xs text-slate-400">{{ t('identity.overview.dailyAvg') }}</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ dailyAvgCost.toFixed(2) }}</div>
+          </div>
+        </div>
+        <!-- Token 用量 -->
+        <div class="mt-3 rounded-xl bg-slate-50/80 px-4 py-3">
+          <div class="flex items-baseline gap-2">
+            <span class="text-xs text-slate-400">{{ t('identity.overview.tokens') }}</span>
+            <span class="text-lg font-semibold text-slate-900">{{ formatBigToken(kpi.total_tokens ?? 0) }}</span>
+          </div>
+          <div class="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-200/70 pt-2.5 sm:grid-cols-4">
+            <div v-for="item in tokenBreakdown" :key="item.labelKey">
+              <div class="flex items-center gap-1.5">
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: item.color }" />
+                <span class="text-xs text-slate-400">{{ t(item.labelKey) }}</span>
+              </div>
+              <div class="mt-0.5 text-sm font-medium text-slate-700">{{ formatBigToken(item.value) }}</div>
+            </div>
+          </div>
+        </div>
+        <!-- 预算进度条 -->
+        <div v-if="budgetUsedPercent !== null" class="mt-4">
+          <div class="flex items-center justify-between text-xs text-slate-400">
+            <span>{{ t('identity.overview.budgetUsage') }}</span>
+            <span>{{ budgetUsedPercent.toFixed(1) }}%</span>
+          </div>
+          <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-full rounded-full transition-all"
+              :class="budgetUsedPercent > 100 ? 'bg-red-500' : budgetUsedPercent > 80 ? 'bg-amber-500' : 'bg-purple-500'"
+              :style="{ width: `${Math.min(budgetUsedPercent, 100)}%` }" />
+          </div>
+        </div>
+        <!-- 趋势图表 -->
+        <div v-if="trend.length" class="mt-5">
+          <div class="mb-2 flex justify-end gap-1">
+            <button
+              v-for="mode in (['cost', 'token'] as const)" :key="mode"
+              class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+              :class="chartMode === mode
+                ? 'bg-purple-50 text-purple-700'
+                : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'"
+              @click="chartMode = mode"
+            >
+              {{ mode === 'cost' ? t('identity.overview.chartCost') : t('identity.overview.chartToken') }}
+            </button>
+          </div>
+          <VChart :option="chartOption" style="height: 200px; width: 100%" autoresize />
+        </div>
+      </section>
+
       <!-- 我的资源 -->
       <section v-if="mainKey" class="mt-6 space-y-4">
         <div class="rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
@@ -326,46 +456,6 @@ onMounted(async () => {
               class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">{{ skillNames[id] || `#${id}` }}</span>
           </div>
           <p v-else class="text-xs text-slate-400">{{ t('identity.resources.emptyMarket') }}</p>
-        </div>
-      </section>
-
-      <!-- 用量概览 -->
-      <section v-if="kpi" class="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
-        <h2 class="mb-4 text-sm font-medium text-slate-900">{{ t('identity.overview.title') }}</h2>
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">{{ t('identity.overview.monthBudget') }}</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">{{ budgetDisplay }}</div>
-          </div>
-          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">{{ t('identity.overview.spent') }}</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ (kpi.total_cost ?? 0).toFixed(2) }}</div>
-            <div v-if="budgetUsedPercent !== null" class="mt-0.5 text-xs text-slate-400">{{ budgetUsedPercent.toFixed(1) }}%</div>
-          </div>
-          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">{{ t('identity.overview.requests') }}</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">{{ (kpi.total_requests ?? 0).toLocaleString() }}</div>
-          </div>
-          <div class="rounded-xl bg-slate-50/80 px-4 py-3">
-            <div class="text-xs text-slate-400">{{ t('identity.overview.dailyAvg') }}</div>
-            <div class="mt-1 text-lg font-semibold text-slate-900">¥{{ dailyAvgCost.toFixed(2) }}</div>
-          </div>
-        </div>
-        <!-- 预算进度条 -->
-        <div v-if="budgetUsedPercent !== null" class="mt-4">
-          <div class="flex items-center justify-between text-xs text-slate-400">
-            <span>{{ t('identity.overview.budgetUsage') }}</span>
-            <span>{{ budgetUsedPercent.toFixed(1) }}%</span>
-          </div>
-          <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-            <div class="h-full rounded-full transition-all"
-              :class="budgetUsedPercent > 100 ? 'bg-red-500' : budgetUsedPercent > 80 ? 'bg-amber-500' : 'bg-purple-500'"
-              :style="{ width: `${Math.min(budgetUsedPercent, 100)}%` }" />
-          </div>
-        </div>
-        <!-- 趋势图表 -->
-        <div v-if="trend.length" class="mt-5">
-          <VChart :option="chartOption" style="height: 200px; width: 100%" autoresize />
         </div>
       </section>
 
