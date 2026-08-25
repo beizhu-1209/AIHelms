@@ -1,6 +1,6 @@
 {
   "login.validation.required": "Enter your account and password.",
-  "login.error.invalidCredentials": "Incorrect username or password",
+  "login.error.invalidCredentials": "Incorrect account or password",
   "login.title": "Welcome",
   "login.subtitle": "Sign in to your AI workspace",
   "login.field.account": "Account",

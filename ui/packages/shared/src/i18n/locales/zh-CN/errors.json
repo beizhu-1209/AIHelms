@@ -2,6 +2,6 @@
   "error.readResponse": "读取响应数据失败",
   "error.nonJsonResponse": "服务器返回了非 JSON 数据: {body}",
   "error.network": "网络连接失败，请检查网络",
-  "error.unauthorized": "用户名或密码错误",
+  "error.unauthorized": "账号或密码错误",
   "error.requestFailed": "请求失败: {status}"
 }

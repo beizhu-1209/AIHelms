@@ -27,7 +27,7 @@
 
 | 接口 | 方法 | 成功 message | 错误 message |
 |------|------|-------------|-------------|
-| /api/v1/auth/login | POST | 登录成功 | 用户名或密码错误 |
+| /api/v1/auth/login | POST | 登录成功 | 账号或密码错误；账户已被禁用 |
 | /api/v1/auth/password | PUT | 密码修改成功 | 旧密码错误；用户不存在 |
 
 ## 用户模块 (users)

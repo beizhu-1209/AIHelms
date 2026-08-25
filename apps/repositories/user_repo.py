@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, or_, delete
+from sqlalchemy import select, func, or_, delete, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.db import User, UserRole, UserDepartment, UserProject
@@ -49,6 +49,17 @@ async def find_users(session: AsyncSession, page: int, page_size: int, keyword: 
 async def find_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+async def find_user_by_account(session: AsyncSession, account: str) -> User | None:
+    """按用户名或邮箱查找用户，用户名精确匹配优先。"""
+    result = await session.execute(
+        select(User)
+        .where(or_(User.username == account, User.email == account.lower()))
+        .order_by(case((User.username == account, 0), else_=1), User.id)
+        .limit(1)
+    )
+    return result.scalars().first()
 
 
 async def find_user_by_username_or_email(session: AsyncSession, username: str, email: str) -> User | None:

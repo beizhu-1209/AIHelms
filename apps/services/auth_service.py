@@ -8,24 +8,24 @@ from core.security import create_access_token, get_password_hash, verify_passwor
 from core.time_utils import fmt_local_time
 from exceptions import NotFoundError, UnauthorizedError
 from models.db import Permission, Role, RolePermission, User, UserRole
+from repositories import user_repo
 
 logger = logging.getLogger(__name__)
 
 
-async def authenticate(session: AsyncSession, username: str, password: str) -> User:
-    result = await session.execute(select(User).where(User.username == username))
-    user = result.scalar_one_or_none()
+async def authenticate(session: AsyncSession, account: str, password: str) -> User:
+    user = await user_repo.find_user_by_account(session, account)
     if not user:
-        raise UnauthorizedError("用户名或密码错误")
+        raise UnauthorizedError("账号或密码错误")
     if not user.is_active:
         raise UnauthorizedError("账户已被禁用")
     if not verify_password(password, user.hashed_password):
-        raise UnauthorizedError("用户名或密码错误")
+        raise UnauthorizedError("账号或密码错误")
     return user
 
 
-async def login(session: AsyncSession, username: str, password: str) -> tuple[str, User]:
-    user = await authenticate(session, username, password)
+async def login(session: AsyncSession, account: str, password: str) -> tuple[str, User]:
+    user = await authenticate(session, account, password)
     permissions = await get_user_permissions(session, user.id)
     token_data = {
         "sub": str(user.id),
