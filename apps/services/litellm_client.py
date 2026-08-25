@@ -7,7 +7,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-LITELLM_TIMEOUT = 10.0
+LITELLM_TIMEOUT = 30.0
 
 
 async def _request(

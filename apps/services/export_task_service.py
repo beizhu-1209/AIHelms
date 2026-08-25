@@ -13,7 +13,6 @@ from models.db import ExportTask
 from repositories import export_task_repo
 from services.export_task_builders import build_export_rows
 
-EXPORT_RETENTION_DAYS = 7
 SOURCE_OPTIONS = [
     {"key": "usage_logs", "label": "日志管理"},
     {"key": "efficiency", "label": "AI效能"},
@@ -169,7 +168,7 @@ async def list_export_tasks(
         "page_size": page_size,
         "sources": SOURCE_OPTIONS,
         "statuses": STATUS_OPTIONS,
-        "retention_days": EXPORT_RETENTION_DAYS,
+        "retention_days": settings.export_task_retention_days,
     }
 
 
@@ -305,8 +304,10 @@ async def cancel_export_task(session: AsyncSession, task_id: int) -> dict:
 
 
 async def cleanup_export_tasks(
-    session: AsyncSession, retention_days: int = EXPORT_RETENTION_DAYS
+    session: AsyncSession, retention_days: int | None = None
 ) -> dict:
+    if retention_days is None:
+        retention_days = settings.export_task_retention_days
     if retention_days < 1:
         raise ValueError("保留天数不能小于 1 天")
     before = _now() - timedelta(days=retention_days)

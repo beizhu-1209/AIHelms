@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from celery_app import celery_app
+from core.config import settings
 from core.database import get_worker_session_factory
 from services import export_task_service
 
@@ -44,8 +45,12 @@ def cleanup_export_tasks() -> None:
 
 
 async def _cleanup() -> None:
+    retention_days = settings.export_task_retention_days
+    if retention_days <= 0:
+        logger.info("export task retention disabled, skip cleanup")
+        return
     try:
         async with get_worker_session_factory()() as session:
-            await export_task_service.cleanup_export_tasks(session)
+            await export_task_service.cleanup_export_tasks(session, retention_days)
     except Exception:
         logger.exception("export task cleanup failed")
