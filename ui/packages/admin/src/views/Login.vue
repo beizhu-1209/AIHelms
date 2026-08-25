@@ -29,7 +29,7 @@ async function handleLogin(): Promise<void> {
     errorMessage.value = ''
     router.push('/')
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '用户名或密码错误'
+    errorMessage.value = e instanceof Error ? e.message : '账号或密码错误'
   } finally {
     isLoading.value = false
   }
