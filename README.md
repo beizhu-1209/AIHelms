@@ -8,7 +8,7 @@
 <p>承载 AI 数字资产 · 释放 AI 生产力 · 链接未来</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.21-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.21)
+[![Release](https://img.shields.io/badge/Release-v0.1.22-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.22)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -85,6 +85,7 @@ AIHelms 是面向企业的 AI 资源纳管平台。帮助企业**管理 AI 资�
 
 | 版本 | 发布时间 | 一句话更新 |
 |------|----------|----------|
+| `0.1.22` | 2026-08-25 | 更新Hub端支持邮箱登录；导出任务历史自动清理变为可配置项；更新MCP日志滑块，复用env中llm配置项|
 | `0.1.21` | 2026-08-13 | 修复人员管理角色/状态筛选分页联动问题.丰富导出功能 |
 | `0.1.20` | 2026-08-04 | 解决日志同步问题；修复时间显示；更新模型广场接入信息 |
 | `0.1.19` | 2026-07-23 | 更新Hy3、Grok支持；改造静态资源托管；更新部分API批量功能；更新模型管理底座Litellm到1.93版本 |

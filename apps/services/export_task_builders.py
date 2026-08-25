@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from repositories import agent_repo, mcp_repo, model_repo, skill_repo
 from services import efficiency_service, resource_application_service, usage_log_service
 
-MAX_EXPORT_ROWS = 100000
+# 导出行数上限。
+MAX_EXPORT_ROWS = 2000000000
 
 
 def _text(params: dict[str, object], key: str, default: str = "") -> str:
