@@ -299,6 +299,10 @@ async def get_user_overview(
         select(
             func.coalesce(func.sum(CostSummaryDaily.total_requests), 0),
             func.coalesce(func.sum(CostSummaryDaily.internal_cost), 0),
+            func.coalesce(func.sum(CostSummaryDaily.input_tokens), 0),
+            func.coalesce(func.sum(CostSummaryDaily.output_tokens), 0),
+            func.coalesce(func.sum(CostSummaryDaily.cache_read_tokens), 0),
+            func.coalesce(func.sum(CostSummaryDaily.cache_creation_tokens), 0),
         ).where(
             CostSummaryDaily.user_id == user_id,
             CostSummaryDaily.summary_date >= start_date,
@@ -308,10 +312,21 @@ async def get_user_overview(
     row = result.one()
     total_requests = int(row[0])
     total_cost = float(row[1])
+    input_tokens = int(row[2])
+    output_tokens = int(row[3])
+    cache_read_tokens = int(row[4])
+    cache_creation_tokens = int(row[5])
 
     return {
         "total_cost": total_cost,
         "total_requests": total_requests,
+        "total_tokens": (
+            input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens
+        ),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_creation_tokens": cache_creation_tokens,
     }
 
 

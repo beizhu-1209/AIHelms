@@ -5,6 +5,11 @@ export interface EfficiencyKpi {
   avg_cost_per_user: number
   cost_change: number | null
   requests_change: number | null
+  total_tokens?: number
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+  cache_creation_tokens?: number
 }
 
 export interface TrendItem {
@@ -12,6 +17,10 @@ export interface TrendItem {
   cost_type: string
   cost: number
   requests: number
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+  cache_creation_tokens?: number
 }
 
 export interface CompositionItem {
