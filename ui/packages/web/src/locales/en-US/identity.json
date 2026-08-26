@@ -32,6 +32,7 @@
   "identity.overview.chartCost": "Cost",
   "identity.overview.chartToken": "Token",
   "identity.overview.budgetUsage": "Budget used",
+  "identity.overview.upgradeHint": "Upgrade to Enterprise to view detailed usage",
   "identity.applications.title": "My requests",
   "identity.status.pending": "Pending",
   "identity.status.approved": "Approved",

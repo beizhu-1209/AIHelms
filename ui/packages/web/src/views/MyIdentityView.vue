@@ -349,6 +349,12 @@ onMounted(async () => {
       <!-- 用量概览 -->
       <section v-if="kpi" class="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-5 backdrop-blur">
         <h2 class="mb-4 text-sm font-medium text-slate-900">{{ t('identity.overview.title') }}</h2>
+        <div class="relative">
+        <div class="absolute inset-0 z-10 flex select-none items-center justify-center rounded-xl bg-white/40 backdrop-blur-md">
+          <span class="rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
+            {{ t('identity.overview.upgradeHint') }}
+          </span>
+        </div>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div class="rounded-xl bg-slate-50/80 px-4 py-3">
             <div class="text-xs text-slate-400">{{ t('identity.overview.monthBudget') }}</div>
@@ -411,6 +417,7 @@ onMounted(async () => {
             </button>
           </div>
           <VChart :option="chartOption" style="height: 200px; width: 100%" autoresize />
+        </div>
         </div>
       </section>
 
