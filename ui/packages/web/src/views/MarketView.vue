@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getMyKeys } from '@aihelms/shared'
+import { getMarketV2 } from '@aihelms/shared'
+import type { HubMcp, HubSkill } from '@aihelms/shared'
 import { request } from '@aihelms/shared/src/api/request'
 import { createResourceApplication } from '@aihelms/shared/src/api/resource-application'
-import type { AiKey } from '@aihelms/shared/src/types/ai-key'
-import type { Skill } from '@aihelms/shared/src/types/skill'
-import type { McpServer } from '@aihelms/shared/src/types/mcp'
 import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import { CheckCircle2, Search, X, ExternalLink, Flame } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
-type MarketItem = (Skill & { _type: 'skill' }) | (McpServer & { _type: 'mcp' })
+type MarketItem = (HubSkill & { _type: 'skill' }) | (HubMcp & { _type: 'mcp' })
 
 const items = ref<MarketItem[]>([])
 const mySkills = ref<number[]>([])
@@ -24,7 +22,7 @@ const categoryFilter = ref('')
 const showApplyDialog = ref(false)
 const showMcpAccessDialog = ref(false)
 const applyTarget = ref<MarketItem | null>(null)
-const mcpTarget = ref<McpServer | null>(null)
+const mcpTarget = ref<HubMcp | null>(null)
 const applyReason = ref('')
 const applyingId = ref<number | null>(null)
 
@@ -80,8 +78,8 @@ function getAuthor(item: MarketItem): string {
 }
 
 function getUsageCount(item: MarketItem): number {
-  if (item._type === 'skill') return (item as Skill).install_count ?? 0
-  return (item as McpServer).call_count ?? 0
+  if (item._type === 'skill') return item.install_count ?? 0
+  return item.call_count ?? 0
 }
 
 function formatUsageCount(count: number): string {
@@ -93,7 +91,7 @@ function formatUsageCount(count: number): string {
 
 async function handleCopyPrompt(item: MarketItem) {
   if (item._type !== 'skill') return
-  skillTarget.value = item as unknown as Skill
+  skillTarget.value = item
   skillInstallInfo.value = null
   showSkillInstallDialog.value = true
   loadSkillInstall(item.id)
@@ -124,14 +122,14 @@ interface SkillInstallInfo {
 }
 
 const showSkillInstallDialog = ref(false)
-const skillTarget = ref<Skill | null>(null)
+const skillTarget = ref<HubSkill | null>(null)
 const skillInstallInfo = ref<SkillInstallInfo | null>(null)
 const skillInstallLoading = ref(false)
 const skillPromptCopied = ref(false)
 
 function handleViewAccess(item: MarketItem) {
   if (item._type !== 'mcp') return
-  mcpTarget.value = item as unknown as McpServer
+  mcpTarget.value = item
   mcpConnectConfig.value = null
   showMcpAccessDialog.value = true
   loadMcpConfig(item.id)
@@ -208,16 +206,14 @@ async function submitApply() {
 async function loadData() {
   isLoading.value = true
   try {
-    const [skillRes, mcpRes, keysRes] = await Promise.all([
-      request<{ items: Skill[] }>('/api/v1/skills/published', { params: { page_size: 100 } }),
-      request<{ items: McpServer[] }>('/api/v1/mcp/servers/published', { params: { page_size: 100 } }),
-      getMyKeys(),
-    ])
+    const data = await getMarketV2()
+    const skillRes = data.skills
+    const mcpRes = data.mcp
     const skillItems: MarketItem[] = (skillRes?.items ?? []).map(s => ({ ...s, _type: 'skill' as const }))
     const mcpItems: MarketItem[] = (mcpRes?.items ?? []).map(m => ({ ...m, _type: 'mcp' as const }))
     items.value = [...skillItems, ...mcpItems]
 
-    const mainKey = keysRes.personal?.find((k: AiKey) => k.key_type === 'personal_main')
+    const mainKey = data.keys.personal.main_key
     mySkills.value = mainKey?.skills ?? []
     myMcps.value = mainKey?.mcps ?? []
   } finally {
