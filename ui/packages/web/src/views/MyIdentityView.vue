@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAuth, getMyKeys, type ActiveModel } from '@aihelms/shared'
-import { request } from '@aihelms/shared/src/api/request'
-import type { AiKey } from '@aihelms/shared/src/types/ai-key'
+import { useAuth, getAiIdentityV2 } from '@aihelms/shared'
+import type { HubAiKey, HubApplication } from '@aihelms/shared'
 import type { EfficiencyKpi, TrendItem } from '@aihelms/shared/src/types/efficiency'
-import type { ResourceApplication } from '@aihelms/shared/src/types/resource-application'
-import type { McpServer } from '@aihelms/shared/src/types/mcp'
-import type { Skill } from '@aihelms/shared/src/types/skill'
 import { Copy, Check, Cpu, Server, Sparkles, Clock, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-vue-next'
 import ProviderIcon from '../components/ProviderIcon.vue'
 
@@ -21,25 +17,24 @@ use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
 const { currentUser } = useAuth()
 const { t } = useI18n()
-const mainKey = ref<AiKey | null>(null)
+const mainKey = ref<HubAiKey | null>(null)
 const kpi = ref<EfficiencyKpi | null>(null)
 const trend = ref<TrendItem[]>([])
-const applications = ref<ResourceApplication[]>([])
+const applications = ref<HubApplication[]>([])
 const mcpNames = ref<Record<number, string>>({})
 const skillNames = ref<Record<number, string>>({})
 const modelIconUrls = ref<Record<string, string>>({})
 const isLoading = ref(true)
 const copied = ref(false)
 const showFullKey = ref(false)
-const endpointUrl = ref('')
 
 const maskedKey = computed(() => {
-  const val = mainKey.value?.key_value || mainKey.value?.litellm_key_id
+  const val = mainKey.value?.key_value
   if (!val) return 'sk-xxxxxxxxxxxx'
   return val.slice(0, 7) + '****' + val.slice(-4)
 })
 
-const fullKey = computed(() => mainKey.value?.key_value || mainKey.value?.litellm_key_id || '')
+const fullKey = computed(() => mainKey.value?.key_value || '')
 
 const displayKey = computed(() => showFullKey.value ? fullKey.value : maskedKey.value)
 
@@ -216,29 +211,19 @@ function getModelIconUrl(modelId: string): string {
 
 onMounted(async () => {
   try {
-    const [keysData, kpiData, trendData, appsData, mcpRes, skillRes, activeModelsData, configData] = await Promise.all([
-      getMyKeys().catch(() => ({ personal: [] as AiKey[], department: [] as AiKey[], project: [] as AiKey[] })),
-      request<EfficiencyKpi>('/api/v1/efficiency/overview', { params: { scope: 'self' }, silent: true }).catch(() => null),
-      request<TrendItem[]>('/api/v1/efficiency/trend', { params: { scope: 'self', group_by: 'day' }, silent: true }).catch(() => []),
-      request<{ items: ResourceApplication[] }>('/api/v1/resource-applications/my', { params: { page: 1, page_size: 10 }, silent: true }).catch(() => ({ items: [] as ResourceApplication[] })),
-      request<{ items: McpServer[] }>('/api/v1/mcp/servers/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
-      request<{ items: Skill[] }>('/api/v1/skills/published', { params: { page_size: 200 }, silent: true }).catch(() => ({ items: [] })),
-      request<ActiveModel[]>('/api/v1/models/active', { silent: true }).catch(() => []),
-      request<{ litellm_base_url: string }>('/api/v1/config/public', { silent: true }).catch(() => ({ litellm_base_url: '' })),
-    ])
-    mainKey.value = keysData.personal.find(k => k.key_type === 'personal_main') ?? null
-    kpi.value = kpiData
-    trend.value = trendData
-    applications.value = appsData.items
-    endpointUrl.value = configData.litellm_base_url || ''
+    const data = await getAiIdentityV2()
+    mainKey.value = data.keys.personal.main_key
+    kpi.value = data.overview
+    trend.value = data.trend
+    applications.value = data.applications.items
     modelIconUrls.value = Object.fromEntries(
-      activeModelsData.map(model => [model.model_id, model.icon_url]),
+      data.models.map(model => [model.model_id, model.icon_url]),
     )
 
-    for (const m of mcpRes.items) {
+    for (const m of data.mcp.items) {
       mcpNames.value[m.id] = m.name
     }
-    for (const s of skillRes.items) {
+    for (const s of data.skills.items) {
       skillNames.value[s.id] = s.name
     }
   } catch { /* */ }
