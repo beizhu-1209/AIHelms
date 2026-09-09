@@ -91,3 +91,14 @@ export {
   getEfficiencyCostDetailScopeUsers, getEfficiencyTopUsers,
   getEfficiencyBudget, getEfficiencyBudgetAlerts, getEfficiencyHealth,
 } from './api/efficiency'
+export { getAiIdentityV2, getAgentCenterV2, getMarketV2, getModelSquareV2 } from './api/webPagesV2'
+export type {
+  HubAgent,
+  HubAiKey,
+  HubApplication,
+  HubKeys,
+  HubMcp,
+  HubSkill,
+  HubUser,
+  ModelSquareModel,
+} from './api/webPagesV2'

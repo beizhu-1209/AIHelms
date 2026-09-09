@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getMyKeys } from '@aihelms/shared'
-import { request } from '@aihelms/shared/src/api/request'
+import { getModelSquareV2 } from '@aihelms/shared'
 import { createResourceApplication } from '@aihelms/shared/src/api/resource-application'
-import type { AiKey } from '@aihelms/shared/src/types/ai-key'
 import { Cpu, CheckCircle2, Search, Copy, Check, X, Eye, EyeOff } from 'lucide-vue-next'
 import ProviderIcon from '../components/ProviderIcon.vue'
 
@@ -25,7 +23,6 @@ interface ModelItem {
   base_url: string
   is_published: boolean
   requires_approval: boolean
-  deployment_count: number
   has_anthropic_deployment: boolean
 }
 
@@ -33,7 +30,6 @@ interface ModelItem {
 const models = ref<ModelItem[]>([])
 const myModels = ref<string[]>([])
 const mainKeyValue = ref('')
-const litellmBaseUrl = ref('')
 const isLoading = ref(true)
 const search = ref('')
 const categoryFilter = ref('')
@@ -116,16 +112,11 @@ async function copyText(text: string, key: string): Promise<void> {
 
 onMounted(async () => {
   try {
-    const [modelsData, keysData, configData] = await Promise.all([
-      request<ModelItem[]>('/api/v1/models/active'),
-      getMyKeys(),
-      request<{ litellm_base_url: string }>('/api/v1/config/public'),
-    ])
-    models.value = modelsData
-    const mainKey = keysData.personal.find((k: AiKey) => k.key_type === 'personal_main')
+    const data = await getModelSquareV2()
+    models.value = data.models
+    const mainKey = data.keys.personal.main_key
     myModels.value = mainKey?.models ?? []
-    mainKeyValue.value = mainKey?.key_value || mainKey?.litellm_key_id || ''
-    litellmBaseUrl.value = configData.litellm_base_url || ''
+    mainKeyValue.value = mainKey?.key_value || ''
   } catch { /* */ }
   finally { isLoading.value = false }
 })
@@ -286,11 +277,11 @@ onMounted(async () => {
           <div class="rounded-lg bg-slate-50 p-4">
             <div class="mb-1 flex items-center justify-between">
               <span class="text-xs font-medium text-slate-500">Base URL</span>
-              <button @click="copyText(activeModel.base_url || litellmBaseUrl, 'url')" class="text-xs text-purple-600 hover:text-purple-700">
+              <button @click="copyText(activeModel.base_url, 'url')" class="text-xs text-purple-600 hover:text-purple-700">
                 {{ copied === 'url' ? t('modelSquare.action.copied') : t('modelSquare.action.copy') }}
               </button>
             </div>
-            <code class="text-sm text-slate-800">{{ activeModel.base_url || litellmBaseUrl || t('modelSquare.fallback.notConfigured') }}</code>
+            <code class="text-sm text-slate-800">{{ activeModel.base_url || t('modelSquare.fallback.notConfigured') }}</code>
           </div>
 
 

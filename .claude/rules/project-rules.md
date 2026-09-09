@@ -1,6 +1,8 @@
 # Project Rules
 
 <!-- Auto-loaded -->
+## API 
+Hub端（用户web）采用v2接口，管理后台还是使用v1接口
 
 ## API Response Format
 

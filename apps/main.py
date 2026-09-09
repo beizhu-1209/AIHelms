@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.v1.router import router as api_v1_router
+from api.v2.router import router as api_v2_router
 from core.audit import AuditLogMiddleware
 from core.config import settings
 from core.database import close_engine
@@ -55,6 +56,7 @@ app = FastAPI(
 app.add_middleware(AuditLogMiddleware)
 register_exception_handlers(app)
 app.include_router(api_v1_router, prefix="/api/v1")
+app.include_router(api_v2_router, prefix="/api/v2")
 
 
 def custom_openapi():

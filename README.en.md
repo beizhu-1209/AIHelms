@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.23` | 2026-09-04 | update Hub OpenAPI , plz use V2 endpoint|
 | `0.1.22` | 2026-08-25 | Hub now supports email sign-in; export task history auto-cleanup is now configurable; reworked the MCP log sync window to reuse the LLM config in `.env`. |
 | `0.1.21` | 2026-08-13 | Fixed user management role/status filter pagination issue. Update export  |
 | `0.1.20` | 2026-08-04 | Fixed log sync issues; fixed timestamp display; updated Model Square access info. |

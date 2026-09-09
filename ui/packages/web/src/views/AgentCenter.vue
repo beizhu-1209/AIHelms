@@ -1,23 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { request } from '@aihelms/shared/src/api/request'
-import { getMyKeys, createResourceApplication, recordAgentUsage, toast } from '@aihelms/shared'
-import type { Agent } from '@aihelms/shared/src/types/agent'
-import type { AiKey } from '@aihelms/shared/src/types/ai-key'
+import { getAgentCenterV2, createResourceApplication, recordAgentUsage, toast } from '@aihelms/shared'
+import type { HubAgent } from '@aihelms/shared'
 import HostedIcon from '@aihelms/shared/src/components/HostedIcon.vue'
 import { Bot, Search, ExternalLink } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
-const agents = ref<Agent[]>([])
+const agents = ref<HubAgent[]>([])
 const myAgents = ref<number[]>([])
 const isLoading = ref(true)
 const search = ref('')
 const categoryFilter = ref('')
 const platformFilter = ref('')
 const showApplyDialog = ref(false)
-const applyTarget = ref<Agent | null>(null)
+const applyTarget = ref<HubAgent | null>(null)
 const applyReason = ref('')
 const applyingId = ref<number | null>(null)
 
@@ -43,15 +41,15 @@ const filtered = computed(() => {
   })
 })
 
-function isOwned(agent: Agent): boolean {
+function isOwned(agent: HubAgent): boolean {
   return myAgents.value.includes(agent.id)
 }
 
-function canDirectUse(agent: Agent): boolean {
+function canDirectUse(agent: HubAgent): boolean {
   return !agent.requires_approval || isOwned(agent)
 }
 
-function handleOpen(agent: Agent): void {
+function handleOpen(agent: HubAgent): void {
   if (canDirectUse(agent)) {
     if (agent.chat_url) {
       recordAgentUsage(agent.id, '').catch(() => {})
@@ -84,12 +82,9 @@ async function submitApply(): Promise<void> {
 
 onMounted(async () => {
   try {
-    const [res, keysRes] = await Promise.all([
-      request<{ items: Agent[] }>('/api/v1/agents/published', { params: { page_size: 100 } }),
-      getMyKeys().catch(() => ({ personal: [], department: [], project: [] })),
-    ])
-    agents.value = res.items ?? []
-    const mainKey = keysRes.personal?.find((k: AiKey) => k.key_type === 'personal_main')
+    const data = await getAgentCenterV2()
+    agents.value = data.agents.items ?? []
+    const mainKey = data.keys.personal.main_key
     myAgents.value = mainKey?.agents ?? []
   } catch { /* */ }
   finally { isLoading.value = false }

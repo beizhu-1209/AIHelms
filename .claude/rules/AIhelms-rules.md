@@ -5,7 +5,7 @@
 AIHelms 是企业 AI 资源管理平台，以 LiteLLM 为底座，通过管理后台（admin）增强管理能力，通过用户端（web）提供资源接入入口。
 
 - **管理后台（admin）**：面向管理员，基于 LiteLLM 的增强管理界面，覆盖模型、Skill、MCP Server、组织、安全等管理场景
-- **用户端（web）**：面向用户，展示可用 AI 资源（模型 key、MCP、Skill），用户获取信息后接入本地客户端，实际连接 LiteLLM
+- **用户端（hub）**：面向用户，展示可用 AI 资源（模型 key、MCP、Skill），用户获取信息后接入本地客户端，实际连接 LiteLLM
 
 ## 核心原则
 
