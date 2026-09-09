@@ -216,14 +216,6 @@ async function handleSubmitProvider(): Promise<void> {
   }
 }
 
-async function handleToggleProvider(provider: Provider): Promise<void> {
-  await updateProvider(provider.id, { is_active: !provider.is_active })
-  await fetchProviders()
-  if (selectedProvider.value?.id === provider.id) {
-    selectedProvider.value = providers.value.find(p => p.id === provider.id) || null
-  }
-}
-
 async function handleConfirmDeleteProvider(): Promise<void> {
   if (!deleteProviderTarget.value) return
   try {
@@ -322,7 +314,12 @@ async function handleSubmitCred(): Promise<void> {
 }
 
 async function handleToggleCred(cred: Credential): Promise<void> {
-  await updateCredential(cred.id, { is_active: !cred.is_active })
+  // 失败提示由 request 层统一 toast，这里兜住异常以便把列表刷回后端真实状态
+  try {
+    await updateCredential(cred.id, { is_active: !cred.is_active })
+  } catch {
+    // 已提示，无需额外处理
+  }
   if (selectedProvider.value) await fetchProviderCredentials(selectedProvider.value.id)
 }
 
@@ -388,10 +385,6 @@ onMounted(() => {
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <span class="truncate text-sm font-medium text-slate-900">{{ provider.name }}</span>
-              <span
-                v-if="!provider.is_active"
-                class="shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-400"
-              >禁用</span>
             </div>
             <div class="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
               <span>{{ getProviderTypeLabel(provider.provider_type) }}</span>
@@ -424,13 +417,6 @@ onMounted(() => {
               @click="handleEditProvider"
             >
               编辑
-            </button>
-            <button
-              class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
-              :class="selectedProvider.is_active ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
-              @click="handleToggleProvider(selectedProvider)"
-            >
-              {{ selectedProvider.is_active ? '禁用' : '启用' }}
             </button>
             <button
               v-if="hasPermission('user:delete')"
