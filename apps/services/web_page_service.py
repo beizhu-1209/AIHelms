@@ -223,7 +223,7 @@ async def get_ai_identity(session: AsyncSession, user_id: int) -> dict[str, obje
         "models": await _optional_block(
             session,
             "model list",
-            lambda: model_service.get_all_active_models(session),
+            lambda: model_service.get_models_visible_to_user(session, user_id),
             [],
         ),
     }
@@ -255,6 +255,6 @@ async def get_market(
 
 async def get_model_square(session: AsyncSession, user_id: int) -> dict[str, object]:
     return {
-        "models": await model_service.get_all_active_models(session),
+        "models": await model_service.get_models_visible_to_user(session, user_id),
         "keys": {"personal": {"main_key": await _main_key(session, user_id)}},
     }

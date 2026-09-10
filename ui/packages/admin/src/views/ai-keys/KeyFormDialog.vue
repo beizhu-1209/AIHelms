@@ -479,6 +479,7 @@ async function handleSubmit() {
       emit('saved')
     } else {
       const ownerId = props.defaultOwnerId ?? (ownerType.value === 'user' ? selectedUsers.value[0]?.id : undefined)
+      if (ownerId === undefined) throw new Error('请选择所属用户')
       const res = await createAiKey({
         name: keyName,
         key_type: form.key_type,

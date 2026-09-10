@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +49,7 @@ class ApplicationStatus(LabeledValue):
     PENDING = ("pending", "待审批")
     APPROVED = ("approved", "已批准")
     REJECTED = ("rejected", "已拒绝")
+    INVALIDATED = ("invalidated", "已失效")
 
 
 VALID_RESOURCE_TYPES = tuple(item.value for item in ResourceType)
@@ -152,9 +153,14 @@ async def approve_application(
     if app.status != ApplicationStatus.PENDING:
         raise ConflictError("该申请已处理")
 
+    if app.resource_type == ResourceType.MODEL:
+        model = await model_repo.find_by_id(session, app.resource_id)
+        if not model or not model.is_active or not model.is_published:
+            raise ConflictError("模型未发布或已停用，不能批准申请")
+
     app.status = ApplicationStatus.APPROVED
     app.reviewed_by = reviewer_id
-    app.reviewed_at = datetime.utcnow()
+    app.reviewed_at = datetime.now(timezone.utc)
     app.review_notes = review_notes
     app.approval_config = approval_config or {}
 
@@ -179,7 +185,7 @@ async def reject_application(
 
     app.status = ApplicationStatus.REJECTED
     app.reviewed_by = reviewer_id
-    app.reviewed_at = datetime.utcnow()
+    app.reviewed_at = datetime.now(timezone.utc)
     app.review_notes = review_notes
 
     await session.commit()
@@ -321,6 +327,8 @@ async def _serialize(session: AsyncSession, app: ResourceApplication) -> dict:
         "reviewed_at": fmt_local_time(app.reviewed_at),
         "review_notes": app.review_notes,
         "approval_config": app.approval_config,
+        "invalidated_at": fmt_local_time(app.invalidated_at),
+        "invalidation_reason": app.invalidation_reason,
         "created_at": fmt_local_time(app.created_at),
         "updated_at": fmt_local_time(app.updated_at),
         "user": (

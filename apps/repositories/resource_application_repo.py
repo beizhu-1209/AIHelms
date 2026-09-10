@@ -1,12 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.db import ResourceApplication
 
 
-async def create(session: AsyncSession, app: ResourceApplication) -> ResourceApplication:
+async def create(
+    session: AsyncSession, app: ResourceApplication
+) -> ResourceApplication:
     session.add(app)
     await session.flush()
     await session.refresh(app)
@@ -32,6 +34,44 @@ async def find_pending_by_user_resource(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def find_approved_user_ids_for_resource(
+    session: AsyncSession, resource_type: str, resource_id: int
+) -> list[int]:
+    result = await session.execute(
+        select(ResourceApplication.user_id)
+        .where(
+            ResourceApplication.resource_type == resource_type,
+            ResourceApplication.resource_id == resource_id,
+            ResourceApplication.status == "approved",
+        )
+        .distinct()
+    )
+    return list(result.scalars().all())
+
+
+async def invalidate_approved_for_resource(
+    session: AsyncSession,
+    resource_type: str,
+    resource_id: int,
+    invalidated_at: datetime,
+    reason: str,
+) -> int:
+    result = await session.execute(
+        update(ResourceApplication)
+        .where(
+            ResourceApplication.resource_type == resource_type,
+            ResourceApplication.resource_id == resource_id,
+            ResourceApplication.status == "approved",
+        )
+        .values(
+            status="invalidated",
+            invalidated_at=invalidated_at,
+            invalidation_reason=reason,
+        )
+    )
+    return result.rowcount or 0
 
 
 async def find_all(

@@ -45,13 +45,13 @@ AIHelms 是企业 AI 资源管理平台，以 LiteLLM 为底座，通过管理�
 
 ### 大批量同步例外：可直写 LiteLLM 数据库
 
-**默认必须走 LiteLLM API。** 模型发布、取消发布和部门范围调整统一使用批量 SQL，不按受影响 Key 数量切换路径；单 Key 编辑、首次部门初始化和单人审批仍走 LiteLLM API。
+**默认必须走 LiteLLM API。** 仅当单次操作影响的 LiteLLM 记录数**超过 100 条**时，允许用 SQL 直接写 LiteLLM 的表，作为"只通过 API 交互"的明确例外。
 
 开这个例外的原因：LiteLLM 的管理 API 只支持逐条更新，`/key/bulk_update` 不含 `models` 字段。上千条记录逐条发 HTTP 会超时，且中途断连会造成平台 DB 与 LiteLLM 不一致；直写同库单条 SQL 可与平台 DB 变更放在同一事务，反而更安全。
 
 适用条件（全部满足才可用）：
 
-1. 业务入口为模型发布、取消发布或部门范围调整，不按人数设阈值
+1. 影响记录数 > 100（低于阈值一律走 API，不得为省事改成直写）
 2. 平台 DB 与 LiteLLM 的变更在**同一事务**内提交
 3. 仅限 UPDATE 既有字段，不得 INSERT 新记录或改表结构
 4. 代码注释标明依赖的表名与字段类型，便于 LiteLLM 升级时复查
@@ -62,7 +62,7 @@ AIHelms 是企业 AI 资源管理平台，以 LiteLLM 为底座，通过管理�
 |----|------|------|------|
 | `public."LiteLLM_VerificationToken"` | `models` | `text[]` | Key 的模型白名单（批量增删用 `array_append` / `array_remove`） |
 
-**缓存影响**：直写库不会主动清除 LiteLLM Key 鉴权缓存。按运行环境的 `general_settings.user_api_key_cache_ttl` 和实际鉴权路径验收撤权生效窗口，不承诺固定 5 秒。
+**缓存影响**：LiteLLM 的 Key 鉴权走内存缓存，TTL 由 `DEFAULT_IN_MEMORY_TTL` 控制（默认 5 秒）。直写库后最长 5 秒生效，不需要额外清缓存。若该环境变量被调大，需评估权限变更的生效延迟是否可接受。
 
 **LiteLLM 升级时必须复查所有直写点**——表结构或字段类型变化会导致 SQL 静默失效或报错。新增直写点必须同步更新上表。
 

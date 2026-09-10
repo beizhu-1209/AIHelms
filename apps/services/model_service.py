@@ -1,16 +1,31 @@
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.time_utils import fmt_local_time
-from exceptions import NotFoundError, ConflictError
-from models.db import Model, ModelDeployment, ModelAccessGroup, RouterSettings, ModelDepartmentVisibility, ModelUserVisibility, Provider, ProviderPrefixMap
-from repositories import model_repo, credential_repo, ai_key_repo
+from exceptions import ConflictError, NotFoundError
+from models.db import (
+    Model,
+    ModelAccessGroup,
+    ModelDeployment,
+    Provider,
+    ProviderPrefixMap,
+    RouterSettings,
+)
+from repositories import (
+    ai_key_repo,
+    credential_repo,
+    model_repo,
+    resource_application_repo,
+)
 from services import litellm_client
 from services.icon_url import resolve_provider_icon_url
-from services.litellm_credential_payload import build_litellm_credential_values_for_credential
+from services.litellm_credential_payload import (
+    build_litellm_credential_values_for_credential,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +86,17 @@ async def get_all_active_models(session: AsyncSession) -> list[dict]:
     model_ids = [m.model_id for m in models]
     anthropic_set = await model_repo.find_model_ids_with_anthropic_deployments(session, model_ids)
     return [_serialize_active_model(m, m.model_id in anthropic_set) for m in models]
+
+
+async def get_models_visible_to_user(
+    session: AsyncSession, user_id: int
+) -> list[dict]:
+    models = await model_repo.find_active_models_visible_to_user(session, user_id)
+    model_ids = [model.model_id for model in models]
+    anthropic_set = await model_repo.find_model_ids_with_anthropic_deployments(
+        session, model_ids
+    )
+    return [_serialize_active_model(model, model.model_id in anthropic_set) for model in models]
 
 
 async def get_model_ids_by_credential_ids(
@@ -628,7 +654,11 @@ async def update_model_publish(
 
     if department_ids is not None:
         await model_repo.set_visibility_departments(session, model_id, department_ids)
-        # Resolve department members to user-level visibility
+    elif model.is_published and model.visibility_type == "selected":
+        saved = await model_repo.find_visibility_by_model(session, model_id)
+        department_ids = [item.department_id for item in saved]
+    if department_ids is not None:
+        # Resolve current members even when republishing saved configuration.
         user_ids: set[int] = set()
         for dept_id in department_ids:
             members = await department_repo.find_members(session, dept_id)
@@ -636,7 +666,15 @@ async def update_model_publish(
                 user_ids.add(user.id)
         await model_repo.set_visibility_users(session, model_id, list(user_ids))
 
-    # 发布且不需要审批时，自动同步到所有主 Key
+    if is_published is False:
+        await resource_application_repo.invalidate_approved_for_resource(
+            session,
+            "model",
+            model_id,
+            datetime.now(timezone.utc),
+            "模型取消发布，原审批授权失效",
+        )
+
     await _sync_published_model_to_main_keys(session, model)
 
     await session.commit()
@@ -703,13 +741,25 @@ def _apply_credential_to_litellm_params(litellm_params: dict, credential) -> dic
 
 
 async def _sync_published_model_to_main_keys(session: AsyncSession, model: Model) -> int:
-    """Sync a public no-approval model to all active main keys."""
-    if not model or not model.model_id or not model.is_published or model.requires_approval:
+    """Align model access for eligible personal main keys."""
+    if not model or not model.model_id:
         return 0
     from services import ai_key_service
 
-    return await ai_key_service.sync_public_resource_to_all_keys(
-        session, "models", model.model_id
+    target_user_ids: list[int] | None = None
+    if not model.is_published:
+        target_user_ids = []
+    elif model.requires_approval:
+        target_user_ids = (
+            await resource_application_repo.find_approved_user_ids_for_resource(
+                session, "model", model.id
+            )
+        )
+    elif model.visibility_type == "selected":
+        visibility = await model_repo.find_user_visibility_by_model(session, model.id)
+        target_user_ids = [item.user_id for item in visibility]
+    return await ai_key_service.sync_model_access_to_personal_main_keys(
+        session, model.model_id, target_user_ids
     )
 
 

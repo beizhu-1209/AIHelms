@@ -10,7 +10,10 @@ from models.db import (
     ModelDepartmentVisibility,
     ModelDeployment,
     ModelUserVisibility,
+    ResourceApplication,
     RouterSettings,
+    User,
+    UserDepartment,
 )
 
 
@@ -75,6 +78,67 @@ async def find_all_active(session: AsyncSession, published_only: bool = False) -
     if published_only:
         stmt = stmt.where(Model.is_published == True)
     result = await session.execute(stmt.order_by(Model.name))
+    return list(result.scalars().all())
+
+
+async def find_active_models_visible_to_user(
+    session: AsyncSession, user_id: int
+) -> list[Model]:
+    stmt = (
+        select(Model)
+        .outerjoin(
+            ModelUserVisibility,
+            ModelUserVisibility.model_id == Model.id,
+        )
+        .outerjoin(
+            ResourceApplication,
+            (ResourceApplication.resource_id == Model.id)
+            & (ResourceApplication.resource_type == "model")
+            & (ResourceApplication.user_id == user_id)
+            & (ResourceApplication.status == "approved"),
+        )
+        .where(
+            Model.is_active.is_(True),
+            Model.is_published.is_(True),
+            (
+                select(User.id).where(User.id == user_id, User.is_admin.is_(True)).exists()
+                | (
+                    Model.requires_approval.is_(False)
+                    & (
+                        (Model.visibility_type == "all")
+                        | (ModelUserVisibility.user_id == user_id)
+                    )
+                )
+                | (
+                    Model.requires_approval.is_(True)
+                    & (ResourceApplication.id.is_not(None))
+                )
+            ),
+        )
+        .distinct()
+        .order_by(Model.name)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def find_public_model_ids_for_user(
+    session: AsyncSession, user_id: int
+) -> list[str]:
+    visibility_exists = select(ModelUserVisibility.id).where(
+        ModelUserVisibility.model_id == Model.id,
+        ModelUserVisibility.user_id == user_id,
+    ).exists()
+    result = await session.execute(
+        select(Model.model_id)
+        .where(
+            Model.is_active.is_(True),
+            Model.is_published.is_(True),
+            Model.requires_approval.is_(False),
+            ((Model.visibility_type == "all") | visibility_exists),
+        )
+        .order_by(Model.id)
+    )
     return list(result.scalars().all())
 
 
@@ -275,3 +339,15 @@ async def remove_visibility_users(
         .where(ModelUserVisibility.user_id.in_(user_ids))
     )
     await session.flush()
+
+
+async def initialize_user_model_visibility(session: AsyncSession, user_id: int) -> None:
+    """Snapshot department visibility once, before granting a new user's models."""
+    result = await session.execute(
+        select(ModelDepartmentVisibility.model_id)
+        .join(UserDepartment, UserDepartment.department_id == ModelDepartmentVisibility.department_id)
+        .where(UserDepartment.user_id == user_id)
+        .distinct()
+    )
+    for model_id in result.scalars().all():
+        await add_visibility_users(session, model_id, [user_id])

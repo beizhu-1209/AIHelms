@@ -180,10 +180,10 @@ async function handleSubmit(): Promise<void> {
         position: position.value,
         avatar: avatar.value,
         is_active: isActive.value,
+        department_ids: selectedDeptIds.value,
       })
       await Promise.all([
         updateUserRoles(user.id, selectedRoleIds.value),
-        updateUserDepartments(user.id, selectedDeptIds.value),
         updateUserProjects(user.id, selectedProjectIds.value),
       ])
     }
