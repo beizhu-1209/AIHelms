@@ -202,6 +202,7 @@ function getTypeLabel(type: string): string {
 function getStatusLabel(status: string): string {
   if (status === 'pending') return t('identity.status.pending')
   if (status === 'approved') return t('identity.status.approved')
+  if (status === 'invalidated') return t('identity.status.invalidated')
   return t('identity.status.rejected')
 }
 
@@ -459,6 +460,7 @@ onMounted(async () => {
             class="flex items-center gap-3 rounded-lg bg-slate-50/80 px-4 py-2.5">
             <Clock v-if="app.status === 'pending'" class="h-4 w-4 shrink-0 text-amber-500" />
             <CheckCircle2 v-else-if="app.status === 'approved'" class="h-4 w-4 shrink-0 text-green-500" />
+            <Clock v-else-if="app.status === 'invalidated'" class="h-4 w-4 shrink-0 text-slate-400" />
             <XCircle v-else class="h-4 w-4 shrink-0 text-red-400" />
             <span class="rounded bg-white px-1.5 py-0.5 text-xs text-slate-500">{{ getTypeLabel(app.resource_type) }}</span>
             <span class="flex-1 truncate text-sm text-slate-900">{{ app.resource_info?.name || `#${app.resource_id}` }}</span>

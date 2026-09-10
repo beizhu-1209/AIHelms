@@ -151,7 +151,7 @@ async def test_get_model_square_uses_one_consistent_main_key_path():
     with (
         patch.object(
             web_page_service.model_service,
-            "get_all_active_models",
+            "get_models_visible_to_user",
             AsyncMock(
                 return_value=[{"model_id": "model-a", "base_url": "https://api"}]
             ),
@@ -216,7 +216,7 @@ async def test_get_ai_identity_degrades_noncritical_blocks(caplog):
         ),
         patch.object(
             web_page_service.model_service,
-            "get_all_active_models",
+            "get_models_visible_to_user",
             AsyncMock(side_effect=RuntimeError("models unavailable")),
         ),
     ):

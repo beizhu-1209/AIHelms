@@ -36,5 +36,6 @@
   "identity.applications.title": "My requests",
   "identity.status.pending": "Pending",
   "identity.status.approved": "Approved",
-  "identity.status.rejected": "Rejected"
+  "identity.status.rejected": "Rejected",
+  "identity.status.invalidated": "Invalidated"
 }

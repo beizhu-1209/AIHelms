@@ -47,6 +47,7 @@ async def create_user(
             position=req.position,
             avatar=req.avatar,
             is_active=req.is_active,
+            department_ids=req.department_ids,
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))

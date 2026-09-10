@@ -1,5 +1,5 @@
 export type ResourceType = 'model' | 'mcp' | 'skill' | 'agent'
-export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'invalidated'
 
 export interface ResourceApplicationUser {
   id: number
@@ -28,6 +28,8 @@ export interface ResourceApplication {
   reviewed_at: string | null
   review_notes: string
   approval_config: Record<string, unknown>
+  invalidated_at: string | null
+  invalidation_reason: string
   created_at: string | null
   updated_at: string | null
   user: ResourceApplicationUser | null

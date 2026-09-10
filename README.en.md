@@ -8,7 +8,7 @@
 <p>Built on top of LiteLLM · Model distribution, AI identity, cost control, and governance</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.22-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.22)
+[![Release](https://img.shields.io/badge/Release-v0.1.24-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.24)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.24` | 2026-09-10 | Fixed model publishing authorization: grants now follow the selected department scope, unpublishing revokes access and invalidates approvals, and new users get keys scoped to their visibility. |
 | `0.1.23` | 2026-09-04 | update Hub OpenAPI , plz use V2 endpoint|
 | `0.1.22` | 2026-08-25 | Hub now supports email sign-in; export task history auto-cleanup is now configurable; reworked the MCP log sync window to reuse the LLM config in `.env`. |
 | `0.1.21` | 2026-08-13 | Fixed user management role/status filter pagination issue. Update export  |
