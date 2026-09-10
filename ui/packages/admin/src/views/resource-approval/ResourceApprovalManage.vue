@@ -33,16 +33,19 @@ const APPLICATION_STATUS = {
   PENDING: 'pending',
   APPROVED: 'approved',
   REJECTED: 'rejected',
+  INVALIDATED: 'invalidated',
 } as const
 const APPLICATION_STATUS_OPTIONS = [
   { value: APPLICATION_STATUS.PENDING, label: '待审批' },
   { value: APPLICATION_STATUS.APPROVED, label: '已批准' },
   { value: APPLICATION_STATUS.REJECTED, label: '已拒绝' },
+  { value: APPLICATION_STATUS.INVALIDATED, label: '已失效' },
 ]
 const STATUS_COLORS: Record<string, string> = {
   [APPLICATION_STATUS.PENDING]: 'bg-amber-50 text-amber-700',
   [APPLICATION_STATUS.APPROVED]: 'bg-green-50 text-green-700',
   [APPLICATION_STATUS.REJECTED]: 'bg-red-50 text-red-700',
+  [APPLICATION_STATUS.INVALIDATED]: 'bg-slate-100 text-slate-700',
 }
 const EXPORT_SOURCE = 'resource_applications'
 const EXPORT_TYPE = 'applications'
@@ -496,6 +499,9 @@ onBeforeUnmount(() => clearTimeout(userSearchTimer))
               <span class="rounded px-2 py-0.5 text-xs" :class="statusColor(app.status)">
                 {{ statusLabel(app.status) }}
               </span>
+              <p v-if="app.status === APPLICATION_STATUS.INVALIDATED" class="mt-1 text-xs text-slate-500">
+                {{ app.invalidation_reason }} {{ app.invalidated_at }}
+              </p>
             </td>
             <td class="px-4 py-2.5 text-xs text-slate-500">
               {{ app.created_at?.replace('T', ' ').slice(0, 19) }}

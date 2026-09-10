@@ -336,7 +336,7 @@ async def update_tool_billing(
 
 
 async def health_check_server(session: AsyncSession, server_id: int) -> dict:
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     server = await mcp_repo.find_server_by_id(session, server_id)
     if not server:
@@ -360,7 +360,7 @@ async def health_check_server(session: AsyncSession, server_id: int) -> dict:
         server.status = "unhealthy"
         server.health_check_error = str(e)
 
-    server.last_health_check = datetime.utcnow()
+    server.last_health_check = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(server)
     return _serialize_server(server)

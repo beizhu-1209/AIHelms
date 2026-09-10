@@ -35,5 +35,6 @@
   "identity.applications.title": "我的申请",
   "identity.status.pending": "审批中",
   "identity.status.approved": "已通过",
-  "identity.status.rejected": "已拒绝"
+  "identity.status.rejected": "已拒绝",
+  "identity.status.invalidated": "已失效"
 }

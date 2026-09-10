@@ -1,7 +1,8 @@
-from sqlalchemy import select, func
+from sqlalchemy import String, bindparam, func, select, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.db import AiKey
+from models.db import AiKey, User
 
 
 async def create(session: AsyncSession, ai_key: AiKey) -> AiKey:
@@ -61,6 +62,90 @@ async def find_personal_main(session: AsyncSession, user_id: int) -> AiKey | Non
         )
     )
     return result.scalar_one_or_none()
+
+
+async def find_personal_main_keys_for_model_sync(
+    session: AsyncSession,
+    user_ids: list[int] | None = None,
+    include_inactive: bool = False,
+) -> list[AiKey]:
+    stmt = (
+        select(AiKey)
+        .join(User, User.id == AiKey.owner_id)
+        .where(
+            AiKey.key_type == "personal_main",
+            AiKey.owner_type == "user",
+            User.is_admin.is_(False),
+        )
+        .order_by(AiKey.id)
+    )
+    if user_ids is not None:
+        stmt = stmt.where(AiKey.owner_id.in_(user_ids))
+    if not include_inactive:
+        stmt = stmt.where(AiKey.is_active.is_(True), User.is_active.is_(True))
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def sync_litellm_model_access(
+    session: AsyncSession,
+    model_id: str | list[str],
+    add_token_hashes: list[str],
+    remove_token_hashes: list[str],
+    remove_model_ids: list[str] | None = None,
+) -> None:
+    """Apply a model grant/revocation to LiteLLM keys in bulk.
+
+    LiteLLM treats an empty ``models`` array as unrestricted access.  Keep the
+    sentinel value on keys which have no model grants so revocation cannot
+    accidentally widen access.
+    """
+    model_ids = [model_id] if isinstance(model_id, str) else list(model_id)
+    revoke_ids = remove_model_ids or model_ids
+    token_param = bindparam("tokens", type_=ARRAY(String()))
+    if add_token_hashes:
+        for current_model_id in model_ids:
+            await session.execute(
+                text(
+                    'UPDATE public."LiteLLM_VerificationToken" '
+                    "SET models = array_append("
+                    "array_remove(COALESCE(models, ARRAY[]::text[]), 'no-default-models'), "
+                    ":model_id) "
+                    "WHERE token = ANY(:tokens) "
+                    "AND NOT (:model_id = ANY(COALESCE(models, ARRAY[]::text[])))"
+                ).bindparams(token_param),
+                {"model_id": current_model_id, "tokens": add_token_hashes},
+            )
+    if remove_token_hashes:
+        for current_model_id in revoke_ids:
+            await session.execute(
+                text(
+                    'UPDATE public."LiteLLM_VerificationToken" '
+                    "SET models = CASE "
+                    "WHEN cardinality(array_remove(array_remove(COALESCE(models, ARRAY[]::text[]), 'no-default-models'), :model_id)) = 0 "
+                    "THEN ARRAY['no-default-models']::text[] "
+                    "ELSE array_remove(array_remove(COALESCE(models, ARRAY[]::text[]), 'no-default-models'), :model_id) "
+                    "END "
+                    "WHERE token = ANY(:tokens)"
+                ).bindparams(token_param),
+                {"model_id": current_model_id, "tokens": remove_token_hashes},
+            )
+
+
+async def get_litellm_model_access(
+    session: AsyncSession,
+    token_hashes: list[str],
+) -> dict[str, set[str]]:
+    token_param = bindparam("tokens", type_=ARRAY(String()))
+    result = await session.execute(
+        text(
+            'SELECT token, models FROM public."LiteLLM_VerificationToken" '
+            'WHERE token = ANY(:tokens)'
+        ).bindparams(token_param),
+        {"tokens": token_hashes},
+    )
+    actual_by_token = {row[0]: set(row[1] or []) for row in result.all()}
+    return actual_by_token
 
 
 async def find_all_main_keys(session: AsyncSession) -> list[AiKey]:

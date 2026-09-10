@@ -10,6 +10,7 @@ class CreateUserRequest(BaseModel):
     position: str = Field("", max_length=100)
     avatar: str = Field("", max_length=500)
     is_active: bool = True
+    department_ids: list[int] = Field(default_factory=list)
 
     @field_validator("email")
     @classmethod

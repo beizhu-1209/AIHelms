@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS aihelms.users (
     is_active BOOLEAN DEFAULT true,
     is_admin BOOLEAN DEFAULT false,
     is_super_admin BOOLEAN DEFAULT false,
+    model_departments_initialized BOOLEAN NOT NULL DEFAULT false,
     litellm_user_id VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -518,6 +519,8 @@ CREATE TABLE IF NOT EXISTS aihelms.resource_applications (
     reviewed_at TIMESTAMPTZ,
     review_notes TEXT DEFAULT '',
     approval_config JSONB DEFAULT '{}',
+    invalidated_at TIMESTAMPTZ,
+    invalidation_reason TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

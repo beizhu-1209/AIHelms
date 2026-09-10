@@ -29,6 +29,8 @@ const showProviderForm = ref(false)
 const isEditingProvider = ref(false)
 const editingProviderId = ref<number | null>(null)
 const deleteProviderTarget = ref<Provider | null>(null)
+const deleteProviderError = ref('')
+const deletingProvider = ref(false)
 const providerError = ref('')
 
 const formName = ref('')
@@ -42,6 +44,8 @@ const showCredForm = ref(false)
 const isEditingCred = ref(false)
 const editingCredId = ref<number | null>(null)
 const deleteCredTarget = ref<Credential | null>(null)
+const deleteCredError = ref('')
+const deletingCredential = ref(false)
 const credError = ref('')
 
 // Access Test
@@ -217,19 +221,30 @@ async function handleSubmitProvider(): Promise<void> {
 }
 
 async function handleConfirmDeleteProvider(): Promise<void> {
-  if (!deleteProviderTarget.value) return
+  const target = deleteProviderTarget.value
+  if (!target || deletingProvider.value) return
+  deleteProviderError.value = ''
+  deletingProvider.value = true
   try {
-    await deleteProvider(deleteProviderTarget.value.id)
-    if (selectedProvider.value?.id === deleteProviderTarget.value.id) {
-      selectedProvider.value = null
-      providerCredentials.value = []
-    }
-    deleteProviderTarget.value = null
-    await fetchProviders()
+    await deleteProvider(target.id)
   } catch (e) {
-    providerError.value = e instanceof Error ? e.message : '删除失败'
-    deleteProviderTarget.value = null
+    deleteProviderError.value = e instanceof Error ? e.message : '删除失败'
+    return
+  } finally {
+    deletingProvider.value = false
   }
+  if (selectedProvider.value?.id === target.id) {
+    selectedProvider.value = null
+    providerCredentials.value = []
+  }
+  deleteProviderTarget.value = null
+  await fetchProviders()
+}
+
+function handleOpenDeleteProvider(): void {
+  if (!selectedProvider.value) return
+  deleteProviderError.value = ''
+  deleteProviderTarget.value = selectedProvider.value
 }
 
 // --- Credential methods ---
@@ -324,15 +339,26 @@ async function handleToggleCred(cred: Credential): Promise<void> {
 }
 
 async function handleConfirmDeleteCred(): Promise<void> {
-  if (!deleteCredTarget.value) return
+  const target = deleteCredTarget.value
+  if (!target || deletingCredential.value) return
+  deleteCredError.value = ''
+  deletingCredential.value = true
   try {
-    await deleteCredential(deleteCredTarget.value.id)
-    deleteCredTarget.value = null
-    if (selectedProvider.value) await fetchProviderCredentials(selectedProvider.value.id)
+    await deleteCredential(target.id)
   } catch (e) {
-    credError.value = e instanceof Error ? e.message : '删除失败'
-    deleteCredTarget.value = null
+    deleteCredError.value = e instanceof Error ? e.message : '删除失败'
+    return
+  } finally {
+    deletingCredential.value = false
   }
+  deleteCredTarget.value = null
+  if (selectedProvider.value) await fetchProviderCredentials(selectedProvider.value.id)
+  await fetchProviders()
+}
+
+function handleOpenDeleteCredential(credential: Credential): void {
+  deleteCredError.value = ''
+  deleteCredTarget.value = credential
 }
 
 async function handleTestProvider(): Promise<void> {
@@ -421,7 +447,8 @@ onMounted(() => {
             <button
               v-if="hasPermission('user:delete')"
               class="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
-              @click="deleteProviderTarget = selectedProvider"
+              data-testid="delete-provider-button"
+              @click="handleOpenDeleteProvider"
             >
               删除
             </button>
@@ -494,7 +521,8 @@ onMounted(() => {
                   <button
                     v-if="hasPermission('user:delete')"
                     class="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
-                    @click="deleteCredTarget = cred"
+                    data-testid="delete-credential-button"
+                    @click="handleOpenDeleteCredential(cred)"
                   >
                     删除
                   </button>
@@ -631,6 +659,8 @@ onMounted(() => {
 
     <ConfirmDialog
       :visible="!!deleteProviderTarget"
+      :error="deleteProviderError"
+      :loading="deletingProvider"
       title="确认删除"
       :message="`确定要删除供应商「${deleteProviderTarget?.name}」吗？`"
       @confirm="handleConfirmDeleteProvider"
@@ -639,6 +669,8 @@ onMounted(() => {
 
     <ConfirmDialog
       :visible="!!deleteCredTarget"
+      :error="deleteCredError"
+      :loading="deletingCredential"
       title="确认删除"
       :message="`确定要删除凭证「${deleteCredTarget?.credential_name}」吗？被部署引用的凭证无法删除。`"
       @confirm="handleConfirmDeleteCred"
