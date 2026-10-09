@@ -53,6 +53,7 @@ Thumbs.db
 
 # Docker
 docker/data/
+backup/
 
 # Database migrations data (seed data, not committed)
 docker/db/migrations_bak
