@@ -56,10 +56,11 @@ async def get_llm_log_filters(
 async def get_llm_log(
     log_id: int,
     session: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_permission("usage_log:read")),
+    current_user: dict = Depends(require_permission("usage_log:read")),
 ):
+    content_visible = await usage_log_service.can_view_log_content(session, current_user)
     try:
-        log = await usage_log_service.get_llm_log(session, log_id)
+        log = await usage_log_service.get_llm_log(session, log_id, content_visible)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="LLM 日志不存在")
     return {"code": 200, "message": "ok", "data": log}
@@ -109,10 +110,11 @@ async def get_mcp_log_filters(
 async def get_mcp_log(
     log_id: int,
     session: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_permission("usage_log:read")),
+    current_user: dict = Depends(require_permission("usage_log:read")),
 ):
+    content_visible = await usage_log_service.can_view_log_content(session, current_user)
     try:
-        log = await usage_log_service.get_mcp_log(session, log_id)
+        log = await usage_log_service.get_mcp_log(session, log_id, content_visible)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="MCP 日志不存在")
     return {"code": 200, "message": "ok", "data": log}

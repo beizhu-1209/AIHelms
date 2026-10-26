@@ -22,6 +22,7 @@ interface Props {
   headerTag?: { text: string; color: string }
   info: InfoItem[]
   jsonBlocks?: JsonBlock[]
+  contentHidden?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -145,7 +146,14 @@ async function handleCopy(idx: number, text: string): Promise<void> {
         </div>
 
         <div
+          v-if="contentHidden"
+          class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500"
+        >
+          日志请求与返回内容仅超级管理员可查看
+        </div>
+        <div
           v-for="(block, idx) in formattedBlocks"
+          v-else
           :key="block.label"
           class="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white"
         >
