@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.26` | 2026-10-26 | Added `LOG_DETAIL_CONTENT_VISIBLE_TO_ADMIN` to control whether regular admins can view request, response and metadata in LLM/MCP log details; super admins can always see them. |
 | `0.1.25` | 2026-09-26 | Fixed saving Anthropic-format model deployments hanging and returning 504. |
 | `0.1.24` | 2026-09-10 | Fixed model publishing authorization: grants now follow the selected department scope, unpublishing revokes access and invalidates approvals, and new users get keys scoped to their visibility. |
 | `0.1.23` | 2026-09-04 | update Hub OpenAPI , plz use V2 endpoint|

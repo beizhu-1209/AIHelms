@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from exceptions import NotFoundError
 from models.db import Agent, AgentUsageLog, LlmCallLog, McpCallLog, SkillUsageLog
-from repositories import usage_log_repo
+from repositories import usage_log_repo, user_repo
 from services.icon_url import resolve_icon_url
 
 # ────────────── LLM ──────────────
@@ -57,7 +57,17 @@ async def list_llm_logs(
     }
 
 
-async def get_llm_log(session: AsyncSession, log_id: int) -> dict:
+async def can_view_log_content(session: AsyncSession, current_user: dict) -> bool:
+    if settings.log_detail_content_visible_to_admin:
+        return True
+    # API Key 身份没有对应用户，不视为超级管理员
+    if current_user["identity_type"] != "user":
+        return False
+    user = await user_repo.find_user_by_id(session, current_user["id"])
+    return bool(user and user.is_super_admin)
+
+
+async def get_llm_log(session: AsyncSession, log_id: int, content_visible: bool) -> dict:
     log = await usage_log_repo.find_llm_log_by_id(session, log_id)
     if not log:
         raise NotFoundError("llm_log", log_id)
@@ -67,9 +77,10 @@ async def get_llm_log(session: AsyncSession, log_id: int) -> dict:
     deployment = deployments.get(log.deployment_id) if log.deployment_id else None
     item = _serialize_llm(log, users, keys, deployment)
     item["deployment"] = deployment
-    item["metadata"] = log.metadata_
-    item["messages"] = log.messages
-    item["response"] = log.response
+    item["content_hidden"] = not content_visible
+    item["metadata"] = log.metadata_ if content_visible else None
+    item["messages"] = log.messages if content_visible else None
+    item["response"] = log.response if content_visible else None
     return item
 
 
@@ -215,7 +226,7 @@ async def list_mcp_logs(
     }
 
 
-async def get_mcp_log(session: AsyncSession, log_id: int) -> dict:
+async def get_mcp_log(session: AsyncSession, log_id: int, content_visible: bool) -> dict:
     log = await usage_log_repo.find_mcp_log_by_id(session, log_id)
     if not log:
         raise NotFoundError("mcp_log", log_id)
@@ -223,8 +234,9 @@ async def get_mcp_log(session: AsyncSession, log_id: int) -> dict:
     keys = await usage_log_repo.load_ai_keys(session, [log.ai_key_id])
     servers = await usage_log_repo.load_mcp_servers(session, [log.server_id])
     item = _serialize_mcp(log, users, keys, servers)
-    item["request_args"] = log.request_args
-    item["response_full"] = log.response_full
+    item["content_hidden"] = not content_visible
+    item["request_args"] = log.request_args if content_visible else None
+    item["response_full"] = log.response_full if content_visible else None
     return item
 
 
