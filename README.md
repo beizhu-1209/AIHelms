@@ -245,9 +245,6 @@ docker compose up -d
 
 ## 交流反馈
 
-- 微信交流群：扫码加入
-
-  <img src="docs/wechat.jpg" alt="微信交流群" width="200">
 
 - 商业合作：[联系邮件](mailto:jiangshiwei@microbaton.com)
 - Issue 反馈：[GitHub Issues](https://github.com/beizhu-1209/AIHelms/issues)

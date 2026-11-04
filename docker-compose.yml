@@ -37,6 +37,8 @@ services:
   litellm:
     image: ghcr.io/berriai/litellm:v1.93.0
     restart: unless-stopped
+    mem_limit: ${LITELLM_MEM_LIMIT:-6g}
+    memswap_limit: ${LITELLM_MEM_LIMIT:-6g}
     logging:
       driver: json-file
       options:
