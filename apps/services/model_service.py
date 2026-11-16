@@ -388,6 +388,10 @@ async def update_deployment(
                 renamed_from = model.model_id
             model.model_id = model_id_str
 
+    # 首次同步到 LiteLLM 等价于新建部署，需按发布规则建立授权；
+    # 编辑既有部署（价格、计费、启停、凭证等）不得改动已发出的用户 Key。
+    first_litellm_sync = not deployment.litellm_model_id
+
     if litellm_params is not None:
         deployment.litellm_params = litellm_params
     if credential_id is not None:
@@ -439,7 +443,7 @@ async def update_deployment(
         await _sync_deployment_to_litellm(deployment, model, credential, session)
         synced_to_litellm = True
 
-    if synced_to_litellm and model:
+    if synced_to_litellm and model and first_litellm_sync:
         await _sync_model_key_access_after_deployment(session, model, credential)
 
     if renamed_from and model:
