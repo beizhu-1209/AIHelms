@@ -84,6 +84,7 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.28` | 2026-11-24 | fixv1/response log|
 | `0.1.27` | 2026-11-16 | Fixed editing a model deployment (e.g. changing only the price) revoking users' model access; editing an existing deployment no longer alters already-issued keys. |
 | `0.1.26` | 2026-10-26 | Added `LOG_DETAIL_CONTENT_VISIBLE_TO_ADMIN` to control whether regular admins can view request, response and metadata in LLM/MCP log details; super admins can always see them. |
 | `0.1.25` | 2026-09-26 | Fixed saving Anthropic-format model deployments hanging and returning 504. |
