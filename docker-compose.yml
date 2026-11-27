@@ -51,6 +51,7 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
       TZ: ${TZ:-Asia/Shanghai}
+      MAX_STRING_LENGTH_PROMPT_IN_DB: ${MAX_STRING_LENGTH_PROMPT_IN_DB:-524288}
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:
