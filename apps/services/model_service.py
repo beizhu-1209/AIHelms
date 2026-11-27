@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from datetime import datetime, timezone
 
@@ -387,6 +388,10 @@ async def update_deployment(
                 renamed_from = model.model_id
             model.model_id = model_id_str
 
+    # 首次同步到 LiteLLM 等价于新建部署，需按发布规则建立授权；
+    # 编辑既有部署（价格、计费、启停、凭证等）不得改动已发出的用户 Key。
+    first_litellm_sync = not deployment.litellm_model_id
+
     if litellm_params is not None:
         deployment.litellm_params = litellm_params
     if credential_id is not None:
@@ -438,7 +443,7 @@ async def update_deployment(
         await _sync_deployment_to_litellm(deployment, model, credential, session)
         synced_to_litellm = True
 
-    if synced_to_litellm and model:
+    if synced_to_litellm and model and first_litellm_sync:
         await _sync_model_key_access_after_deployment(session, model, credential)
 
     if renamed_from and model:
@@ -970,25 +975,27 @@ def _ensure_v1_suffix(api_base: str) -> str:
 
 async def _sync_keys_anthropic_access(session: AsyncSession) -> int:
     """Expand Anthropic model variants into active main keys' LiteLLM grants."""
-    from services import ai_key_service
-
-    all_main_keys = await ai_key_repo.find_all_main_keys(session)
-    keys_updated = 0
+    all_main_keys = [
+        key
+        for key in await ai_key_repo.find_all_main_keys(session)
+        if key.litellm_key_id and key.models
+    ]
+    all_model_ids = list({mid for key in all_main_keys for mid in key.models})
+    anthropic_models = await model_repo.find_model_ids_with_anthropic_deployments(
+        session, all_model_ids
+    )
+    # 直写 LiteLLM 表并随平台事务提交；走 /key/update 会被本事务持有的行锁卡住
+    models_by_token_hash: dict[str, list[str]] = {}
     for key in all_main_keys:
-        if not key.litellm_key_id or not key.models:
-            continue
-        litellm_models, _ = await ai_key_service._expand_models_with_anthropic(
-            session, key.models, None
+        litellm_models = list(key.models)
+        for mid in key.models:
+            if mid in anthropic_models:
+                litellm_models.append(f"{mid}{ANTHROPIC_MODEL_SUFFIX}")
+        token_hash = hashlib.sha256(key.litellm_key_id.encode()).hexdigest()
+        models_by_token_hash[token_hash] = litellm_client.normalize_models_for_litellm(
+            litellm_models
         )
-        try:
-            await litellm_client.update_key(
-                key_id=key.litellm_key_id,
-                models=litellm_models,
-            )
-            keys_updated += 1
-        except litellm_client.LiteLLMError:
-            logger.warning("anthropic access sync failed for ai_key %s", key.id)
-    return keys_updated
+    return await ai_key_repo.set_litellm_models(session, models_by_token_hash)
 
 
 async def resync_anthropic_deployments(session: AsyncSession) -> dict:

@@ -341,6 +341,7 @@ onMounted(() => {
         { label: '内部成本', value: '¥' + detail.internal_cost },
         { label: '错误信息', value: detail.error_message || '—' },
       ]"
+      :content-hidden="detail.content_hidden"
       :json-blocks="[
         { label: '请求', value: detail.request_args, collapsed: false },
         { label: '返回内容', value: detail.response_full, collapsed: false },

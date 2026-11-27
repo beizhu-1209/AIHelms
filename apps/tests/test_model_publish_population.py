@@ -503,6 +503,38 @@ async def test_publish_grants_both_anthropic_routes(publication_case, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_anthropic_key_access_sync_uses_bulk_sql_not_litellm_api(monkeypatch):
+    keys = [
+        AiKey(id=1, litellm_key_id="sk-a", models=[MODEL_NAME, OTHER_MODEL]),
+        AiKey(id=2, litellm_key_id="sk-b", models=[OTHER_MODEL]),
+        AiKey(id=3, litellm_key_id=None, models=[MODEL_NAME]),
+    ]
+    monkeypatch.setattr(
+        ai_key_repo, "find_all_main_keys", AsyncMock(return_value=keys)
+    )
+    monkeypatch.setattr(
+        model_repo,
+        "find_model_ids_with_anthropic_deployments",
+        AsyncMock(return_value={MODEL_NAME}),
+    )
+    sql_update = AsyncMock(return_value=2)
+    api_update = AsyncMock()
+    monkeypatch.setattr(ai_key_repo, "set_litellm_models", sql_update)
+    monkeypatch.setattr(model_service.litellm_client, "update_key", api_update)
+
+    updated = await model_service._sync_keys_anthropic_access(AsyncMock())
+
+    assert updated == 2
+    api_update.assert_not_awaited()
+    assert sql_update.await_args.args[1] == {
+        sha256(b"sk-a").hexdigest(): [
+            MODEL_NAME, OTHER_MODEL, f"{MODEL_NAME}(Anthropic)"
+        ],
+        sha256(b"sk-b").hexdigest(): [OTHER_MODEL],
+    }
+
+
+@pytest.mark.asyncio
 async def test_final_state_rejects_unrestricted_remote_key(publication_case, monkeypatch):
     case = publication_case
     monkeypatch.setattr(ai_key_repo, "sync_litellm_model_access", AsyncMock())

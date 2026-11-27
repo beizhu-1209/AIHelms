@@ -415,6 +415,7 @@ onMounted(() => {
         { label: 'Session ID', value: detail.session_id, mono: true },
         { label: '错误', value: detail.error_message },
       ]"
+      :content-hidden="detail.content_hidden"
       :json-blocks="[
         { label: '请求', value: detail.messages, collapsed: false },
         { label: '返回', value: detail.response, collapsed: false },

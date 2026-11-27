@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # 导出任务记录保留天数（0 = 不清理）
     export_task_retention_days: int = 7
 
+    # 普通管理员能否查看日志详情中的请求/返回/metadata（超级管理员始终可见）
+    log_detail_content_visible_to_admin: bool = True
+
     @model_validator(mode="after")
     def build_urls(self) -> "Settings":
         if not self.database_url:

@@ -22,6 +22,7 @@ interface Props {
   headerTag?: { text: string; color: string }
   info: InfoItem[]
   jsonBlocks?: JsonBlock[]
+  contentHidden?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -73,7 +74,7 @@ function formatValue(value: unknown): string {
 }
 
 const formattedBlocks = computed(() =>
-  props.jsonBlocks.map((block, idx) => ({
+  (props.contentHidden ? [] : props.jsonBlocks).map((block, idx) => ({
     label: block.label,
     text: formatValue(block.value),
     isEmpty: block.value === null || block.value === undefined || block.value === '',

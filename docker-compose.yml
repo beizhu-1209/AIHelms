@@ -37,6 +37,8 @@ services:
   litellm:
     image: ghcr.io/berriai/litellm:v1.93.0
     restart: unless-stopped
+    mem_limit: ${LITELLM_MEM_LIMIT:-6g}
+    memswap_limit: ${LITELLM_MEM_LIMIT:-6g}
     logging:
       driver: json-file
       options:
@@ -49,6 +51,7 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
       TZ: ${TZ:-Asia/Shanghai}
+      MAX_STRING_LENGTH_PROMPT_IN_DB: ${MAX_STRING_LENGTH_PROMPT_IN_DB:-524288}
     volumes:
       - ./docker/litellm/litellm.yaml:/app/config.yaml:ro
     ports:
@@ -81,6 +84,7 @@ services:
       LLM_LOG_SYNC_INTERVAL_MINUTES: ${LLM_LOG_SYNC_INTERVAL_MINUTES:-5}
       LLM_LOG_RETENTION_DAYS: ${LLM_LOG_RETENTION_DAYS:-0}
       EXPORT_TASK_RETENTION_DAYS: ${EXPORT_TASK_RETENTION_DAYS:-7}
+      LOG_DETAIL_CONTENT_VISIBLE_TO_ADMIN: ${LOG_DETAIL_CONTENT_VISIBLE_TO_ADMIN:-true}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-0}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}

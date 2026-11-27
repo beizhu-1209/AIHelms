@@ -8,7 +8,7 @@
 <p>承载 AI 数字资产 · 释放 AI 生产力 · 链接未来</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.24-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.24)
+[![Release](https://img.shields.io/badge/Release-v0.1.25-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.25)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -85,6 +85,10 @@ AIHelms 是面向企业的 AI 资源纳管平台。帮助企业**管理 AI 资�
 
 | 版本 | 发布时间 | 一句话更新 |
 |------|----------|----------|
+| `0.1.28` | 2026-11-24 | 修复v1/response log，使用/docker/db/backfill-request-message补齐数据|
+| `0.1.27` | 2026-11-16 | 修复编辑模型部署（如只改价格）会撤销用户模型授权的问题，编辑既有部署不再改动已下发的 Key |
+| `0.1.26` | 2026-10-26 | 新增配置项 `LOG_DETAIL_CONTENT_VISIBLE_TO_ADMIN`，可控制普通管理员能否查看 LLM/MCP 日志详情中的请求、返回和 Metadata，超级管理员始终可见 |
+| `0.1.25` | 2026-09-26 | 修复保存 Anthropic 格式模型部署时卡住并返回 504 的问题 |
 | `0.1.24` | 2026-09-10 | 修复模型发布授权：按部门范围下发，取消发布回收授权并使审批记录失效；新建用户按可见范围初始化 Key |
 | `0.1.23` | 2026-09-04 | 优化Hub端OpenAPI，更新为v2端点|
 | `0.1.22` | 2026-08-25 | 更新Hub端支持邮箱登录；导出任务历史自动清理变为可配置项；更新MCP日志滑块，复用env中llm配置项|
@@ -243,9 +247,6 @@ docker compose up -d
 
 ## 交流反馈
 
-- 微信交流群：扫码加入
-
-  <img src="docs/wechat.jpg" alt="微信交流群" width="200">
 
 - 商业合作：[联系邮件](mailto:jiangshiwei@microbaton.com)
 - Issue 反馈：[GitHub Issues](https://github.com/beizhu-1209/AIHelms/issues)

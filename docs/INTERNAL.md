@@ -322,6 +322,19 @@ cp .env.example .env   # 修改密码、密钥等
 docker compose up -d   # 直接拉镜像启动，无需本地构建
 ```
 
+迁移：
+1. 手工将`.env`、`data/` 原样复制到新服务器
+2. 数据库迁移
+```bash
+# 旧服务器
+bash docker/db/server-migrate.sh export ./backup                      # 生成 backup/aihelms-db-<时间>.tar，拷到新服务器
+
+# 新服务器
+bash docker/db/server-migrate.sh import backup/aihelms-db-<时间>.tar   # 导入并启动服务
+bash docker/db/server-migrate.sh rollback                              # 有问题时恢复导入前的库
+bash docker/db/server-migrate.sh cleanup                               # 确认无误后删除备份库
+```
+
 ## 9. 重建数据库（慎用）
 
 ```bash

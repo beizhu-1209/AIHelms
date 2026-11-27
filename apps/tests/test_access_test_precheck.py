@@ -320,3 +320,47 @@ async def test_access_test_precheck_admin_no_deployment_does_not_grant(
     assert key is not None
     assert detail is not None
     assert detail["category"] == "no_active_deployment"
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_anthropic_variant_keeps_suffix_for_call(
+    monkeypatch,
+) -> None:
+    from api.v1 import access_test
+
+    model = SimpleNamespace(id=73, model_id="claude-opus-5-5", category="chat")
+    lookups: list[str] = []
+
+    async def fake_find_by_model_id(session, model_id: str):
+        lookups.append(model_id)
+        return model if model_id == "claude-opus-5-5" else None
+
+    monkeypatch.setattr(access_test.model_repo, "find_by_model_id", fake_find_by_model_id)
+
+    model_obj, test_model, base_model = await access_test._resolve_model(
+        FakeSession(), "claude-opus-5-5(Anthropic)"
+    )
+
+    assert lookups == ["claude-opus-5-5"]
+    assert model_obj is model
+    assert test_model == "claude-opus-5-5(Anthropic)"
+    assert base_model == "claude-opus-5-5"
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_openai_model_unchanged(monkeypatch) -> None:
+    from api.v1 import access_test
+
+    model = SimpleNamespace(id=1, model_id="deepseek-chat", category="chat")
+
+    async def fake_find_by_model_id(session, model_id: str):
+        return model if model_id == "deepseek-chat" else None
+
+    monkeypatch.setattr(access_test.model_repo, "find_by_model_id", fake_find_by_model_id)
+
+    _, test_model, base_model = await access_test._resolve_model(
+        FakeSession(), "deepseek-chat"
+    )
+
+    assert test_model == "deepseek-chat"
+    assert base_model == "deepseek-chat"

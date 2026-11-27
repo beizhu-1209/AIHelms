@@ -72,7 +72,8 @@ export interface LlmLog {
 
 export interface LlmLogDetail extends LlmLog {
   deployment: { id: number; deploy_name: string } | null
-  metadata: Record<string, unknown>
+  content_hidden: boolean
+  metadata: Record<string, unknown> | null
   messages: unknown
   response: unknown
 }
@@ -94,8 +95,9 @@ export interface McpLog {
 }
 
 export interface McpLogDetail extends McpLog {
-  request_args: Record<string, unknown>
-  response_full: string
+  content_hidden: boolean
+  request_args: Record<string, unknown> | null
+  response_full: string | null
 }
 
 export interface SkillLog {

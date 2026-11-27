@@ -128,6 +128,12 @@ def _messages_from_payload(
     proxy_messages = proxy_request.get("messages")
     if isinstance(proxy_messages, list) and proxy_messages:
         return proxy_messages
+    # /v1/responses 的请求体用 input 承载对话内容，没有 messages
+    proxy_input = proxy_request.get("input")
+    if isinstance(proxy_input, list) and proxy_input:
+        return proxy_input
+    if isinstance(proxy_input, str) and proxy_input:
+        return [{"role": "user", "content": proxy_input}]
     return None
 
 

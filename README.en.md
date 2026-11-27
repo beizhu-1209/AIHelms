@@ -8,7 +8,7 @@
 <p>Built on top of LiteLLM · Model distribution, AI identity, cost control, and governance</p>
 
 
-[![Release](https://img.shields.io/badge/Release-v0.1.24-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.24)
+[![Release](https://img.shields.io/badge/Release-v0.1.25-brightgreen.svg)](https://github.com/beizhu-1209/AIHelms/releases/tag/0.1.25)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -84,6 +84,10 @@ Recent versions are summarized from [GitHub Releases](https://github.com/beizhu-
 
 | Version | Date | Summary |
 |------|----------|----------|
+| `0.1.28` | 2026-11-24 | fixv1/response log|
+| `0.1.27` | 2026-11-16 | Fixed editing a model deployment (e.g. changing only the price) revoking users' model access; editing an existing deployment no longer alters already-issued keys. |
+| `0.1.26` | 2026-10-26 | Added `LOG_DETAIL_CONTENT_VISIBLE_TO_ADMIN` to control whether regular admins can view request, response and metadata in LLM/MCP log details; super admins can always see them. |
+| `0.1.25` | 2026-09-26 | Fixed saving Anthropic-format model deployments hanging and returning 504. |
 | `0.1.24` | 2026-09-10 | Fixed model publishing authorization: grants now follow the selected department scope, unpublishing revokes access and invalidates approvals, and new users get keys scoped to their visibility. |
 | `0.1.23` | 2026-09-04 | update Hub OpenAPI , plz use V2 endpoint|
 | `0.1.22` | 2026-08-25 | Hub now supports email sign-in; export task history auto-cleanup is now configurable; reworked the MCP log sync window to reuse the LLM config in `.env`. |
